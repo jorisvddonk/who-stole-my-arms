@@ -1,3 +1,5 @@
+console.log('Toolbox menu module loaded');
+
 import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
 
 export class ToolboxMenu extends LitElement {
@@ -67,20 +69,38 @@ export class ToolboxMenu extends LitElement {
 
   constructor() {
     super();
-    this.menuItems = [
-      { label: 'Tool 1', children: [] },
-      { label: 'Tool 2', children: [
-        { label: 'Subtool 1', children: [] },
-        { label: 'Subtool 2', children: [] }
-      ] },
-      { label: 'Tool 3', children: [
-        { label: 'Subtool A', children: [
-          { label: 'Deep Tool 1', children: [] }
-        ] }
-      ] }
-    ];
+    this.menuItems = [];
     this.isOpen = false;
     this.floating = true;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    console.log('Toolbox connected');
+    window.toolboxMenu = this;
+    this.loadTools();
+  }
+
+  async loadTools() {
+    console.log('Loading tools...');
+    try {
+      const res = await fetch('/toolbox/list');
+      const data = await res.json();
+      console.log('Tools data:', data);
+      for (const url of data.tools) {
+        console.log('Importing:', url);
+        const mod = await import(url);
+        if (mod.register) mod.register(this);
+      }
+    } catch (error) {
+      console.error('Failed to load tools:', error);
+    }
+  }
+
+  addItem(label, children = [], onClick = null) {
+    console.log('Adding item:', label);
+    this.menuItems.push({ label, children, onClick });
+    this.requestUpdate();
   }
 
   render() {
@@ -101,7 +121,7 @@ export class ToolboxMenu extends LitElement {
     return html`
       <ul>
         ${items.map(item => html`
-          <li @mouseenter=${() => this.handleMouseEnter(item)} @mouseleave=${() => this.handleMouseLeave(item)}>
+          <li @mouseenter=${() => this.handleMouseEnter(item)} @mouseleave=${() => this.handleMouseLeave(item)} @click=${() => item.onClick && item.onClick()}>
             ${item.label}
             ${item.children && item.children.length > 0 ? html`<span>▶</span>` : ''}
             ${item.isOpen ? html`<ul class="submenu">${this.renderMenu(item.children)}</ul>` : ''}

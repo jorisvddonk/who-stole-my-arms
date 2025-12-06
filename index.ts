@@ -3,8 +3,12 @@ import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { getOSMetrics } from "./lib/util/os-metrics.js";
+import { toolboxCollector } from "./lib/toolbox-collector.js";
 
 const api = new KoboldAPI();
+
+// Register OS metrics frontend
+toolboxCollector.register('/widgets/os-metrics-widget.js');
 
 serve({
   port: 3000,
@@ -22,6 +26,12 @@ serve({
     if (req.method === 'GET' && url.pathname === '/metrics') {
       const metrics = getOSMetrics();
       return new Response(JSON.stringify(metrics), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (req.method === 'GET' && url.pathname === '/toolbox/list') {
+      console.log('Serving toolbox list');
+      const tools = toolboxCollector.getTools();
+      console.log('Tools:', tools);
+      return new Response(JSON.stringify({ tools }), { headers: { 'Content-Type': 'application/json' } });
     }
     if (req.method === 'GET' && url.pathname.startsWith('/widgets/')) {
       try {
