@@ -893,7 +893,7 @@ export class PromptManagerWidget extends LitElement {
           </div>
 
           <div class="bottom-section">
-            <button class="build-button" @click=${isTemplateActive ? this.buildPrompt : null} ?disabled=${this.loading || !isTemplateActive}>${this.loading ? 'Building...' : 'Build Prompt'}</button>
+            <button class="build-button" @click=${isTemplateActive ? this.buildPrompt : null} ?disabled=${this.loading || !isTemplateActive}>${this.loading ? 'Generating...' : 'Preview Prompt'}</button>
 
             ${this.error ? html`<div class="error">${this.error}</div>` : ''}
             ${this.loading ? html`<div class="loading">Building prompt...</div>` : ''}
