@@ -18,6 +18,10 @@ export class Storage implements Storage {
     return this.db;
   }
 
+  getSessionId(): string | undefined {
+    return this.sessionId;
+  }
+
   execute(sql: string, params?: any[]): any {
     return params ? this.db.run(sql, params) : this.db.run(sql);
   }

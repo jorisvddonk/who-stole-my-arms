@@ -6,6 +6,7 @@ export interface HasStorage {
 export interface Storage {
   getTableName(): string;
   getDB(): Database;
+  getSessionId(): string | undefined;
   execute(sql: string, params?: any[]): any;
   query(sql: string, params?: any[]): any[];
   getComponentVersion(): Promise<number | null>;

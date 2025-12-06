@@ -40,6 +40,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
   }
 
   async init(storage: Storage): Promise<void> {
+    const sessionId = storage.getSessionId();
+    console.log(`\x1b[32mInitializing prompt template database${sessionId ? ` for session \x1b[34m${sessionId}\x1b[32m` : ''}...\x1b[0m`);
     await storage.execute(`CREATE TABLE IF NOT EXISTS ${storage.getTableName()} (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, data TEXT NOT NULL)`);
     const currentVersion = await storage.getComponentVersion();
     if (currentVersion === null) {

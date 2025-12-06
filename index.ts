@@ -5,7 +5,7 @@ import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { applyStorageMiddleware } from "./lib/middleware/database.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { widgetCollector } from "./lib/widget-collector.js";
-import { DatabaseManager } from "./lib/database-manager.js";
+import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
@@ -93,71 +93,81 @@ const routeGroups = [
           return new Response('File not found', { status: 404 });
         }
       },
-      "/sessions/:sessionId/generate": createMethodRouter({
-        POST: async (req) => {
-          try {
-            const body = await req.json();
-            const prompt = body.prompt;
-            if (!prompt) {
-              return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-            }
-            const text = await api.generate(prompt);
-            logGenerate(prompt, text.length);
-            return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
-          } catch (error) {
-            logError(error.message);
-            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-          }
-        }
-      }),
-      "/sessions/:sessionId/generateStream": createMethodRouter({
-        POST: async (req) => {
-          try {
-            const body = await req.json();
-            const prompt = body.prompt;
-            if (!prompt) {
-              return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-            }
+       "/sessions/:sessionId/generate": createMethodRouter({
+         POST: async (req) => {
+           try {
+             const sessionId = (req as any).params.sessionId;
+             const db = await dbManager.getSessionDB(sessionId);
+             const storage = new Storage(db, promptManager.getFQDN(), sessionId);
+             await promptManager.init(storage);
 
-            // For streaming, we'll use Server-Sent Events
-            const stream = new ReadableStream({
-              async start(controller) {
-                try {
-                  let totalLength = 0;
-                  for await (const chunk of api.generateStream(prompt)) {
-                    if (chunk.token) {
-                      totalLength += chunk.token.length;
-                      const data = JSON.stringify({ token: chunk.token });
-                      controller.enqueue(`data: ${data}\n\n`);
-                    } else if (chunk.finishReason) {
-                      const data = JSON.stringify({ finishReason: chunk.finishReason });
-                      controller.enqueue(`data: ${data}\n\n`);
-                      logGenerate(prompt, totalLength);
-                      break;
-                    }
-                  }
-                } catch (error) {
-                  logError(error.message);
-                  controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-                } finally {
-                  controller.close();
-                }
-              }
-            });
+             const body = await req.json();
+             const prompt = body.prompt;
+             if (!prompt) {
+               return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+             }
+             const text = await api.generate(prompt);
+             logGenerate(prompt, text.length);
+             return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+           } catch (error) {
+             logError(error.message);
+             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           }
+         }
+       }),
+       "/sessions/:sessionId/generateStream": createMethodRouter({
+         POST: async (req) => {
+           try {
+             const sessionId = (req as any).params.sessionId;
+             const db = await dbManager.getSessionDB(sessionId);
+             const storage = new Storage(db, promptManager.getFQDN(), sessionId);
+             await promptManager.init(storage);
 
-            return new Response(stream, {
-              headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-              }
-            });
-          } catch (error) {
-            logError(error.message);
-            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-          }
-        }
-      }),
+             const body = await req.json();
+             const prompt = body.prompt;
+             if (!prompt) {
+               return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+             }
+
+             // For streaming, we'll use Server-Sent Events
+             const stream = new ReadableStream({
+               async start(controller) {
+                 try {
+                   let totalLength = 0;
+                   for await (const chunk of api.generateStream(prompt)) {
+                     if (chunk.token) {
+                       totalLength += chunk.token.length;
+                       const data = JSON.stringify({ token: chunk.token });
+                       controller.enqueue(`data: ${data}\n\n`);
+                     } else if (chunk.finishReason) {
+                       const data = JSON.stringify({ finishReason: chunk.finishReason });
+                       controller.enqueue(`data: ${data}\n\n`);
+                       logGenerate(prompt, totalLength);
+                       break;
+                     }
+                   }
+                 } catch (error) {
+                   logError(error.message);
+                   controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+                 } finally {
+                   controller.close();
+                 }
+               }
+             });
+
+             return new Response(stream, {
+               headers: {
+                 'Content-Type': 'text/event-stream',
+                 'Cache-Control': 'no-cache',
+                 'Connection': 'keep-alive',
+               }
+             });
+           } catch (error) {
+             logError(error.message);
+             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           }
+         }
+       }),
 
       "/llm/settings": (req) => {
         // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
