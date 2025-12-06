@@ -5,18 +5,35 @@ import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/al
 export class ChatApp extends LitElement {
   static styles = css`
     :host {
-      display: grid;
-      grid-template-rows: 1fr auto;
+      display: flex;
+      flex-direction: column;
       height: 100vh;
       font-family: 'Times New Roman', serif;
       background: var(--primary-bg);
       color: var(--text-color);
     }
     .chat-container {
-      grid-row: 1;
+      flex: 1;
       overflow-y: auto;
       padding: 20px;
       background: var(--primary-bg);
+    }
+    .resizer {
+      height: 4px;
+      background: var(--border-color);
+      cursor: ns-resize;
+      flex-shrink: 0;
+    }
+    .dock {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      padding: 20px;
+      background: var(--secondary-bg);
+      border-top: 1px solid var(--border-color);
+      gap: 10px;
+      min-height: 80px;
     }
     .message {
       margin-bottom: 10px;
@@ -35,16 +52,6 @@ export class ChatApp extends LitElement {
       background: var(--system-msg-bg);
       color: var(--text-color);
       border: 1px solid var(--border-color);
-    }
-    .input-container {
-      grid-row: 2;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      padding: 20px;
-      background: var(--secondary-bg);
-      border-top: 1px solid var(--border-color);
-      gap: 10px;
     }
     input {
       flex: 1;
@@ -74,13 +81,17 @@ export class ChatApp extends LitElement {
 
   static properties = {
     messages: { type: Array },
-    loading: { type: Boolean }
+    loading: { type: Boolean },
+    dockHeight: { type: Number }
   };
 
   constructor() {
     super();
     this.messages = [];
     this.loading = false;
+    this.dockHeight = 0;
+    this.isResizing = false;
+    this.startY = 0;
   }
 
   async generate(e) {
@@ -118,6 +129,27 @@ export class ChatApp extends LitElement {
     }, 0);
   }
 
+  startResize(e) {
+    this.isResizing = true;
+    this.startY = e.clientY;
+    this.initialHeight = this.dockHeight || this.shadowRoot.querySelector('.dock').offsetHeight;
+    document.addEventListener('mousemove', this.handleResize);
+    document.addEventListener('mouseup', this.stopResize);
+  }
+
+  handleResize = (e) => {
+    if (!this.isResizing) return;
+    const deltaY = this.startY - e.clientY;
+    this.dockHeight = Math.max(80, this.initialHeight + deltaY);
+    this.requestUpdate();
+  }
+
+  stopResize = () => {
+    this.isResizing = false;
+    document.removeEventListener('mousemove', this.handleResize);
+    document.removeEventListener('mouseup', this.stopResize);
+  }
+
   render() {
     return html`
       <div class="chat-container">
@@ -126,7 +158,8 @@ export class ChatApp extends LitElement {
         `)}
         ${this.loading ? html`<div class="message system">Generating...</div>` : ''}
       </div>
-      <form class="input-container" @submit=${this.generate}>
+      <div class="resizer" @mousedown=${this.startResize}></div>
+      <form class="dock" @submit=${this.generate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}>
         <toolbox-menu .floating=${false}></toolbox-menu>
         <input id="prompt" type="text" placeholder="Type your message..." required ?disabled=${this.loading}>
         <button type="submit" ?disabled=${this.loading}>
