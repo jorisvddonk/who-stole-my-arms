@@ -1,5 +1,6 @@
 import { LitElement, html, css, unsafeHTML } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
 import './popup-dialog.js';
+import { sessionManager } from './session-manager.js';
 
 const dialog = document.createElement('popup-dialog');
 document.body.appendChild(dialog);
@@ -429,7 +430,8 @@ export class PromptManagerWidget extends LitElement {
 
   constructor() {
     super();
-    this.currentSession = sessionStorage.getItem('currentSession') || 'default';
+    this.currentSession = sessionManager.getCurrentSession();
+    this.sessionChangeHandler = this.handleSessionChange.bind(this);
     this.reset();
   }
 
@@ -437,21 +439,21 @@ export class PromptManagerWidget extends LitElement {
     super.connectedCallback();
     this.reset();
     // Listen for session changes
-    window.addEventListener('session-changed', this.handleSessionChange.bind(this));
+    sessionManager.addSessionChangeListener(this.sessionChangeHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener('session-changed', this.handleSessionChange.bind(this));
+    sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
   }
 
-  handleSessionChange(event) {
-    this.currentSession = event.detail.sessionId;
+  handleSessionChange(sessionId) {
+    this.currentSession = sessionId;
     this.reset(); // Reload data for the new session
   }
 
   reset() {
-    this.currentSession = sessionStorage.getItem('currentSession') || 'default';
+    this.currentSession = sessionManager.getCurrentSession();
     this.providers = [];
     this.groups = [];
     this.selectedGroups = [];

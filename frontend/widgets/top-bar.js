@@ -1,4 +1,5 @@
 import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
+import { sessionManager } from './session-manager.js';
 
 export class TopBar extends LitElement {
   static styles = css`
@@ -80,20 +81,30 @@ export class TopBar extends LitElement {
 
   constructor() {
     super();
-    this.currentSession = sessionStorage.getItem('currentSession') || 'default';
+    this.currentSession = sessionManager.getCurrentSession();
     this.sessions = [];
     this.menuOpen = false;
-    this.loadSessions();
+    this.sessionChangeHandler = this.handleSessionChange.bind(this);
+    this.initialize();
+  }
+
+  async initialize() {
+    await sessionManager.initialize();
+    this.currentSession = sessionManager.getCurrentSession();
+    this.sessions = sessionManager.getSessions();
+    this.requestUpdate();
   }
 
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener('click', this.handleClickOutside);
+    sessionManager.addSessionChangeListener(this.sessionChangeHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('click', this.handleClickOutside);
+    sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
   }
 
   handleClickOutside(event) {
@@ -102,22 +113,23 @@ export class TopBar extends LitElement {
     }
   }
 
-  async loadSessions() {
-    try {
-      const res = await fetch('/sessions');
-      if (res.ok) {
-        const data = await res.json();
-        this.sessions = data.sessions || [];
-        // Ensure current session exists in the list
-        if (!this.sessions.includes(this.currentSession)) {
-          this.sessions.unshift(this.currentSession);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load sessions:', error);
-      this.sessions = [this.currentSession];
-    }
+  handleSessionChange(sessionId) {
+    this.currentSession = sessionId;
+    this.sessions = sessionManager.getSessions();
     this.requestUpdate();
+  }
+
+  async switchSession(sessionId) {
+    await sessionManager.switchSession(sessionId);
+    this.closeMenu();
+  }
+
+  async createNewSession() {
+    try {
+      await sessionManager.createNewSession();
+    } catch (error) {
+      console.error('Failed to create new session:', error);
+    }
   }
 
   toggleMenu(event) {
