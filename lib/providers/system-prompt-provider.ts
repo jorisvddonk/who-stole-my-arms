@@ -42,7 +42,10 @@ export class SystemPromptProvider implements PromptProvider {
     }
   }
 
-  getAvailablePromptGroups(): string[] {
-    return ['basic', 'advanced'];
+  getAvailablePromptGroups(): { name: string; description: string }[] {
+    return [
+      { name: 'basic', description: 'Simple system prompt' },
+      { name: 'advanced', description: 'Detailed system prompt with formatting' }
+    ];
   }
 }

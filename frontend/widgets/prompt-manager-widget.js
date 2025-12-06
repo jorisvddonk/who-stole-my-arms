@@ -102,7 +102,7 @@ export class PromptManagerWidget extends LitElement {
       font-weight: 500;
     }
 
-    .group-preview {
+     .group-description {
       font-size: 0.75em;
       color: var(--text-color);
       opacity: 0.7;
@@ -823,26 +823,26 @@ export class PromptManagerWidget extends LitElement {
               <div class="section">
                 <h3>Available Groups</h3>
                 <div class="groups-list">
-                  ${this.groups.map(providerGroup => html`
-                    ${providerGroup.groups.map(groupName => {
-                      const groupPath = `${providerGroup.provider}/${groupName}`;
-                      const isSelected = this.selectedGroups.includes(groupPath);
-                      return html`
-                        <div class="group-item ${isTemplateActive ? '' : 'disabled'}" @click=${isTemplateActive ? () => this.handleGroupToggle(groupPath, !isSelected) : null}>
-                          <input
-                            type="checkbox"
-                            class="group-checkbox"
-                            .checked=${isSelected}
-                            ?disabled=${!isTemplateActive}
-                            @change=${(e) => e.stopPropagation()}
-                            @click=${(e) => e.stopPropagation()}
-                          >
-                          <span class="group-name">${groupPath}</span>
-                          <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
-                        </div>
-                      `;
-                    })}
-                  `)}
+                   ${this.groups.map(providerGroup => html`
+                     ${providerGroup.groups.map(group => {
+                       const groupPath = `${providerGroup.provider}/${group.name}`;
+                       const isSelected = this.selectedGroups.includes(groupPath);
+                       return html`
+                         <div class="group-item ${isTemplateActive ? '' : 'disabled'}" @click=${isTemplateActive ? () => this.handleGroupToggle(groupPath, !isSelected) : null}>
+                           <input
+                             type="checkbox"
+                             class="group-checkbox"
+                             .checked=${isSelected}
+                             ?disabled=${!isTemplateActive}
+                             @change=${(e) => e.stopPropagation()}
+                             @click=${(e) => e.stopPropagation()}
+                           >
+                           <span class="group-name">${groupPath}</span>
+                           <span class="group-description">${group.description}</span>
+                         </div>
+                       `;
+                     })}
+                   `)}
                 </div>
                 <div class="action-area">
                   ${this.selectedGroups.length > 0 && isTemplateActive ? html`
@@ -910,14 +910,7 @@ export class PromptManagerWidget extends LitElement {
     return 'Select groups above to add them to your prompt';
   }
 
-  getGroupPreview(providerName, groupName) {
-    // This is a simple preview - in a real implementation you might fetch actual content
-    if (providerName === 'system') {
-      if (groupName === 'basic') return 'Simple system prompt';
-      if (groupName === 'advanced') return 'Detailed system prompt with formatting';
-    }
-    return 'Prompt group';
-  }
+
 }
 
 customElements.define('prompt-manager-widget', PromptManagerWidget);

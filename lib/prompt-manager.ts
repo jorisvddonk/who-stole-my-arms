@@ -22,7 +22,7 @@ export type Item = PromptItem | NamedGroup;
 
 export interface PromptProvider {
   getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null>;
-  getAvailablePromptGroups(): string[];
+  getAvailablePromptGroups(): { name: string; description: string }[];
 }
 
 export interface PromptTemplate {
@@ -80,8 +80,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
     return Array.from(this.providers.keys());
   }
 
-  getAllGroups(): { provider: string; groups: string[] }[] {
-    const result: { provider: string; groups: string[] }[] = [];
+  getAllGroups(): { provider: string; groups: { name: string; description: string }[] }[] {
+    const result: { provider: string; groups: { name: string; description: string }[] }[] = [];
 
     for (const [providerName, provider] of this.providers) {
       try {
@@ -316,8 +316,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
         for (const [providerName, provider] of this.providers) {
           try {
             const availableGroups = provider.getAvailablePromptGroups();
-            for (const groupName of availableGroups) {
-              const fullPath = `${providerName}/${groupName}`;
+            for (const group of availableGroups) {
+              const fullPath = `${providerName}/${group.name}`;
               if (minimatch(fullPath, pattern)) {
                 expanded.push(fullPath);
               }

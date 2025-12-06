@@ -20,8 +20,8 @@ export class ChatHistory implements HasStorage, PromptProvider {
     return 'tools.chat.history';
   }
 
-  getAvailablePromptGroups(): string[] {
-    return ['chatHistory'];
+  getAvailablePromptGroups(): { name: string; description: string }[] {
+    return [{ name: 'chatHistory', description: 'Recent chat messages for context' }];
   }
 
   async getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null> {
