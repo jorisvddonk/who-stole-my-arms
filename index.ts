@@ -1,12 +1,14 @@
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
-import { logGenerate, logError } from "./lib/logging/logger.js";
+import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { widgetCollector } from "./lib/widget-collector.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
+import { PromptManager } from "./lib/prompt-manager.js";
+import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
 
 const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) => {
   api.updateSettings(settings);
@@ -15,11 +17,17 @@ const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettin
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 
+// Initialize PromptManager and providers
+const promptManager = new PromptManager(toolboxCollector);
+const systemPromptProvider = new SystemPromptProvider();
+promptManager.registerProvider('system', systemPromptProvider);
+
 // Define routes without logging (logging will be applied via middleware)
 const routes = {
   ...osMetricsTool.getRoutes(),
   ...koboldSettingsTool.getRoutes(),
   ...osMetricsDockWidget.getRoutes(),
+  ...promptManager.getRoutes(),
   "/": async (req) => {
     try {
       const content = await readFile('./frontend/index.html');
@@ -160,18 +168,18 @@ const routes = {
       }
     }
   },
-  "/generate/abort": {
-    POST: async (req) => {
-      try {
-        const success = await api.abortGeneration();
-        return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
-      } catch (error) {
-        logError(error.message);
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    "/generate/abort": {
+      POST: async (req) => {
+        try {
+          const success = await api.abortGeneration();
+          return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+          logError(error.message);
+          return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
       }
     }
-  }
-};
+  };
 
 const server = Bun.serve({
   port: 3000,

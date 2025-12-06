@@ -4,5 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "minimatch": "^10.1.1"
   }
 }
