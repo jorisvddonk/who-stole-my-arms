@@ -215,9 +215,139 @@ const routeGroups = [
              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
            }
          }
-       }),
+        }),
+        "/sessions/:sessionId/continue": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
 
-      "/llm/settings": (req) => {
+              const body = await req.json();
+              const { messageId } = body;
+              if (!messageId) {
+                return new Response(JSON.stringify({ error: 'messageId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              }
+
+              // Get existing message
+              const messages = await chatHistory.getMessages(chatStorage);
+              const message = messages.find(m => m.id === messageId);
+              if (!message || message.actor !== 'game-master') {
+                return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+              }
+
+              // Get the chatMessage template prefix
+              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+              await promptManager.init(promptStorage);
+              const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+              let prefix = '';
+              if (templateGroups) {
+                prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+              }
+
+              // Get all messages up to this point for context
+              const contextMessages = messages.filter(m => m.finishedAt <= message.finishedAt);
+              const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
+              const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
+
+              const text = await api.generate(fullPrompt);
+
+              // Append to existing message
+              await chatHistory.appendToMessage(chatStorage, messageId, text);
+
+              logGenerate(`Continue on message ${messageId}`, text.length);
+              return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+            } catch (error) {
+              logError(error.message);
+              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        }),
+        "/sessions/:sessionId/continueStream": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
+
+              const body = await req.json();
+              const { messageId } = body;
+              if (!messageId) {
+                return new Response(JSON.stringify({ error: 'messageId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              }
+
+              // Get existing message
+              const messages = await chatHistory.getMessages(chatStorage);
+              const message = messages.find(m => m.id === messageId);
+              if (!message || message.actor !== 'game-master') {
+                return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+              }
+
+              // Get the chatMessage template prefix
+              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+              await promptManager.init(promptStorage);
+              const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+              let prefix = '';
+              if (templateGroups) {
+                prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+              }
+
+              // Get all messages up to this point for context
+              const contextMessages = messages.filter(m => m.finishedAt <= message.finishedAt);
+              const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
+              const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
+
+              // For streaming, we'll use Server-Sent Events
+              const stream = new ReadableStream({
+                async start(controller) {
+                  try {
+                    let totalLength = 0;
+                    let additionalResponse = '';
+                    for await (const chunk of api.generateStream(fullPrompt)) {
+                      if (chunk.token) {
+                        totalLength += chunk.token.length;
+                        additionalResponse += chunk.token;
+                        const data = JSON.stringify({ token: chunk.token });
+                        controller.enqueue(`data: ${data}\n\n`);
+                      } else if (chunk.finishReason) {
+                        const data = JSON.stringify({ finishReason: chunk.finishReason });
+                        controller.enqueue(`data: ${data}\n\n`);
+                        // Append to existing message
+                        await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, chunk.finishReason);
+                        logGenerate(`Continue on message ${messageId}`, totalLength);
+                        break;
+                      }
+                    }
+                  } catch (error) {
+                    logError(error.message);
+                    // If there was partial response, append it
+                    if (additionalResponse) {
+                      await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, 'abort');
+                    }
+                    controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+                  } finally {
+                    controller.close();
+                  }
+                }
+              });
+
+              return new Response(stream, {
+                headers: {
+                  'Content-Type': 'text/event-stream',
+                  'Cache-Control': 'no-cache',
+                  'Connection': 'keep-alive',
+                }
+              });
+            } catch (error) {
+              logError(error.message);
+              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        }),
+
+       "/llm/settings": (req) => {
         // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
         const supportsStreaming = api instanceof Object && 'generateStream' in api;
         return new Response(JSON.stringify({

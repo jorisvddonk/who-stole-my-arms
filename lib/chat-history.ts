@@ -98,6 +98,22 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
+  async appendToMessage(storage: Storage, messageId: number, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
+    try {
+      const existingMessage = await storage.findById(messageId);
+      if (!existingMessage) {
+        return false;
+      }
+      const updatedContent = existingMessage.content + additionalContent;
+      const updatedFinishReason = finishReason || existingMessage.finishReason;
+      await storage.execute(`UPDATE ${storage.getTableName()} SET content = ?, finishReason = ? WHERE id = ?`, [updatedContent, updatedFinishReason, messageId]);
+      return true;
+    } catch (error) {
+      logError(`Failed to append to message: ${error.message}`);
+      return false;
+    }
+  }
+
   getRoutes(): Record<string, any> {
     return {
       "/sessions/:sessionid/chat/messages": createMethodRouter({
@@ -132,6 +148,31 @@ export class ChatHistory implements HasStorage, PromptProvider {
               return new Response(JSON.stringify({ error: 'Invalid message ID' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
             }
             const success = await this.deleteMessage(storage, messageId);
+            if (success) {
+              return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+            } else {
+              return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+            }
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }),
+      "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const storage = (req as any).context.get('storage');
+            const messageId = parseInt(req.params.messageid);
+            if (isNaN(messageId)) {
+              return new Response(JSON.stringify({ error: 'Invalid message ID' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+            const body = await req.json();
+            const { additionalContent, finishReason } = body;
+            if (additionalContent === undefined) {
+              return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+            const success = await this.appendToMessage(storage, messageId, additionalContent, finishReason);
             if (success) {
               return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
             } else {

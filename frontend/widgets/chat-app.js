@@ -44,7 +44,8 @@ export class ChatApp extends LitElement {
     .message-container {
       margin-bottom: 10px;
     }
-    .message-container:hover .delete-button {
+    .message-container:hover .delete-button,
+    .message-container:hover .continue-button {
       opacity: 1;
     }
     .delete-button {
@@ -67,7 +68,29 @@ export class ChatApp extends LitElement {
       justify-content: center;
     }
     .delete-button:hover {
-      background: var(--error-color, #ff4444);
+      background: var(--hover-bg);
+    }
+    .continue-button {
+      position: absolute;
+      top: 5px;
+      right: 30px;
+      background: var(--border-color);
+      color: var(--text-color);
+      border: none;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 12px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .continue-button:hover {
+      background: var(--hover-bg);
     }
     .message.system {
       background: var(--system-msg-bg);
@@ -284,15 +307,107 @@ export class ChatApp extends LitElement {
     return content.replace(/^\n+/, '');
   }
 
+  async handleContinue(messageId) {
+    this.loading = true;
+    this.requestUpdate();
+
+    try {
+      const endpoint = this.supportsStreaming ? `/sessions/${this.currentSession}/continueStream` : `/sessions/${this.currentSession}/continue`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.warn('Failed to continue generation:', errorData.error);
+        return;
+      }
+
+      if (this.supportsStreaming) {
+        // Handle streaming response
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE messages
+          while (buffer.includes('\n\n')) {
+            const messageEnd = buffer.indexOf('\n\n');
+            const message = buffer.slice(0, messageEnd);
+            buffer = buffer.slice(messageEnd + 2);
+
+            for (const line of message.split('\n')) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.token) {
+                    // Find the message and append the token
+                    const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                    if (msgIndex !== -1) {
+                      this.messages[msgIndex].content += data.token;
+                      this.requestUpdate();
+                      // Scroll to bottom
+                      setTimeout(() => {
+                        const container = this.shadowRoot.querySelector('.chat-container');
+                        container.scrollTop = container.scrollHeight;
+                      }, 0);
+                    }
+                  } else if (data.finishReason) {
+                    // Generation completed
+                    console.log('Continue generation finished:', data.finishReason);
+                    break;
+                  } else if (data.error) {
+                    console.warn('Continue generation error:', data.error);
+                    return;
+                  }
+                } catch (e) {
+                  // Skip malformed JSON
+                  continue;
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Handle non-streaming response
+        const data = await res.json();
+        // Find the message and append the text
+        const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+        if (msgIndex !== -1) {
+          this.messages[msgIndex].content += data.text;
+          this.requestUpdate();
+          // Scroll to bottom
+          setTimeout(() => {
+            const container = this.shadowRoot.querySelector('.chat-container');
+            container.scrollTop = container.scrollHeight;
+          }, 0);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to continue generation:', error);
+    } finally {
+      this.loading = false;
+      this.requestUpdate();
+    }
+  }
+
   render() {
     return html`
       <top-bar></top-bar>
       <div class="chat-container">
         ${this.messages.map((msg, index) => {
           const isLastSystemMessage = msg.role === 'system' && index === this.messages.length - 1;
+          const showContinueButton = msg.role === 'system' && index === this.messages.length - 1 && !this.loading;
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button></div>
+              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
