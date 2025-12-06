@@ -50,7 +50,7 @@ export class PromptManager implements ToolboxTool, HasStorage {
       // Add default chatMessage template
       const defaultTemplate = {
         name: 'chatMessage',
-        groups: ['system/advanced'],
+        groups: ['system/advanced', 'chat/chatHistory'],
         createdAt: new Date()
       };
       await storage.insert({
@@ -192,7 +192,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
               return new Response(JSON.stringify({ error: 'groups array is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
             }
 
-            const prompt = await this.getPrompt(groups, context);
+            const mergedContext = { ...context, sessionId: (req as any).params.sessionid };
+            const prompt = await this.getPrompt(groups, mergedContext);
             return new Response(JSON.stringify({ prompt }), { headers: { 'Content-Type': 'application/json' } });
           } catch (error) {
             logError(error.message);

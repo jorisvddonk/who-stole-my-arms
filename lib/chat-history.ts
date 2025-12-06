@@ -1,7 +1,9 @@
-import { Storage } from "../interfaces/Storage.js";
+import { Storage } from "./database-manager.js";
 import { HasStorage } from "../interfaces/Storage.js";
+import { PromptProvider, NamedGroup, Item } from "./prompt-manager.js";
 import { logError } from './logging/logger.js';
 import { createMethodRouter } from './util/route-utils.js';
+import { DatabaseManager } from "./database-manager.js";
 
 export interface ChatMessage {
   id: number;
@@ -11,9 +13,40 @@ export interface ChatMessage {
   finishReason: string | null;
 }
 
-export class ChatHistory implements HasStorage {
+export class ChatHistory implements HasStorage, PromptProvider {
+  constructor(private dbManager: DatabaseManager) {}
+
   getFQDN(): string {
     return 'tools.chat.history';
+  }
+
+  getAvailablePromptGroups(): string[] {
+    return ['chatHistory'];
+  }
+
+  async getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null> {
+    if (groupName !== 'chatHistory' || !context?.sessionId) {
+      return null;
+    }
+    try {
+      const db = await this.dbManager.getSessionDB(context.sessionId);
+      const storage = new Storage(db, this.getFQDN(), context.sessionId);
+      const messages = await this.getMessages(storage);
+      const items: Item[] = messages.map(msg => ({
+        type: 'prompt' as const,
+        name: msg.actor,
+        prompt: msg.content,
+        tags: []
+      }));
+      return {
+        type: 'group',
+        name: 'chatHistory',
+        items
+      };
+    } catch (error) {
+      logError(`Failed to get chat history prompt group: ${error.message}`);
+      return null;
+    }
   }
 
   async init(storage: Storage): Promise<void> {

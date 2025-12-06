@@ -24,13 +24,14 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) =
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 
+// Initialize ChatHistory
+const chatHistory = new ChatHistory(dbManager);
+
 // Initialize PromptManager and providers
 const promptManager = new PromptManager(toolboxCollector);
 const systemPromptProvider = new SystemPromptProvider();
 promptManager.registerProvider('system', systemPromptProvider);
-
-// Initialize ChatHistory
-const chatHistory = new ChatHistory();
+promptManager.registerProvider('chat', chatHistory);
 
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
@@ -118,7 +119,11 @@ const routeGroups = [
              await chatHistory.addMessage(chatStorage, 'user', userPrompt);
 
              // Get the chatMessage template prefix
-             const prefix = await promptManager.getPromptFromTemplate(promptStorage, 'chatMessage');
+             const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+             let prefix = '';
+             if (templateGroups) {
+               prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+             }
              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
              const text = await api.generate(fullPrompt);
@@ -154,7 +159,11 @@ const routeGroups = [
              await chatHistory.addMessage(chatStorage, 'user', userPrompt);
 
              // Get the chatMessage template prefix
-             const prefix = await promptManager.getPromptFromTemplate(promptStorage, 'chatMessage');
+             const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+             let prefix = '';
+             if (templateGroups) {
+               prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+             }
              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
              // For streaming, we'll use Server-Sent Events
