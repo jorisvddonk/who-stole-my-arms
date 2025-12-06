@@ -58,9 +58,36 @@ const server = Bun.serve({
           if (!prompt) {
             return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
           }
-          const text = await api.generate(prompt);
-          logGenerate(prompt, text.length);
-          return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+
+          // For streaming, we'll use Server-Sent Events
+          const stream = new ReadableStream({
+            async start(controller) {
+              try {
+                let totalLength = 0;
+                for await (const token of api.generateStream(prompt)) {
+                  totalLength += token.length;
+                  const data = JSON.stringify({ token });
+                  controller.enqueue(`data: ${data}\n\n`);
+                }
+                // Send completion signal
+                controller.enqueue(`data: ${JSON.stringify({ done: true })}\n\n`);
+                logGenerate(prompt, totalLength);
+              } catch (error) {
+                logError(error.message);
+                controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+              } finally {
+                controller.close();
+              }
+            }
+          });
+
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            }
+          });
         } catch (error) {
           logError(error.message);
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
