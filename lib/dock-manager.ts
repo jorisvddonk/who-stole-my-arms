@@ -2,6 +2,10 @@ import { HasStorage } from "../interfaces/Storage.js";
 import { createMethodRouter } from "./util/route-utils.js";
 
 export class DockManager implements HasStorage {
+  constructor(toolboxCollector: any) {
+    toolboxCollector.register('/widgets/add-widget-row-widget.js');
+  }
+
   getFQDN(): string {
     return "dock.manager";
   }

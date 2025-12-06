@@ -24,10 +24,7 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) =
 });
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
-const dockManager = new DockManager();
-
-// Register add widget row widget
-toolboxCollector.register('/widgets/add-widget-row-widget.js');
+const dockManager = new DockManager(toolboxCollector);
 
 // Initialize ChatHistory
 const chatHistory = new ChatHistory(dbManager);
