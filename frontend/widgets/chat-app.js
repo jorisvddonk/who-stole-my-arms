@@ -42,6 +42,32 @@ export class ChatApp extends LitElement {
     }
     .message-container {
       margin-bottom: 10px;
+      position: relative;
+    }
+    .message-container:hover .delete-button {
+      opacity: 1;
+    }
+    .delete-button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: var(--border-color);
+      color: var(--text-color);
+      border: none;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 12px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .delete-button:hover {
+      background: var(--error-color, #ff4444);
     }
     .message.system {
       background: var(--system-msg-bg);
@@ -102,6 +128,7 @@ export class ChatApp extends LitElement {
       if (res.ok) {
         const data = await res.json();
         this.messages = data.messages.map(msg => ({
+          id: msg.id,
           role: msg.actor === 'user' ? 'user' : 'system',
           content: msg.content
         }));
@@ -122,6 +149,21 @@ export class ChatApp extends LitElement {
     } catch (error) {
       console.warn('Failed to check LLM settings:', error);
       this.supportsStreaming = false;
+    }
+  }
+
+  async deleteMessage(messageId) {
+    try {
+      const res = await fetch(`/sessions/${this.currentSession}/chat/messages/${messageId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        this.loadChatHistory();
+      } else {
+        console.warn('Failed to delete message');
+      }
+    } catch (error) {
+      console.warn('Failed to delete message:', error);
     }
   }
 
@@ -251,6 +293,7 @@ export class ChatApp extends LitElement {
           return html`
             <div class="message-container">
               <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}</div>
+              <button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
