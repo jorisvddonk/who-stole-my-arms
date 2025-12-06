@@ -125,7 +125,7 @@ export class ToolboxMenu extends LitElement {
     return html`
       <ul>
         ${items.map(item => html`
-          <li @mouseenter=${() => this.handleMouseEnter(item)} @mouseleave=${() => this.handleMouseLeave(item)} @click=${() => item.onClick && item.onClick()}>
+          <li @mouseenter=${() => this.handleMouseEnter(item)} @mouseleave=${() => this.handleMouseLeave(item)} @click=${() => this.handleItemClick(item)}>
             ${item.label}
             ${item.children && item.children.length > 0 ? html`<span>▶</span>` : ''}
             ${item.isOpen ? html`<ul class="submenu">${this.renderMenu(item.children)}</ul>` : ''}
@@ -145,6 +145,11 @@ export class ToolboxMenu extends LitElement {
   handleMouseLeave(item) {
     item.isOpen = false;
     this.requestUpdate();
+  }
+
+  handleItemClick(item) {
+    if (item.onClick) item.onClick();
+    this.isOpen = false;
   }
 
   updated() {
