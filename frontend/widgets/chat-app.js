@@ -245,11 +245,15 @@ export class ChatApp extends LitElement {
                       const container = this.shadowRoot.querySelector('.chat-container');
                       container.scrollTop = container.scrollHeight;
                     }, 0);
-                  } else if (data.finishReason) {
-                    // Generation completed with finish reason
-                    console.log('Generation finished:', data.finishReason);
-                    break;
-                  } else if (data.error) {
+                   } else if (data.finishReason) {
+                     // Generation completed with finish reason
+                     console.log('Generation finished:', data.finishReason);
+                     break;
+                   } else if (data.messageId) {
+                     // Set the message id for continuation
+                     this.messages[systemMessageIndex].id = data.messageId;
+                     this.requestUpdate();
+                   } else if (data.error) {
                     this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${data.error}` };
                     this.requestUpdate();
                     return;
@@ -262,11 +266,11 @@ export class ChatApp extends LitElement {
             }
           }
         }
-      } else {
-        // Handle non-streaming response
-        const data = await res.json();
-        this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response' };
-        this.requestUpdate();
+       } else {
+         // Handle non-streaming response
+         const data = await res.json();
+         this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
+         this.requestUpdate();
         // Scroll to bottom
         setTimeout(() => {
           const container = this.shadowRoot.querySelector('.chat-container');

@@ -126,24 +126,24 @@ const routeGroups = [
                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
              }
 
-             // Add user message to history
-             await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+              // Add user message to history
+              await chatHistory.addMessage(chatStorage, 'user', userPrompt);
 
-             // Get the chatMessage template prefix
-             const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
-             let prefix = '';
-             if (templateGroups) {
-               prefix = await promptManager.getPrompt(templateGroups, { sessionId });
-             }
-             const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
+              // Get the chatMessage template prefix
+              const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+              let prefix = '';
+              if (templateGroups) {
+                prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+              }
+              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
-             const text = await api.generate(fullPrompt);
+              const text = await api.generate(fullPrompt);
 
-             // Add generated message to history
-             await chatHistory.addMessage(chatStorage, 'game-master', text);
+              // Add generated message to history
+              const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
 
-             logGenerate(userPrompt, text.length);
-             return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+              logGenerate(userPrompt, text.length);
+              return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
            } catch (error) {
              logError(error.message);
              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
@@ -191,23 +191,28 @@ const routeGroups = [
                        fullResponse += chunk.token;
                        const data = JSON.stringify({ token: chunk.token });
                        controller.enqueue(`data: ${data}\n\n`);
-                     } else if (chunk.finishReason) {
-                       const data = JSON.stringify({ finishReason: chunk.finishReason });
-                       controller.enqueue(`data: ${data}\n\n`);
-                       // Add generated message to history
-                       await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
-                       logGenerate(userPrompt, totalLength);
-                       break;
+                      } else if (chunk.finishReason) {
+                        const data = JSON.stringify({ finishReason: chunk.finishReason });
+                        controller.enqueue(`data: ${data}\n\n`);
+                        // Add generated message to history
+                        const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
+                        const idData = JSON.stringify({ messageId });
+                        controller.enqueue(`data: ${idData}\n\n`);
+                        logGenerate(userPrompt, totalLength);
+                        break;
+                      }
+                    }
+                  } catch (error) {
+                     logError(error.message);
+                     // If there was partial response, store it as aborted
+                     if (fullResponse) {
+                       const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), 'abort');
+                       const idData = JSON.stringify({ messageId });
+                       controller.enqueue(`data: ${idData}\n\n`);
                      }
-                   }
-                 } catch (error) {
-                   logError(error.message);
-                   // If there was partial response, store it as aborted
-                   if (fullResponse) {
-                     await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), 'abort');
-                   }
-                   controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-                 } finally {
+                     controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+                    }
+                  finally {
                    controller.close();
                  }
                }

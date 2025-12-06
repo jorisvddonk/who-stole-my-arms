@@ -59,9 +59,9 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
-  async addMessage(storage: Storage, actor: 'user' | 'game-master', content: string, finishedAt: Date = new Date(), finishReason: string | null = null): Promise<void> {
+  async addMessage(storage: Storage, actor: 'user' | 'game-master', content: string, finishedAt: Date = new Date(), finishReason: string | null = null): Promise<number> {
     try {
-      await storage.insert({
+      return await storage.insert({
         actor,
         content,
         finishedAt: finishedAt.toISOString(),
@@ -69,6 +69,7 @@ export class ChatHistory implements HasStorage, PromptProvider {
       });
     } catch (error) {
       logError(`Failed to add message: ${error.message}`);
+      throw error;
     }
   }
 
