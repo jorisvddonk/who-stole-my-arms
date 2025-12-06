@@ -120,12 +120,27 @@ export class DockWidget extends LitElement {
 
   handleMenuAction(e) {
     const { action, rowId } = e.detail;
-    if (action === 'remove') {
+    if (action === 'add-row-above') {
+      this.addRowAt(rowId, 'above');
+    } else if (action === 'add-row-below') {
+      this.addRowAt(rowId, 'below');
+    } else if (action === 'remove') {
       this.rows = this.rows.filter(r => r.id !== rowId);
     } else if (action === 'edit-widgets') {
       this.editWidgets(rowId);
     }
     this.requestUpdate();
+  }
+
+  addRowAt(rowId, position) {
+    const index = this.rows.findIndex(r => r.id === rowId);
+    const newId = Math.max(0, ...this.rows.map(r => r.id)) + 1;
+    const newRow = { id: newId, widgets: [{ type: 'empty-widget', span: 12 }] };
+    if (position === 'above') {
+      this.rows.splice(index, 0, newRow);
+    } else {
+      this.rows.splice(index + 1, 0, newRow);
+    }
   }
 
   editWidgets(rowId) {

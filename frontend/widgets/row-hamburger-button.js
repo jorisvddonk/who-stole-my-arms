@@ -31,7 +31,7 @@ export class RowHamburgerButton extends LitElement {
       border: 1px solid var(--border-color);
       border-radius: 4px;
       padding: 5px 0;
-      min-width: 120px;
+      min-width: 160px;
       z-index: 101;
     }
     .menu-item {
@@ -71,8 +71,10 @@ export class RowHamburgerButton extends LitElement {
       <div class="hamburger" @click=${this.toggleMenu}>☰</div>
       ${this.isOpen ? html`
         <div class="menu">
-          <div class="menu-item" @click=${() => this.handleAction('remove')}>Remove Row</div>
+          <div class="menu-item" @click=${() => this.handleAction('add-row-above')}>Add Row Above</div>
           <div class="menu-item" @click=${() => this.handleAction('edit-widgets')}>Edit Widgets</div>
+          <div class="menu-item" @click=${() => this.handleAction('remove')}>Remove Row</div>
+          <div class="menu-item" @click=${() => this.handleAction('add-row-below')}>Add Row Below</div>
         </div>
       ` : ''}
     `;
