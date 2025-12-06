@@ -171,7 +171,6 @@ export class KoboldSettingsWidget extends LitElement {
   render() {
     return html`
       <div class="settings-form">
-        <h3>KoboldCPP Settings</h3>
 
         <div class="setting-group">
           <label for="baseUrl">Base URL:</label>
@@ -283,6 +282,7 @@ customElements.define('kobold-settings-widget', KoboldSettingsWidget);
 export function register(toolboxMenu) {
   toolboxMenu.addItem('KoboldCPP Settings', [], () => {
     dialog.contentTemplate = () => html`<kobold-settings-widget></kobold-settings-widget>`;
+    dialog.title = 'KoboldCPP Settings';
     dialog.open = true;
   });
 }
