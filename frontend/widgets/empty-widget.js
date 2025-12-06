@@ -11,10 +11,35 @@ export class EmptyWidget extends LitElement {
       border-radius: 4px;
       box-sizing: border-box;
     }
+    button {
+      opacity: 0;
+      transition: opacity 0.2s;
+      background: none;
+      border: none;
+      color: var(--text-color);
+      font-size: 2em;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    :host(:hover) button {
+      opacity: 1;
+    }
   `;
 
+  static properties = {
+    rowId: { type: Number }
+  };
+
   render() {
-    return html`<div style="height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-color);">Empty</div>`;
+    return html`<button @click=${this.handleClick}>+</button>`;
+  }
+
+  handleClick() {
+    this.dispatchEvent(new CustomEvent('replace', { detail: { rowId: this.rowId } }));
   }
 }
 

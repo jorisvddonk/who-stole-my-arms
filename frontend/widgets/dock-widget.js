@@ -201,10 +201,10 @@ export class DockWidget extends LitElement {
     }
   }
 
-  renderWidget(type) {
+  renderWidget(type, rowId) {
     switch (type) {
       case 'empty-widget':
-        return html`<empty-widget></empty-widget>`;
+        return html`<empty-widget .rowId=${rowId} @replace=${this.handleReplace}></empty-widget>`;
       case 'dummy-widget':
         return html`<dummy-widget></dummy-widget>`;
       case 'os-metrics-dock-widget':
@@ -212,6 +212,10 @@ export class DockWidget extends LitElement {
       default:
         return html`<div>Unknown widget: ${type}</div>`;
     }
+  }
+
+  handleReplace(e) {
+    this.editWidgets(e.detail.rowId);
   }
 
   handleKeyDown(e) {
@@ -234,7 +238,7 @@ export class DockWidget extends LitElement {
         <div class="row" @mouseenter=${() => this.showHamburger(row.id)} @mouseleave=${() => this.hideHamburger(row.id)}>
           <row-hamburger-button .rowId=${row.id} style="display: ${this.visibleHamburgers.has(row.id) ? 'block' : 'none'}" @menu-action=${this.handleMenuAction}></row-hamburger-button>
           <div class="grid" style="display: grid; grid-template-columns: repeat(12, 1fr);">
-            ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type)}</div>`)}
+            ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type, row.id)}</div>`)}
           </div>
         </div>
         `)}

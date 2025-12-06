@@ -6,7 +6,7 @@ export class RowHamburgerButton extends LitElement {
       position: absolute;
       right: 0px;
       top: 0px;
-      height: calc(100% - 1px);
+      height: calc(100% - 2px);
       width: 10px;
       z-index: 100;
     }
