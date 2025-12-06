@@ -184,9 +184,9 @@ export class EditWidgetsPopup extends LitElement {
         <div class="widgets-list">
           ${this._widgets.map((widget, index) => html`
             <div class="widget-item">
-              <select .value=${widget.type} @change=${(e) => this.updateType(index, e.target.value)}>
+              <select @change=${(e) => this.updateType(index, e.target.value)}>
                 ${Array.from(widgetTypes.entries()).map(([type, label]) => html`
-                  <option value=${type}>${label}</option>
+                  <option value=${type} ?selected=${widget.type === type}>${label}</option>
                 `)}
               </select>
               <input type="number" min="1" max="12" .value=${widget.span} @input=${(e) => this.updateSpan(index, e.target.value)}>
