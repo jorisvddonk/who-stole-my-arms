@@ -3,6 +3,7 @@ import './toolbox-menu.js';
 import './empty-widget.js';
 import './dummy-widget.js';
 import './row-hamburger-button.js';
+import './edit-widgets-popup.js';
 
 export class DockWidget extends LitElement {
   static styles = css`
@@ -87,9 +88,9 @@ export class DockWidget extends LitElement {
     super();
     this.loading = false;
     this.rows = [
-      { id: 1, columns: 12, widgets: [{ type: 'empty-widget', span: 12 }] },
-      { id: 2, columns: 6, widgets: [{ type: 'dummy-widget', span: 3 }, { type: 'empty-widget', span: 3 }] },
-      { id: 3, columns: 4, widgets: [{ type: 'dummy-widget', span: 2 }, { type: 'dummy-widget', span: 2 }] }
+      { id: 1, widgets: [{ type: 'empty-widget', span: 12 }] },
+      { id: 2, widgets: [{ type: 'dummy-widget', span: 6 }, { type: 'empty-widget', span: 6 }] },
+      { id: 3, widgets: [{ type: 'dummy-widget', span: 3 }, { type: 'dummy-widget', span: 3 }, { type: 'dummy-widget', span: 6 }] }
     ];
     this.visibleHamburgers = new Set();
   }
@@ -103,7 +104,7 @@ export class DockWidget extends LitElement {
 
   addRow() {
     const id = Math.max(0, ...this.rows.map(r => r.id)) + 1;
-    this.rows = [...this.rows, { id, columns: 12, widgets: [{ type: 'empty-widget', span: 12 }] }];
+    this.rows = [...this.rows, { id, widgets: [{ type: 'empty-widget', span: 12 }] }];
     this.requestUpdate();
   }
 
@@ -121,24 +122,28 @@ export class DockWidget extends LitElement {
     const { action, rowId } = e.detail;
     if (action === 'remove') {
       this.rows = this.rows.filter(r => r.id !== rowId);
-    } else if (action === 'set-columns') {
-      const cols = parseInt(prompt('Number of columns (1-12):'));
-      if (cols >= 1 && cols <= 12) {
-        const row = this.rows.find(r => r.id === rowId);
-        row.columns = cols;
-        // Reset widgets if needed
-        row.widgets = [{ type: 'empty-widget', span: cols }];
-      }
-    } else if (action === 'add-widget') {
-      const type = prompt('Widget type: empty-widget, dummy-widget');
-      const span = parseInt(prompt('Span (1-12):'));
-      if (type && span >= 1 && span <= 12) {
-        const row = this.rows.find(r => r.id === rowId);
-        row.widgets.push({ type, span });
-        // Adjust if total span > columns, but for simplicity, allow
-      }
+    } else if (action === 'edit-widgets') {
+      this.editWidgets(rowId);
     }
     this.requestUpdate();
+  }
+
+  editWidgets(rowId) {
+    const row = this.rows.find(r => r.id === rowId);
+    const editor = document.createElement('edit-widgets-popup');
+    editor.row = row;
+    editor.addEventListener('save', this.handleSave.bind(this));
+    document.body.appendChild(editor);
+  }
+
+  handleSave(e) {
+    const { widgets } = e.detail;
+    // Find the row and update
+    const row = this.rows.find(r => r.id === e.target.row.id);
+    if (row) {
+      row.widgets = widgets;
+      this.requestUpdate();
+    }
   }
 
   handleSubmit() {
@@ -180,7 +185,7 @@ export class DockWidget extends LitElement {
         ${this.rows.map(row => html`
         <div class="row" @mouseenter=${() => this.showHamburger(row.id)} @mouseleave=${() => this.hideHamburger(row.id)}>
           <row-hamburger-button .rowId=${row.id} style="display: ${this.visibleHamburgers.has(row.id) ? 'block' : 'none'}" @menu-action=${this.handleMenuAction}></row-hamburger-button>
-          <div class="grid" style="display: grid; grid-template-columns: repeat(${row.columns}, 1fr);">
+          <div class="grid" style="display: grid; grid-template-columns: repeat(12, 1fr);">
             ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type)}</div>`)}
           </div>
         </div>

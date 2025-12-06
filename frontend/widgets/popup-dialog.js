@@ -7,8 +7,6 @@ export class PopupDialog extends LitElement {
       border-radius: 8px;
       padding: 20px;
       box-shadow: 0 4px 20px var(--shadow-color);
-      max-width: 500px;
-      max-height: 80vh;
       overflow-y: auto;
       background: var(--dialog-bg);
       color: var(--text-color);
@@ -17,19 +15,95 @@ export class PopupDialog extends LitElement {
     dialog::backdrop {
       background: var(--backdrop-color);
     }
+    .dialog-title {
+      margin: 0 0 10px 0;
+      color: var(--text-color);
+      font-family: 'Times New Roman', serif;
+    }
     .content {
       white-space: pre-wrap;
     }
-    button {
-      margin-top: 10px;
-      padding: 8px 16px;
+    .content select {
+      width: 120px;
+    }
+    .content input {
+      width: 60px;
+    }
+    .content select, .content input {
+      padding: 2px 4px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text-color);
+      font-family: 'Times New Roman', serif;
+      height: 24px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .content select:focus, .content input:focus {
+      outline: none;
+      border-color: var(--accent-bg);
+    }
+    .content button {
+      padding: 2px 6px;
       background: var(--dark-accent);
       color: var(--light-text);
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      font-family: 'Times New Roman', serif;
+      height: 24px;
+      font-size: 12px;
     }
-    button:hover {
+    .content button:hover {
+      background: var(--darker-accent);
+    }
+    dialog::-webkit-scrollbar {
+      width: 8px;
+    }
+    dialog::-webkit-scrollbar-track {
+      background: var(--primary-bg);
+    }
+    dialog::-webkit-scrollbar-thumb {
+      background: var(--accent-bg);
+      border-radius: 4px;
+    }
+    dialog::-webkit-scrollbar-thumb:hover {
+      background: var(--darker-accent);
+    }
+    .content .widgets-list {
+      margin-bottom: 10px;
+    }
+    .content .widgets-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .content .widget-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px;
+      background: var(--secondary-bg);
+      border-radius: 4px;
+    }
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 30px;
+      height: 30px;
+      background: var(--dark-accent);
+      color: var(--light-text);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .close-btn:hover {
       background: var(--darker-accent);
     }
   `;
@@ -37,20 +111,27 @@ export class PopupDialog extends LitElement {
   static properties = {
     open: { type: Boolean },
     content: { type: String },
-    contentTemplate: { type: Function }
+    contentTemplate: { type: Function },
+    maxWidth: { type: String },
+    maxHeight: { type: String },
+    title: { type: String }
   };
 
   constructor() {
     super();
     this.open = false;
     this.content = '';
+    this.maxWidth = '500px';
+    this.maxHeight = '80vh';
+    this.title = '';
   }
 
   render() {
     return html`
-      <dialog>
+      <dialog style="max-width: ${this.maxWidth}; max-height: ${this.maxHeight};">
+        <button class="close-btn" @click=${() => this.open = false}>×</button>
+        ${this.title ? html`<h3 class="dialog-title">${this.title}</h3>` : ''}
         <div class="content">${this.contentTemplate ? this.contentTemplate() : this.content}</div>
-        <button @click=${() => this.open = false}>Close</button>
       </dialog>
     `;
   }

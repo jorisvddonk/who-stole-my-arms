@@ -72,8 +72,7 @@ export class RowHamburgerButton extends LitElement {
       ${this.isOpen ? html`
         <div class="menu">
           <div class="menu-item" @click=${() => this.handleAction('remove')}>Remove Row</div>
-          <div class="menu-item" @click=${() => this.handleAction('set-columns')}>Set Columns</div>
-          <div class="menu-item" @click=${() => this.handleAction('add-widget')}>Add Widget</div>
+          <div class="menu-item" @click=${() => this.handleAction('edit-widgets')}>Edit Widgets</div>
         </div>
       ` : ''}
     `;
