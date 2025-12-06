@@ -860,21 +860,22 @@ export class PromptManagerWidget extends LitElement {
 
                 <div class="ordered-groups">
                   <div class="insert-indicator" id="insert-indicator"></div>
-                  ${this.orderedGroups.map((groupPath, index) => html`
-                    <span
-                      class="group-tag"
-                      draggable="true"
-                      @dragstart=${(e) => this.handleDragStart(e, index)}
-                      @dragover=${(e) => this.handleDragOver(e, index)}
-                      @dragenter=${(e) => this.handleDragEnter(e, index)}
-                      @dragleave=${this.handleDragLeave}
-                      @drop=${(e) => this.handleDrop(e, index)}
-                      @dragend=${this.handleDragEnd}
-                    >
-                      ${groupPath}
-                      <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
-                    </span>
-                  `)}
+                   ${this.orderedGroups.map((groupPath, index) => html`
+                     <span
+                       class="group-tag"
+                       draggable="true"
+                       title="${this.getGroupDescription(groupPath)}"
+                       @dragstart=${(e) => this.handleDragStart(e, index)}
+                       @dragover=${(e) => this.handleDragOver(e, index)}
+                       @dragenter=${(e) => this.handleDragEnter(e, index)}
+                       @dragleave=${this.handleDragLeave}
+                       @drop=${(e) => this.handleDrop(e, index)}
+                       @dragend=${this.handleDragEnd}
+                     >
+                       ${groupPath}
+                       <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
+                     </span>
+                   `)}
                 </div>
 
                 <div class="add-group-section">
@@ -908,6 +909,17 @@ export class PromptManagerWidget extends LitElement {
 
   getPlaceholderText() {
     return 'Select groups above to add them to your prompt';
+  }
+
+  getGroupDescription(groupPath) {
+    for (const providerGroup of this.groups) {
+      for (const group of providerGroup.groups) {
+        if (`${providerGroup.provider}/${group.name}` === groupPath) {
+          return group.description;
+        }
+      }
+    }
+    return 'Prompt group';
   }
 
 
