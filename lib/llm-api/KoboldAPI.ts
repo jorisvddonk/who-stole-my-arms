@@ -1,12 +1,38 @@
 import { NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl } from '../interfaces/LLMInvoke.js';
 
+interface KoboldSettings {
+  baseUrl: string;
+  maxLength: number;
+  temperature: number;
+  topK: number;
+  topP: number;
+  repetitionPenalty: number;
+  minP: number;
+}
+
 export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl {
   private baseUrl: string;
   private genkey: string;
+  private settings: KoboldSettings;
 
-  constructor(baseUrl: string = 'http://localhost:5001') {
+  constructor(baseUrl: string = 'http://localhost:5001', settings?: Partial<KoboldSettings>) {
     this.baseUrl = baseUrl;
     this.genkey = `KCPP${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    this.settings = {
+      baseUrl,
+      maxLength: 100,
+      temperature: 0.7,
+      topK: 40,
+      topP: 0.9,
+      repetitionPenalty: 1.0,
+      minP: 0.05,
+      ...settings
+    };
+  }
+
+  updateSettings(newSettings: Partial<KoboldSettings>) {
+    this.settings = { ...this.settings, ...newSettings };
+    this.baseUrl = this.settings.baseUrl;
   }
 
   private async _callApi(endpoint: string, payload?: any): Promise<any> {
@@ -41,7 +67,12 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLM
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: prompt,
-        max_length: 100,
+        max_length: this.settings.maxLength,
+        temperature: this.settings.temperature,
+        top_k: this.settings.topK,
+        top_p: this.settings.topP,
+        rep_pen: this.settings.repetitionPenalty,
+        min_p: this.settings.minP,
         genkey: this.genkey,
       })
     });
@@ -60,7 +91,12 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLM
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: prompt,
-        max_length: 100,
+        max_length: this.settings.maxLength,
+        temperature: this.settings.temperature,
+        top_k: this.settings.topK,
+        top_p: this.settings.topP,
+        rep_pen: this.settings.repetitionPenalty,
+        min_p: this.settings.minP,
         genkey: this.genkey,
       })
     });

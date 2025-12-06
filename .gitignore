@@ -11,3 +11,4 @@ build/
 *.swo
 package-lock.json
 yarn.lock
+kobold-settings.json

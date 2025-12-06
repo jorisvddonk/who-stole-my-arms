@@ -84,10 +84,10 @@ export class DockWidget extends LitElement {
       cursor: not-allowed;
     }
     button.abort {
-      background-color: var(--error-color, #dc3545);
+      background-color: var(--error-color);
     }
     button.abort:hover {
-      background-color: var(--darker-error-color, #c82333);
+      background-color: var(--darker-error-color);
     }
   `;
 

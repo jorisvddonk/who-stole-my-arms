@@ -5,15 +5,20 @@ import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { widgetCollector } from "./lib/widget-collector.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
+import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 
-const api = new KoboldAPI();
+const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) => {
+  api.updateSettings(settings);
+});
+const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 
 // Define routes without logging (logging will be applied via middleware)
 const routes = {
   ...osMetricsTool.getRoutes(),
+  ...koboldSettingsTool.getRoutes(),
   ...osMetricsDockWidget.getRoutes(),
   "/": async (req) => {
     try {
@@ -168,7 +173,6 @@ const server = Bun.serve({
   port: 3000,
   routes: applyLoggingMiddleware(routes),
   fetch(req) {
-    logRequest(req);
     return new Response('Not found', { status: 404 });
   }
 });
