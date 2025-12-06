@@ -6,16 +6,16 @@ export class PopupDialog extends LitElement {
       border: none;
       border-radius: 8px;
       padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 20px var(--shadow-color);
       max-width: 500px;
       max-height: 80vh;
       overflow-y: auto;
-      background: #bcaaa4;
-      color: #3e2723;
+      background: var(--dialog-bg);
+      color: var(--text-color);
       font-family: 'Times New Roman', serif;
     }
     dialog::backdrop {
-      background: rgba(0,0,0,0.5);
+      background: var(--backdrop-color);
     }
     .content {
       white-space: pre-wrap;
@@ -23,14 +23,14 @@ export class PopupDialog extends LitElement {
     button {
       margin-top: 10px;
       padding: 8px 16px;
-      background: #5d4037;
-      color: #f4f1e8;
+      background: var(--dark-accent);
+      color: var(--light-text);
       border: none;
       border-radius: 4px;
       cursor: pointer;
     }
     button:hover {
-      background: #3e2723;
+      background: var(--darker-accent);
     }
   `;
 

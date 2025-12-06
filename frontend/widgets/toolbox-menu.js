@@ -17,21 +17,21 @@ export class ToolboxMenu extends LitElement {
       width: 50px;
       height: 50px;
       border-radius: 50%;
-      background: #5d4037;
-      color: #f4f1e8;
+      background: var(--dark-accent);
+      color: var(--light-text);
       border: none;
       font-size: 24px;
       cursor: pointer;
     }
     button:hover {
-      background: #3e2723;
+      background: var(--darker-accent);
     }
     .menu {
-      background: #bcaaa4;
-      border: 1px solid #8d6e63;
+      background: var(--menu-bg);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       padding: 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--shadow-color);
       position: absolute;
       bottom: 60px;
       left: 0;
@@ -47,20 +47,20 @@ export class ToolboxMenu extends LitElement {
       position: relative;
       padding: 5px 10px;
       cursor: pointer;
-      color: #3e2723;
+      color: var(--text-color);
     }
     li:hover {
-      background: #a1887f;
+      background: var(--hover-bg);
     }
     .submenu {
       position: absolute;
       left: 100%;
       top: 0;
-      background: #bcaaa4;
-      border: 1px solid #8d6e63;
+      background: var(--submenu-bg);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       padding: 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--shadow-color);
       min-width: 200px;
     }
   `;

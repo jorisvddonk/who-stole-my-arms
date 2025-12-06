@@ -8,6 +8,7 @@ export class OsMetricsWidget extends LitElement {
   static styles = css`
     .content {
       white-space: pre-wrap;
+      color: var(--text-color);
     }
   `;
 

@@ -9,14 +9,14 @@ export class ChatApp extends LitElement {
       grid-template-rows: 1fr auto;
       height: 100vh;
       font-family: 'Times New Roman', serif;
-      background: #d7ccc8;
-      color: #3e2723;
+      background: var(--primary-bg);
+      color: var(--text-color);
     }
     .chat-container {
       grid-row: 1;
       overflow-y: auto;
       padding: 20px;
-      background: #d7ccc8;
+      background: var(--primary-bg);
     }
     .message {
       margin-bottom: 10px;
@@ -26,15 +26,15 @@ export class ChatApp extends LitElement {
       font-family: 'Times New Roman', serif;
     }
     .message.user {
-      background: #8d6e63;
-      color: #f4f1e8;
+      background: var(--user-msg-bg);
+      color: var(--light-text);
       align-self: flex-end;
       margin-left: auto;
     }
     .message.system {
-      background: #bcaaa4;
-      color: #3e2723;
-      border: 1px solid #8d6e63;
+      background: var(--system-msg-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
     }
     .input-container {
       grid-row: 2;
@@ -42,32 +42,32 @@ export class ChatApp extends LitElement {
       grid-template-columns: auto 1fr auto;
       align-items: center;
       padding: 20px;
-      background: #bcaaa4;
-      border-top: 1px solid #8d6e63;
+      background: var(--secondary-bg);
+      border-top: 1px solid var(--border-color);
       gap: 10px;
     }
     input {
       flex: 1;
       padding: 10px;
-      border: 1px solid #8d6e63;
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       margin-right: 10px;
-      background: #d7ccc8;
-      color: #3e2723;
+      background: var(--input-bg);
+      color: var(--text-color);
     }
     button {
       padding: 10px 20px;
-      background-color: #5d4037;
-      color: #f4f1e8;
+      background-color: var(--dark-accent);
+      color: var(--light-text);
       border: none;
       border-radius: 4px;
       cursor: pointer;
     }
     button:hover {
-      background-color: #3e2723;
+      background-color: var(--darker-accent);
     }
     button:disabled {
-      background-color: #a1887f;
+      background-color: var(--disabled-bg);
       cursor: not-allowed;
     }
   `;
