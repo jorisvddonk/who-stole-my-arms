@@ -208,6 +208,7 @@ export class ChatApp extends LitElement {
 
   render() {
     return html`
+      <top-bar></top-bar>
       <div class="chat-container">
         ${this.messages.map((msg, index) => {
           const isLastSystemMessage = msg.role === 'system' && index === this.messages.length - 1;

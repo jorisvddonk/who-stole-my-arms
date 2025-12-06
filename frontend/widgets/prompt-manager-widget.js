@@ -423,20 +423,35 @@ export class PromptManagerWidget extends LitElement {
     draggedIndex: { type: Number },
     templates: { type: Array },
     currentTemplateName: { type: String },
-    isNewTemplate: { type: Boolean }
+    isNewTemplate: { type: Boolean },
+    currentSession: { type: String }
   };
 
   constructor() {
     super();
+    this.currentSession = sessionStorage.getItem('currentSession') || 'default';
     this.reset();
   }
 
   connectedCallback() {
     super.connectedCallback();
     this.reset();
+    // Listen for session changes
+    window.addEventListener('session-changed', this.handleSessionChange.bind(this));
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('session-changed', this.handleSessionChange.bind(this));
+  }
+
+  handleSessionChange(event) {
+    this.currentSession = event.detail.sessionId;
+    this.reset(); // Reload data for the new session
   }
 
   reset() {
+    this.currentSession = sessionStorage.getItem('currentSession') || 'default';
     this.providers = [];
     this.groups = [];
     this.selectedGroups = [];
@@ -454,9 +469,9 @@ export class PromptManagerWidget extends LitElement {
   async loadData() {
     try {
       const [providersRes, groupsRes, templatesRes] = await Promise.all([
-        fetch('/sessions/default/prompts/providers'),
-        fetch('/sessions/default/prompts/groups'),
-        fetch('/sessions/default/prompts/templates')
+        fetch(`/sessions/${this.currentSession}/prompts/providers`),
+        fetch(`/sessions/${this.currentSession}/prompts/groups`),
+        fetch(`/sessions/${this.currentSession}/prompts/templates`)
       ]);
 
       if (providersRes.ok) {
@@ -674,7 +689,7 @@ export class PromptManagerWidget extends LitElement {
     this.result = '';
 
     try {
-      const response = await fetch('/sessions/default/prompts/build', {
+      const response = await fetch(`/sessions/${this.currentSession}/prompts/build`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -718,7 +733,7 @@ export class PromptManagerWidget extends LitElement {
     }
 
     try {
-      const response = await fetch('/sessions/default/prompts/templates', {
+      const response = await fetch(`/sessions/${this.currentSession}/prompts/templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -742,7 +757,7 @@ export class PromptManagerWidget extends LitElement {
 
   async loadTemplate(templateName) {
     try {
-      const response = await fetch(`/sessions/default/prompts/templates/${encodeURIComponent(templateName)}`);
+      const response = await fetch(`/sessions/${this.currentSession}/prompts/templates/${encodeURIComponent(templateName)}`);
 
       if (response.ok) {
         const data = await response.json();
