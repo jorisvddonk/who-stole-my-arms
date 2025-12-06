@@ -39,14 +39,14 @@ export function withStorage(dbManager: DatabaseManager, component: HasStorage) {
 // Function to apply storage middleware to route groups
 export function applyStorageMiddleware(
   dbManager: DatabaseManager,
-  routeGroups: Array<{ routes: Record<string, any>; component?: HasStorage }>
+  routeGroups: Array<{ routes: Record<string, any>; component?: any }>
 ): Record<string, any> {
   const wrappedRoutes: Record<string, any> = {};
   for (const { routes, component } of routeGroups) {
     for (const [path, handler] of Object.entries(routes)) {
       let wrappedHandler = handler;
-      if (component) {
-        wrappedHandler = withStorage(dbManager, component)(wrappedHandler);
+      if (component && typeof component.getFQDN === 'function') {
+        wrappedHandler = withStorage(dbManager, component as HasStorage)(wrappedHandler);
       }
       wrappedRoutes[path] = wrappedHandler;
     }

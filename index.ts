@@ -224,7 +224,7 @@ const server = Bun.serve({
     if (item.routes) {
       return { routes: applyLoggingMiddleware(item.routes), component: item.component };
     } else {
-      return { routes: applyLoggingMiddleware(item), component: item };
+      return { routes: applyLoggingMiddleware(item.getRoutes()), component: item };
     }
   })),
   fetch(req) {
