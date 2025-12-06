@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
+import { LitElement, html, css, unsafeHTML } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
 import './popup-dialog.js';
 
 const dialog = document.createElement('popup-dialog');
@@ -9,58 +9,101 @@ export class PromptManagerWidget extends LitElement {
     .prompt-manager {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 8px;
       color: var(--text-color);
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
+      max-width: 800px;
+      max-height: 400px;
+    }
+
+    .top-row {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .left-panel, .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .left-panel .section, .right-panel .build-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .bottom-section {
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 6px;
+      background: var(--secondary-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      box-sizing: border-box;
+      align-items: stretch;
     }
 
     .section {
       border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 15px;
+      border-radius: 4px;
+      padding: 6px;
       background: var(--secondary-bg);
     }
 
     .section h3 {
-      margin: 0 0 10px 0;
+      margin: 0 0 3px 0;
       color: var(--text-color);
-      font-size: 1.1em;
+      font-size: 0.85em;
+      font-weight: 600;
     }
 
     .groups-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 3px;
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
     }
 
     .group-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px;
+      gap: 6px;
+      padding: 4px 6px;
       background: var(--input-bg);
-      border-radius: 4px;
+      border-radius: 2px;
       border: 1px solid var(--border-color);
+      font-size: 0.8em;
+      min-height: 28px;
     }
 
     .group-checkbox {
-      width: 16px;
-      height: 16px;
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
     }
 
     .group-name {
       flex: 1;
       font-family: monospace;
-      font-size: 0.9em;
+      font-size: 0.8em;
+      font-weight: 500;
     }
 
     .group-preview {
-      flex: 2;
-      font-size: 0.8em;
+      flex: 1.2;
+      font-size: 0.75em;
       color: var(--text-color);
-      opacity: 0.8;
+      opacity: 0.7;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -68,109 +111,163 @@ export class PromptManagerWidget extends LitElement {
 
     .build-section {
       border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 15px;
+      border-radius: 4px;
+      padding: 6px;
       background: var(--secondary-bg);
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
 
     .ordered-groups {
       display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 15px;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 6px;
+      min-height: 20px;
     }
 
     .group-tag {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 4px 8px;
+      gap: 3px;
+      padding: 2px 4px;
       background: var(--dark-accent);
       color: var(--light-text);
-      border-radius: 12px;
-      font-size: 0.8em;
+      border-radius: 6px;
+      font-size: 0.7em;
       font-family: monospace;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .remove-group {
       cursor: pointer;
       color: var(--light-text);
-      opacity: 0.7;
+      opacity: 0.8;
+      font-size: 1.2em;
+      line-height: 1;
+      margin-left: 1px;
     }
 
     .remove-group:hover {
       opacity: 1;
+      color: var(--error-color, #ff6b6b);
     }
 
     .add-group-section {
       display: flex;
-      gap: 10px;
-      align-items: center;
+      gap: 6px;
+      align-items: stretch;
+      margin-bottom: 6px;
     }
 
     .group-input {
       flex: 1;
-      padding: 8px;
+      padding: 4px 6px;
       border: 1px solid var(--border-color);
-      border-radius: 4px;
+      border-radius: 2px;
       background: var(--input-bg);
       color: var(--text-color);
       font-family: monospace;
-      font-size: 0.9em;
+      font-size: 0.8em;
+      min-height: 28px;
     }
 
     .add-button {
-      padding: 8px 12px;
+      padding: 4px 8px;
       background-color: var(--dark-accent);
       color: var(--light-text);
       border: none;
-      border-radius: 4px;
+      border-radius: 2px;
       cursor: pointer;
-      font-size: 0.9em;
+      font-size: 0.8em;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .add-button:hover {
       background-color: var(--darker-accent);
     }
 
-    .build-button {
-      padding: 10px 20px;
+    .action-area {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .placeholder-text {
+      font-size: 0.75em;
+      color: var(--text-color);
+      opacity: 0.5;
+      text-align: center;
+      width: 100%;
+    }
+
+    .bottom-section .build-button {
+      width: 100%;
+      padding: 8px 16px;
       background-color: var(--dark-accent);
       color: var(--light-text);
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
-      margin-top: 10px;
+      font-size: 0.9em;
+      font-weight: 500;
+      text-align: center;
     }
 
-    .build-button:hover {
+    .bottom-section .build-button:hover {
       background-color: var(--darker-accent);
     }
 
-    .result-section {
-      margin-top: 15px;
-      padding: 10px;
+    .bottom-section .result-section {
+      margin-top: 4px;
+      padding: 4px 6px;
       background: var(--input-bg);
       border: 1px solid var(--border-color);
-      border-radius: 4px;
+      border-radius: 3px;
       white-space: pre-wrap;
       font-family: monospace;
-      font-size: 0.9em;
-      max-height: 200px;
+      font-size: 0.8em;
+      line-height: 1.2;
+      max-height: 120px;
       overflow-y: auto;
+      width: 100%;
+      box-sizing: border-box;
+      align-self: flex-start;
+    }
+
+    .result-section * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    .result-section > div:first-child {
+      font-weight: 600;
+      margin-bottom: 2px !important;
+    }
+
+    .result-section > div:last-child {
+      margin-top: 0 !important;
     }
 
     .error {
       color: var(--error-color);
-      font-size: 0.9em;
-      margin-top: 5px;
+      font-size: 0.75em;
+      margin-top: 3px;
+      font-weight: 500;
     }
 
     .loading {
       color: var(--text-color);
       opacity: 0.7;
       font-style: italic;
+      font-size: 0.8em;
+      margin-top: 3px;
     }
   `;
 
@@ -269,7 +366,7 @@ export class PromptManagerWidget extends LitElement {
 
       if (response.ok) {
         const data = await response.json();
-        this.result = data.prompt;
+        this.result = data.prompt.trim();
       } else {
         const errorData = await response.json();
         this.error = errorData.error || 'Failed to build prompt';
@@ -284,74 +381,82 @@ export class PromptManagerWidget extends LitElement {
   render() {
     return html`
       <div class="prompt-manager">
-        <div class="section">
-          <h3>Available Groups</h3>
-          <div class="groups-list">
-            ${this.groups.map(providerGroup => html`
-              <div>
-                <strong>${providerGroup.provider}:</strong>
-                ${providerGroup.groups.map(groupName => {
-                  const groupPath = `${providerGroup.provider}/${groupName}`;
-                  const isSelected = this.selectedGroups.includes(groupPath);
-                  return html`
-                    <div class="group-item">
-                      <input
-                        type="checkbox"
-                        class="group-checkbox"
-                        .checked=${isSelected}
-                        @change=${(e) => this.handleGroupToggle(groupPath, e.target.checked)}
-                      >
-                      <span class="group-name">${groupPath}</span>
-                      <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
-                    </div>
-                  `;
-                })}
+        <div class="top-row">
+          <div class="left-panel">
+            <div class="section">
+              <h3>Available Groups</h3>
+              <div class="groups-list">
+                ${this.groups.map(providerGroup => html`
+                  ${providerGroup.groups.map(groupName => {
+                    const groupPath = `${providerGroup.provider}/${groupName}`;
+                    const isSelected = this.selectedGroups.includes(groupPath);
+                    return html`
+                      <div class="group-item">
+                        <input
+                          type="checkbox"
+                          class="group-checkbox"
+                          .checked=${isSelected}
+                          @change=${(e) => this.handleGroupToggle(groupPath, e.target.checked)}
+                        >
+                        <span class="group-name">${groupPath}</span>
+                        <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
+                      </div>
+                    `;
+                  })}
+                `)}
               </div>
-            `)}
+              <div class="action-area">
+                ${this.selectedGroups.length > 0 ? html`
+                  <button class="add-button" @click=${this.addSelectedToOrder}>
+                    Add Selected (${this.selectedGroups.length}) to Order
+                  </button>
+                ` : html`${unsafeHTML('<div class="placeholder-text">' + this.getPlaceholderText().trim() + '</div>')}`}
+              </div>
+            </div>
           </div>
-          <button class="add-button" @click=${this.addSelectedToOrder} ?disabled=${this.selectedGroups.length === 0}>
-            Add Selected to Order
-          </button>
+
+          <div class="right-panel">
+            <div class="section build-section">
+              <h3>Build Prompt</h3>
+
+              <div class="ordered-groups">
+                ${this.orderedGroups.map(groupPath => html`
+                  <span class="group-tag">
+                    ${groupPath}
+                    <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
+                  </span>
+                `)}
+              </div>
+
+              <div class="add-group-section">
+                <input
+                  type="text"
+                  class="group-input"
+                  placeholder="Enter group path (e.g., system/basic or system/*)"
+                  @keydown=${(e) => e.key === 'Enter' && this.addToOrder()}
+                >
+                <button class="add-button" @click=${this.addToOrder}>Add</button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="build-section">
-          <h3>Build Prompt</h3>
-
-          <div class="ordered-groups">
-            ${this.orderedGroups.map(groupPath => html`
-              <span class="group-tag">
-                ${groupPath}
-                <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
-              </span>
-            `)}
-          </div>
-
-          <div class="add-group-section">
-            <input
-              type="text"
-              class="group-input"
-              placeholder="Enter group path (e.g., system/basic or system/*)"
-              @keydown=${(e) => e.key === 'Enter' && this.addToOrder()}
-            >
-            <button class="add-button" @click=${this.addToOrder}>Add</button>
-          </div>
-
-          <button class="build-button" @click=${this.buildPrompt} ?disabled=${this.loading}>
-            ${this.loading ? 'Building...' : 'Build Prompt'}
-          </button>
+        <div class="bottom-section">
+          <button class="build-button" @click=${this.buildPrompt} ?disabled=${this.loading}>${this.loading ? 'Building...' : 'Build Prompt'}</button>
 
           ${this.error ? html`<div class="error">${this.error}</div>` : ''}
           ${this.loading ? html`<div class="loading">Building prompt...</div>` : ''}
 
           ${this.result ? html`
-            <div class="result-section">
-              <strong>Result:</strong><br>
-              ${this.result}
-            </div>
+            <div class="result-section">${this.result}</div>
           ` : ''}
         </div>
       </div>
     `;
+  }
+
+  getPlaceholderText() {
+    return 'Select groups above to add them to your prompt';
   }
 
   getGroupPreview(providerName, groupName) {
@@ -368,6 +473,7 @@ customElements.define('prompt-manager-widget', PromptManagerWidget);
 
 export function register(toolboxMenu) {
   toolboxMenu.addItem('Prompt Manager', [], () => {
+    dialog.title = 'Prompt Manager';
     dialog.contentTemplate = () => html`<prompt-manager-widget></prompt-manager-widget>`;
     dialog.open = true;
   });
