@@ -6,22 +6,25 @@ document.body.appendChild(dialog);
 
 export class PromptManagerWidget extends LitElement {
   static styles = css`
-    .prompt-manager {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      color: var(--text-color);
-      max-width: 800px;
-      max-height: 400px;
-    }
+     .prompt-manager {
+       display: flex;
+       flex-direction: column;
+       gap: 8px;
+       color: var(--text-color);
+       width: 100%;
+     }
 
-    .top-row {
-      display: flex;
-      flex-direction: row;
-      gap: 8px;
-      flex: 1;
-      min-height: 0;
-    }
+     .prompt-manager.has-result {
+       max-height: 600px;
+     }
+
+     .top-row {
+       display: flex;
+       flex-direction: column;
+       gap: 8px;
+       flex: 1;
+       min-height: 0;
+     }
 
     .left-panel, .right-panel {
       flex: 1;
@@ -93,14 +96,12 @@ export class PromptManagerWidget extends LitElement {
     }
 
     .group-name {
-      flex: 1;
       font-family: monospace;
       font-size: 0.8em;
       font-weight: 500;
     }
 
     .group-preview {
-      flex: 1.2;
       font-size: 0.75em;
       color: var(--text-color);
       opacity: 0.7;
@@ -142,6 +143,8 @@ export class PromptManagerWidget extends LitElement {
        font-weight: 500;
        white-space: nowrap;
        cursor: grab;
+       width: fit-content;
+       align-self: flex-start;
      }
 
      .group-tag.dragging {
@@ -562,8 +565,9 @@ export class PromptManagerWidget extends LitElement {
   }
 
   render() {
+    const hasResult = this.result || this.error || this.loading;
     return html`
-      <div class="prompt-manager">
+      <div class="prompt-manager ${hasResult ? 'has-result' : ''}">
         <div class="top-row">
           <div class="left-panel">
             <div class="section">
@@ -573,18 +577,19 @@ export class PromptManagerWidget extends LitElement {
                   ${providerGroup.groups.map(groupName => {
                     const groupPath = `${providerGroup.provider}/${groupName}`;
                     const isSelected = this.selectedGroups.includes(groupPath);
-                    return html`
-                      <div class="group-item">
-                        <input
-                          type="checkbox"
-                          class="group-checkbox"
-                          .checked=${isSelected}
-                          @change=${(e) => this.handleGroupToggle(groupPath, e.target.checked)}
-                        >
-                        <span class="group-name">${groupPath}</span>
-                        <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
-                      </div>
-                    `;
+                     return html`
+                       <div class="group-item" @click=${() => this.handleGroupToggle(groupPath, !isSelected)}>
+                         <input
+                           type="checkbox"
+                           class="group-checkbox"
+                           .checked=${isSelected}
+                           @change=${(e) => e.stopPropagation()}
+                           @click=${(e) => e.stopPropagation()}
+                         >
+                         <span class="group-name">${groupPath}</span>
+                         <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
+                       </div>
+                     `;
                   })}
                 `)}
               </div>
@@ -667,6 +672,8 @@ customElements.define('prompt-manager-widget', PromptManagerWidget);
 export function register(toolboxMenu) {
   toolboxMenu.addItem('Prompt Manager', [], () => {
     dialog.title = 'Prompt Manager';
+    dialog.maxWidth = '95vw';
+    dialog.minWidth = '80vw';
     dialog.contentTemplate = () => html`<prompt-manager-widget></prompt-manager-widget>`;
     dialog.open = true;
   });
