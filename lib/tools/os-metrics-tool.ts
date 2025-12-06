@@ -2,7 +2,7 @@ import { ToolboxTool } from "../../interfaces/ToolboxTool.js";
 import { getOSMetrics } from "../util/os-metrics.js";
 
 export class OsMetricsTool implements ToolboxTool {
-  init(toolboxCollector: any): void {
+  constructor(toolboxCollector: any) {
     toolboxCollector.register('/widgets/os-metrics-widget.js');
   }
 

@@ -5,8 +5,7 @@ import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 
 const api = new KoboldAPI();
-const osMetricsTool = new OsMetricsTool();
-osMetricsTool.init(toolboxCollector);
+const osMetricsTool = new OsMetricsTool(toolboxCollector);
 
 const server = Bun.serve({
   port: 3000,
