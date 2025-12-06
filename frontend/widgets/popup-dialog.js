@@ -29,16 +29,35 @@ export class PopupDialog extends LitElement {
     .content input {
       width: 60px;
     }
+    .content select {
+      width: var(--select-width, auto);
+    }
+    .content input {
+      width: var(--input-width, auto);
+    }
     .content select, .content input {
-      padding: 2px 4px;
+      padding: 8px;
       border: 1px solid var(--border-color);
       border-radius: 4px;
       background: var(--input-bg);
       color: var(--text-color);
       font-family: 'Times New Roman', serif;
-      height: 24px;
-      font-size: 12px;
-      box-sizing: border-box;
+    }
+    .content select:focus, .content input:focus {
+      outline: none;
+      border-color: var(--accent-bg);
+    }
+    .content button {
+      padding: 8px 12px;
+      background: var(--dark-accent);
+      color: var(--light-text);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Times New Roman', serif;
+    }
+    .content button:hover {
+      background: var(--darker-accent);
     }
     .content select:focus, .content input:focus {
       outline: none;
