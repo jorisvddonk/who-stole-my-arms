@@ -26,6 +26,9 @@ const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 const dockManager = new DockManager();
 
+// Register add widget row widget
+toolboxCollector.register('/widgets/add-widget-row-widget.js');
+
 // Initialize ChatHistory
 const chatHistory = new ChatHistory(dbManager);
 
