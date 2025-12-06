@@ -31,6 +31,7 @@ export class ChatApp extends LitElement {
       border-radius: 10px;
       max-width: 70%;
       font-family: 'Times New Roman', serif;
+      white-space: pre-wrap;
     }
     .message.user {
       background: var(--user-msg-bg);
