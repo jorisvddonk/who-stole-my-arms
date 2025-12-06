@@ -6,6 +6,11 @@ import './row-hamburger-button.js';
 import './edit-widgets-popup.js';
 
 export class DockWidget extends LitElement {
+  static widgetTypes = new Map([
+    ['empty-widget', 'Empty'],
+    ['dummy-widget', 'Dummy']
+  ]);
+
   static styles = css`
     :host {
       display: flex;
@@ -31,13 +36,14 @@ export class DockWidget extends LitElement {
     .row {
       position: relative;
       flex-shrink: 0;
+      padding-left: 10px;
+      padding-right: 10px;
     }
 
     .grid {
-      height: 100%;
-      padding: 10px;
       display: grid;
       gap: var(--grid-gap);
+      align-items: stretch;
     }
     .rows-container::-webkit-scrollbar {
       width: 8px;
@@ -97,8 +103,33 @@ export class DockWidget extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.dockWidget = this;
     if (window.toolboxMenu) {
       window.toolboxMenu.addItem('Add Row', [], () => this.addRow());
+    }
+    this.loadWidgets();
+  }
+
+  registerWidgetType(type, label) {
+    DockWidget.widgetTypes.set(type, label);
+  }
+
+  async loadWidgets() {
+    try {
+      const res = await fetch('/widgets/list');
+      const data = await res.json();
+      for (const url of data.widgets) {
+        try {
+          const mod = await import(url);
+          if (mod.registerWidgetType) {
+            mod.registerWidgetType(this);
+          }
+        } catch (error) {
+          console.error('Failed to load widget:', url, error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load widgets:', error);
     }
   }
 
@@ -176,8 +207,10 @@ export class DockWidget extends LitElement {
         return html`<empty-widget></empty-widget>`;
       case 'dummy-widget':
         return html`<dummy-widget></dummy-widget>`;
+      case 'os-metrics-dock-widget':
+        return html`<os-metrics-dock-widget></os-metrics-dock-widget>`;
       default:
-        return html``;
+        return html`<div>Unknown widget: ${type}</div>`;
     }
   }
 

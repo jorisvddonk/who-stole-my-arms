@@ -5,8 +5,8 @@ export class RowHamburgerButton extends LitElement {
     :host {
       position: absolute;
       right: 0px;
-      top: 10px;
-      height: calc(100%);
+      top: 0px;
+      height: calc(100% - 1px);
       width: 10px;
       z-index: 100;
     }

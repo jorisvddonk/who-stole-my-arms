@@ -2,15 +2,19 @@ import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
+import { widgetCollector } from "./lib/widget-collector.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
+import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 
 const api = new KoboldAPI();
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
+const osMetricsDockWidget = new OsMetricsDockWidget();
 
 const server = Bun.serve({
   port: 3000,
   routes: {
     ...osMetricsTool.getRoutes(),
+    ...osMetricsDockWidget.getRoutes(),
     "/": async (req) => {
       logRequest(req);
       try {
@@ -26,6 +30,13 @@ const server = Bun.serve({
       const tools = toolboxCollector.getTools();
       console.log('Tools:', tools);
       return new Response(JSON.stringify({ tools }), { headers: { 'Content-Type': 'application/json' } });
+    },
+    "/widgets/list": (req) => {
+      logRequest(req);
+      console.log('Serving widgets list');
+      const widgets = widgetCollector.getWidgets();
+      console.log('Widgets:', widgets);
+      return new Response(JSON.stringify({ widgets }), { headers: { 'Content-Type': 'application/json' } });
     },
     "/widgets/*": async (req) => {
       logRequest(req);

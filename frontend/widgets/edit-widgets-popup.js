@@ -174,14 +174,20 @@ export class EditWidgetsPopup extends LitElement {
 
   renderContent() {
     const total = this._widgets.reduce((sum, w) => sum + w.span, 0);
+    const widgetTypes = window.dockWidget?.constructor?.widgetTypes || new Map([
+      ['empty-widget', 'Empty'],
+      ['dummy-widget', 'Dummy']
+    ]);
+
     return html`
       <div>
         <div class="widgets-list">
           ${this._widgets.map((widget, index) => html`
             <div class="widget-item">
               <select .value=${widget.type} @change=${(e) => this.updateType(index, e.target.value)}>
-                <option value="empty-widget">Empty</option>
-                <option value="dummy-widget">Dummy</option>
+                ${Array.from(widgetTypes.entries()).map(([type, label]) => html`
+                  <option value=${type}>${label}</option>
+                `)}
               </select>
               <input type="number" min="1" max="12" .value=${widget.span} @input=${(e) => this.updateSpan(index, e.target.value)}>
               <button @click=${() => this.removeWidget(index)}>Remove</button>
