@@ -1,7 +1,6 @@
 export interface HasStorage {
   getFQDN(): string;
   init(storage: Storage): Promise<void>;
-  setStorage(storage: Storage): void;
 }
 
 export interface Storage {

@@ -1,7 +1,7 @@
 import { minimatch } from 'minimatch';
-import { minimatch } from 'minimatch';
 import { ToolboxTool } from '../interfaces/ToolboxTool.js';
-import { HasStorage, Storage } from '../interfaces/Storage.js';
+import { Storage } from '../interfaces/Storage.js';
+
 import { logError } from './logging/logger.js';
 import { createMethodRouter } from './util/route-utils.js';
 
@@ -34,7 +34,20 @@ export interface PromptTemplate {
 export class PromptManager implements ToolboxTool, HasStorage {
   private providers: Map<string, PromptProvider> = new Map();
   private currentContext: any = {};
-  private storage?: Storage;
+
+  getFQDN(): string {
+    return 'tools.prompt.manager';
+  }
+
+  async init(storage: Storage): Promise<void> {
+    await storage.execute(`CREATE TABLE IF NOT EXISTS ${storage.getTableName()} (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, data TEXT NOT NULL)`);
+    const currentVersion = await storage.getComponentVersion();
+    if (currentVersion === null) {
+      await storage.setComponentVersion(1);
+    }
+  }
+
+
 
   constructor(toolboxCollector?: any) {
     if (toolboxCollector) {
@@ -72,8 +85,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
     return result;
   }
 
-  saveTemplate(name: string, groups: string[]): boolean {
-    if (!name || !groups || !Array.isArray(groups) || !this.storage) {
+  saveTemplate(storage: Storage, name: string, groups: string[]): boolean {
+    if (!name || !groups || !Array.isArray(groups)) {
       return false;
     }
 
@@ -85,8 +98,8 @@ export class PromptManager implements ToolboxTool, HasStorage {
       };
 
       // Use execute directly for INSERT OR REPLACE
-      this.storage.execute(
-        `INSERT OR REPLACE INTO ${this.storage.getTableName()} (name, data) VALUES (?, ?)`,
+      storage.execute(
+        `INSERT OR REPLACE INTO ${storage.getTableName()} (name, data) VALUES (?, ?)`,
         [name, JSON.stringify(template)]
       );
 
@@ -97,11 +110,9 @@ export class PromptManager implements ToolboxTool, HasStorage {
     }
   }
 
-  async loadTemplate(name: string): Promise<string[] | null> {
-    if (!this.storage) return null;
-
+  async loadTemplate(storage: Storage, name: string): Promise<string[] | null> {
     try {
-      const rows = await this.storage.findAll();
+      const rows = await storage.findAll();
       const row = rows.find(row => {
         const template = JSON.parse(row.data);
         return template.name === name;
@@ -118,11 +129,9 @@ export class PromptManager implements ToolboxTool, HasStorage {
     }
   }
 
-  async getAllTemplates(): Promise<PromptTemplate[]> {
-    if (!this.storage) return [];
-
+  async getAllTemplates(storage: Storage): Promise<PromptTemplate[]> {
     try {
-      const rows = await this.storage.findAll();
+      const rows = await storage.findAll();
       const templates: PromptTemplate[] = rows.map(row => {
         const template = JSON.parse(row.data);
         return {
@@ -140,18 +149,16 @@ export class PromptManager implements ToolboxTool, HasStorage {
     }
   }
 
-  async deleteTemplate(name: string): Promise<boolean> {
-    if (!this.storage) return false;
-
+  async deleteTemplate(storage: Storage, name: string): Promise<boolean> {
     try {
-      const rows = await this.storage.findAll();
+      const rows = await storage.findAll();
       const templateRow = rows.find(row => {
         const template = JSON.parse(row.data);
         return template.name === name;
       });
 
       if (templateRow) {
-        await this.storage.delete(templateRow.id);
+        await storage.delete(templateRow.id);
         return true;
       }
       return false;
@@ -163,7 +170,7 @@ export class PromptManager implements ToolboxTool, HasStorage {
 
   getRoutes(): Record<string, any> {
     return {
-      "/prompts/build": {
+      "/sessions/:sessionid/prompts/build": {
         POST: async (req) => {
           try {
             const body = await req.json();
@@ -180,11 +187,11 @@ export class PromptManager implements ToolboxTool, HasStorage {
           }
         }
       },
-      "/prompts/providers": (req) => {
+      "/sessions/:sessionid/prompts/providers": (req) => {
         const providers = this.getRegisteredProviders();
         return new Response(JSON.stringify({ providers }), { headers: { 'Content-Type': 'application/json' } });
       },
-      "/prompts/groups": (req) => {
+      "/sessions/:sessionid/prompts/groups": (req) => {
         const url = new URL(req.url);
         const providerFilter = url.searchParams.get('provider');
 
@@ -195,13 +202,15 @@ export class PromptManager implements ToolboxTool, HasStorage {
 
         return new Response(JSON.stringify({ groups: filteredGroups }), { headers: { 'Content-Type': 'application/json' } });
       },
-      "/prompts/templates": {
+      "/sessions/:sessionid/prompts/templates": {
         GET: async (req) => {
-          const templates = await this.getAllTemplates();
+          const storage = (req as any).context.get('storage');
+          const templates = await this.getAllTemplates(storage);
           return new Response(JSON.stringify({ templates }), { headers: { 'Content-Type': 'application/json' } });
         },
         POST: async (req) => {
           try {
+            const storage = (req as any).context.get('storage');
             const body = await req.json();
             const { name, groups } = body;
 
@@ -209,7 +218,7 @@ export class PromptManager implements ToolboxTool, HasStorage {
               return new Response(JSON.stringify({ error: 'name and groups array are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
             }
 
-            const success = this.saveTemplate(name, groups);
+            const success = this.saveTemplate(storage, name, groups);
             if (!success) {
               return new Response(JSON.stringify({ error: 'Failed to save template' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
             }
@@ -221,12 +230,11 @@ export class PromptManager implements ToolboxTool, HasStorage {
           }
         }
       },
-      "/prompts/templates/:name": createMethodRouter({
+      "/sessions/:sessionid/prompts/templates/:name": createMethodRouter({
         GET: async (req) => {
-          const url = new URL(req.url);
-          const pathParts = url.pathname.split('/');
-          const name = pathParts[pathParts.length - 1];
-          const groups = await this.loadTemplate(decodeURIComponent(name));
+          const name = (req as any).params.name;
+          const storage = (req as any).context.get('storage');
+          const groups = await this.loadTemplate(storage, decodeURIComponent(name));
 
           if (groups === null) {
             return new Response(JSON.stringify({ error: 'Template not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
@@ -235,10 +243,9 @@ export class PromptManager implements ToolboxTool, HasStorage {
           return new Response(JSON.stringify({ name, groups }), { headers: { 'Content-Type': 'application/json' } });
         },
         DELETE: async (req) => {
-          const url = new URL(req.url);
-          const pathParts = url.pathname.split('/');
-          const name = pathParts[pathParts.length - 1];
-          const success = await this.deleteTemplate(decodeURIComponent(name));
+          const name = (req as any).params.name;
+          const storage = (req as any).context.get('storage');
+          const success = await this.deleteTemplate(storage, decodeURIComponent(name));
 
           if (!success) {
             return new Response(JSON.stringify({ error: 'Template not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
@@ -337,31 +344,5 @@ export class PromptManager implements ToolboxTool, HasStorage {
     return '';
   }
 
-  // HasStorage implementation
-  getFQDN(): string {
-    return 'tools.prompt.manager';
-  }
 
-  setStorage(storage: Storage): void {
-    this.storage = storage;
-  }
-
-  async init(storage: Storage): Promise<void> {
-    const tableName = storage.getTableName();
-
-    // Create table if needed
-    await storage.execute(`
-      CREATE TABLE IF NOT EXISTS ${tableName} (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        data TEXT NOT NULL
-      )
-    `);
-
-    // Check version and migrate
-    const currentVersion = await storage.getComponentVersion();
-    if (currentVersion === null) {
-      await storage.setComponentVersion(1);
-    }
-  }
 }

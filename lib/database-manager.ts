@@ -3,70 +3,15 @@ import { join } from "path";
 import { mkdir, readdir, unlink } from "fs/promises";
 import { HasStorage, Storage } from "../interfaces/Storage.js";
 
-class GlobalStorage implements Storage {
-  constructor(private db: Database, private fqdn: string) {}
+export class Storage implements Storage {
+  constructor(private db: Database, private fqdn: string, private sessionId?: string) {}
 
   getTableName(): string {
-    return `global_${this.fqdn.replace(/\./g, '_')}`;
-  }
-
-  getDB(): Database {
-    return this.db;
-  }
-
-  execute(sql: string, params?: any[]): any {
-    return params ? this.db.run(sql, params) : this.db.run(sql);
-  }
-
-  query(sql: string, params?: any[]): any[] {
-    return this.db.query(sql).all(params);
-  }
-
-  async getComponentVersion(): Promise<number | null> {
-    const rows = this.query('SELECT version FROM component_versions WHERE fqdn = ?', [this.fqdn]);
-    return rows.length > 0 ? rows[0].version : null;
-  }
-
-  async setComponentVersion(version: number): Promise<void> {
-    this.execute('INSERT OR REPLACE INTO component_versions (fqdn, version) VALUES (?, ?)', [this.fqdn, version]);
-  }
-
-  async insert(data: Record<string, any>): Promise<number> {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const placeholders = keys.map(() => '?').join(', ');
-    const sql = `INSERT INTO ${this.getTableName()} (${keys.join(', ')}) VALUES (${placeholders})`;
-    const result = this.execute(sql, values);
-    return result.lastInsertRowid;
-  }
-
-  async update(id: number, data: Record<string, any>): Promise<void> {
-    const keys = Object.keys(data);
-    const values = Object.values(data);
-    const setClause = keys.map(key => `${key} = ?`).join(', ');
-    const sql = `UPDATE ${this.getTableName()} SET ${setClause} WHERE id = ?`;
-    this.execute(sql, [...values, id]);
-  }
-
-  async findById(id: number): Promise<Record<string, any> | null> {
-    const rows = this.query(`SELECT * FROM ${this.getTableName()} WHERE id = ?`, [id]);
-    return rows.length > 0 ? rows[0] : null;
-  }
-
-  async findAll(): Promise<Record<string, any>[]> {
-    return this.query(`SELECT * FROM ${this.getTableName()}`);
-  }
-
-  async delete(id: number): Promise<void> {
-    this.execute(`DELETE FROM ${this.getTableName()} WHERE id = ?`, [id]);
-  }
-}
-
-class SessionStorage implements Storage {
-  constructor(private db: Database, private fqdn: string, private sessionId: string) {}
-
-  getTableName(): string {
-    return `session_${this.sessionId}_${this.fqdn.replace(/\./g, '_')}`;
+    if (this.sessionId) {
+      return `session_${this.sessionId}_${this.fqdn.replace(/\./g, '_')}`;
+    } else {
+      return `global_${this.fqdn.replace(/\./g, '_')}`;
+    }
   }
 
   getDB(): Database {
@@ -148,8 +93,7 @@ export class DatabaseManager {
 
   async registerGlobalComponent(component: HasStorage): Promise<void> {
     try {
-      const storage = new GlobalStorage(this.globalDB, component.getFQDN());
-      component.setStorage(storage);
+      const storage = new Storage(this.globalDB, component.getFQDN());
       await component.init(storage);
     } catch (error) {
       console.warn(`Failed to initialize global component ${component.getFQDN()}:`, error);
@@ -158,23 +102,6 @@ export class DatabaseManager {
 
   async registerSessionComponent(component: HasStorage): Promise<void> {
     this.sessionComponents.set(component.getFQDN(), component);
-  }
-
-  async getComponentSessionStorage(sessionId: string, component: HasStorage): Promise<SessionStorage> {
-    const dbPath = join(this.sessionsDir, `${sessionId}.db`);
-    // Ensure sessions directory exists
-    await mkdir(this.sessionsDir, { recursive: true });
-    const db = new Database(dbPath);
-
-    // Init shared tables in session DB
-    db.run(`
-      CREATE TABLE IF NOT EXISTS component_versions (
-        fqdn TEXT PRIMARY KEY,
-        version INTEGER NOT NULL
-      )
-    `);
-
-    return new SessionStorage(db, component.getFQDN(), sessionId);
   }
 
   // Utility methods
@@ -196,5 +123,22 @@ export class DatabaseManager {
     } catch (error) {
       console.warn(`Failed to delete session ${sessionId}:`, error);
     }
+  }
+
+  getGlobalDB(): Database {
+    return this.globalDB;
+  }
+
+  async getSessionDB(sessionId: string): Promise<Database> {
+    const dbPath = join(this.sessionsDir, `${sessionId}.db`);
+    await mkdir(this.sessionsDir, { recursive: true });
+    const db = new Database(dbPath);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS component_versions (
+        fqdn TEXT PRIMARY KEY,
+        version INTEGER NOT NULL
+      )
+    `);
+    return db;
   }
 }

@@ -454,9 +454,9 @@ export class PromptManagerWidget extends LitElement {
   async loadData() {
     try {
       const [providersRes, groupsRes, templatesRes] = await Promise.all([
-        fetch('/prompts/providers'),
-        fetch('/prompts/groups'),
-        fetch('/prompts/templates')
+        fetch('/sessions/default/prompts/providers'),
+        fetch('/sessions/default/prompts/groups'),
+        fetch('/sessions/default/prompts/templates')
       ]);
 
       if (providersRes.ok) {
@@ -674,7 +674,7 @@ export class PromptManagerWidget extends LitElement {
     this.result = '';
 
     try {
-      const response = await fetch('/prompts/build', {
+      const response = await fetch('/sessions/default/prompts/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -718,7 +718,7 @@ export class PromptManagerWidget extends LitElement {
     }
 
     try {
-      const response = await fetch('/prompts/templates', {
+      const response = await fetch('/sessions/default/prompts/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -742,7 +742,7 @@ export class PromptManagerWidget extends LitElement {
 
   async loadTemplate(templateName) {
     try {
-      const response = await fetch(`/prompts/templates/${encodeURIComponent(templateName)}`);
+      const response = await fetch(`/sessions/default/prompts/templates/${encodeURIComponent(templateName)}`);
 
       if (response.ok) {
         const data = await response.json();

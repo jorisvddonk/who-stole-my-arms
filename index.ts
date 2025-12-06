@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
+import { applyStorageMiddleware } from "./lib/middleware/database.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { widgetCollector } from "./lib/widget-collector.js";
 import { DatabaseManager } from "./lib/database-manager.js";
@@ -10,6 +11,7 @@ import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
+import { createMethodRouter } from "./lib/util/route-utils.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -29,199 +31,202 @@ promptManager.registerProvider('system', systemPromptProvider);
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 
-// Register session components
-await dbManager.registerSessionComponent(promptManager);
-
-// Initialize default session for prompt manager
-const defaultSessionStorage = await dbManager.getComponentSessionStorage('default', promptManager);
-promptManager.setStorage(defaultSessionStorage);
-await promptManager.init(defaultSessionStorage);
+// Session components are now stateless and initialize storage per request
 
 // Create API after settings are loaded
 const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 
-// Define routes without logging (logging will be applied via middleware)
-const routes = {
-  ...osMetricsTool.getRoutes(),
-  ...koboldSettingsTool.getRoutes(),
-  ...osMetricsDockWidget.getRoutes(),
-  ...promptManager.getRoutes(),
-  "/sessions": {
-    GET: async (req) => {
-      const sessions = await dbManager.listSessions();
-      return new Response(JSON.stringify({ sessions }), { headers: { 'Content-Type': 'application/json' } });
-    },
-    POST: async (req) => {
-      // For now, generate a simple session ID
-      const sessionId = `session_${Date.now()}`;
-      // Note: actual session creation happens when storage is requested
-      return new Response(JSON.stringify({ sessionId }), { headers: { 'Content-Type': 'application/json' } });
-    }
-  },
-  "/sessions/:id": {
-    DELETE: async (req) => {
-      const url = new URL(req.url);
-      const sessionId = url.pathname.split('/').pop()!;
-      await dbManager.deleteSession(sessionId);
-      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-    }
-  },
-  "/": async (req) => {
-    try {
-      const content = await readFile('./frontend/index.html');
-      return new Response(content, { headers: { 'Content-Type': 'text/html' } });
-    } catch {
-      return new Response('Frontend not found', { status: 404 });
-    }
-  },
-  "/toolbox/list": (req) => {
-    console.log('Serving toolbox list');
-    const tools = toolboxCollector.getTools();
-    console.log('Tools:', tools);
-    return new Response(JSON.stringify({ tools }), { headers: { 'Content-Type': 'application/json' } });
-  },
-  "/widgets/list": (req) => {
-    console.log('Serving widgets list');
-    const widgets = widgetCollector.getWidgets();
-    console.log('Widgets:', widgets);
-    return new Response(JSON.stringify({ widgets }), { headers: { 'Content-Type': 'application/json' } });
-  },
-  "/widgets/*": async (req) => {
-    const url = new URL(req.url);
-    try {
-      const filePath = `./frontend${url.pathname}`;
-      const content = await readFile(filePath);
-      return new Response(content, { headers: { 'Content-Type': 'application/javascript' } });
-    } catch {
-      return new Response('File not found', { status: 404 });
-    }
-  },
-  "/generate": {
-    POST: async (req) => {
-      try {
-        const body = await req.json();
-        const prompt = body.prompt;
-        if (!prompt) {
-          return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+// Define route groups
+const routeGroups = [
+  osMetricsTool,
+  koboldSettingsTool,
+  osMetricsDockWidget,
+  promptManager,
+  {
+    routes: {
+      "/sessions": createMethodRouter({
+        GET: async (req) => {
+          const sessions = await dbManager.listSessions();
+          return new Response(JSON.stringify({ sessions }), { headers: { 'Content-Type': 'application/json' } });
+        },
+        POST: async (req) => {
+          // For now, generate a simple session ID
+          const sessionId = `session_${Date.now()}`;
+          // Note: actual session creation happens when storage is requested
+          return new Response(JSON.stringify({ sessionId }), { headers: { 'Content-Type': 'application/json' } });
         }
-        const text = await api.generate(prompt);
-        logGenerate(prompt, text.length);
-        return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
-      } catch (error) {
-        logError(error.message);
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-      }
-    }
-  },
-  "/generateStream": {
-    POST: async (req) => {
-      try {
-        const body = await req.json();
-        const prompt = body.prompt;
-        if (!prompt) {
-          return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }),
+      "/sessions/:id": createMethodRouter({
+        DELETE: async (req) => {
+          const sessionId = (req as any).params.id;
+          await dbManager.deleteSession(sessionId);
+          return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
         }
-
-          // For streaming, we'll use Server-Sent Events
-          const stream = new ReadableStream({
-            async start(controller) {
-              try {
-                let totalLength = 0;
-                for await (const chunk of api.generateStream(prompt)) {
-                  if (chunk.token) {
-                    totalLength += chunk.token.length;
-                    const data = JSON.stringify({ token: chunk.token });
-                    controller.enqueue(`data: ${data}\n\n`);
-                  } else if (chunk.finishReason) {
-                    const data = JSON.stringify({ finishReason: chunk.finishReason });
-                    controller.enqueue(`data: ${data}\n\n`);
-                    logGenerate(prompt, totalLength);
-                    break;
-                  }
-                }
-              } catch (error) {
-                logError(error.message);
-                controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-              } finally {
-                controller.close();
-              }
-            }
-          });
-
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          }
-        });
-      } catch (error) {
-        logError(error.message);
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-      }
-    }
-  },
-  "/llm/settings": (req) => {
-    // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
-    const supportsStreaming = api instanceof Object && 'generateStream' in api;
-    return new Response(JSON.stringify({
-      supportsStreaming,
-      model: 'KoboldCPP'
-    }), { headers: { 'Content-Type': 'application/json' } });
-  },
-  "/llm/info": async (req) => {
-    try {
-      const [version, model, maxContext, perf] = await Promise.all([
-        api.getVersion().catch(() => ({ version: 'unknown' })),
-        api.getModel().catch(() => 'unknown'),
-        api.getMaxContextLength().catch(() => 0),
-        api.getPerformanceStats().catch(() => ({}))
-      ]);
-
-      return new Response(JSON.stringify({
-        version,
-        model,
-        maxContextLength: maxContext,
-        performance: perf
-      }), { headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      logError(error.message);
-      return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  },
-  "/llm/tokens": {
-    POST: async (req) => {
-      try {
-        const body = await req.json();
-        const text = body.text;
-        if (!text) {
-          return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-        }
-
-        const result = await api.countTokens(text);
-        return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
-      } catch (error) {
-        logError(error.message);
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-      }
-    }
-  },
-    "/generate/abort": {
-      POST: async (req) => {
+      }),
+      "/": async (req) => {
         try {
-          const success = await api.abortGeneration();
-          return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+          const content = await readFile('./frontend/index.html');
+          return new Response(content, { headers: { 'Content-Type': 'text/html' } });
+        } catch {
+          return new Response('Frontend not found', { status: 404 });
+        }
+      },
+      "/toolbox/list": (req) => {
+        console.log('Serving toolbox list');
+        const tools = toolboxCollector.getTools();
+        console.log('Tools:', tools);
+        return new Response(JSON.stringify({ tools }), { headers: { 'Content-Type': 'application/json' } });
+      },
+      "/widgets/list": (req) => {
+        console.log('Serving widgets list');
+        const widgets = widgetCollector.getWidgets();
+        console.log('Widgets:', widgets);
+        return new Response(JSON.stringify({ widgets }), { headers: { 'Content-Type': 'application/json' } });
+      },
+      "/widgets/*": async (req) => {
+        const url = new URL(req.url);
+        try {
+          const filePath = `./frontend${url.pathname}`;
+          const content = await readFile(filePath);
+          return new Response(content, { headers: { 'Content-Type': 'application/javascript' } });
+        } catch {
+          return new Response('File not found', { status: 404 });
+        }
+      },
+      "/generate": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const body = await req.json();
+            const prompt = body.prompt;
+            if (!prompt) {
+              return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+            const text = await api.generate(prompt);
+            logGenerate(prompt, text.length);
+            return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }),
+      "/generateStream": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const body = await req.json();
+            const prompt = body.prompt;
+            if (!prompt) {
+              return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            // For streaming, we'll use Server-Sent Events
+            const stream = new ReadableStream({
+              async start(controller) {
+                try {
+                  let totalLength = 0;
+                  for await (const chunk of api.generateStream(prompt)) {
+                    if (chunk.token) {
+                      totalLength += chunk.token.length;
+                      const data = JSON.stringify({ token: chunk.token });
+                      controller.enqueue(`data: ${data}\n\n`);
+                    } else if (chunk.finishReason) {
+                      const data = JSON.stringify({ finishReason: chunk.finishReason });
+                      controller.enqueue(`data: ${data}\n\n`);
+                      logGenerate(prompt, totalLength);
+                      break;
+                    }
+                  }
+                } catch (error) {
+                  logError(error.message);
+                  controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+                } finally {
+                  controller.close();
+                }
+              }
+            });
+
+            return new Response(stream, {
+              headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+              }
+            });
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }),
+      "/llm/settings": (req) => {
+        // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
+        const supportsStreaming = api instanceof Object && 'generateStream' in api;
+        return new Response(JSON.stringify({
+          supportsStreaming,
+          model: 'KoboldCPP'
+        }), { headers: { 'Content-Type': 'application/json' } });
+      },
+      "/llm/info": async (req) => {
+        try {
+          const [version, model, maxContext, perf] = await Promise.all([
+            api.getVersion().catch(() => ({ version: 'unknown' })),
+            api.getModel().catch(() => 'unknown'),
+            api.getMaxContextLength().catch(() => 0),
+            api.getPerformanceStats().catch(() => ({}))
+          ]);
+
+          return new Response(JSON.stringify({
+            version,
+            model,
+            maxContextLength: maxContext,
+            performance: perf
+          }), { headers: { 'Content-Type': 'application/json' } });
         } catch (error) {
           logError(error.message);
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
         }
-      }
+      },
+      "/llm/tokens": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const body = await req.json();
+            const text = body.text;
+            if (!text) {
+              return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            const result = await api.countTokens(text);
+            return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }),
+      "/generate/abort": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const success = await api.abortGeneration();
+            return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      })
     }
-  };
+  }
+];
 
 const server = Bun.serve({
   port: 3000,
-  routes: applyLoggingMiddleware(routes),
+  routes: applyStorageMiddleware(dbManager, routeGroups.map(item => {
+    if (item.routes) {
+      return { routes: applyLoggingMiddleware(item.routes), component: item.component };
+    } else {
+      return { routes: applyLoggingMiddleware(item), component: item };
+    }
+  })),
   fetch(req) {
     return new Response('Not found', { status: 404 });
   }
