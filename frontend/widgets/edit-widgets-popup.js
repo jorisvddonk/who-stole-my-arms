@@ -147,23 +147,18 @@ export class EditWidgetsPopup extends LitElement {
     this.row = null;
     this.open = true;
     this._widgets = [];
-    console.log('constructor', this._widgets);
   }
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('connected', this.row, this._widgets);
     if (this.row) {
       this._widgets = [...this.row.widgets];
-      console.log('set _widgets', this._widgets);
     }
   }
 
   updated(changedProperties) {
-    console.log('updated', changedProperties, this.row, this._widgets);
     if (changedProperties.has('row') && this.row) {
       this._widgets = [...this.row.widgets];
-      console.log('updated _widgets', this._widgets);
       this.requestUpdate();
     }
   }
@@ -206,37 +201,27 @@ export class EditWidgetsPopup extends LitElement {
   }
 
   addWidget = () => {
-    console.log('addWidget this', this, this._widgets);
     this._widgets = [...this._widgets, { type: 'empty-widget', span: 1 }];
-    console.log('addWidget after', this._widgets);
     this.requestUpdate();
   }
 
   removeWidget = (index) => {
-    console.log('removeWidget', index, this._widgets);
     this._widgets = this._widgets.filter((_, i) => i !== index);
-    console.log('removeWidget after', this._widgets);
     this.requestUpdate();
   }
 
   updateType = (index, type) => {
-    console.log('updateType', index, type, this._widgets);
     this._widgets = this._widgets.map((w, i) => i === index ? { ...w, type } : w);
-    console.log('updateType after', this._widgets);
     this.requestUpdate();
   }
 
   updateSpan = (index, span) => {
-    console.log('updateSpan', index, span, this._widgets);
     this._widgets = this._widgets.map((w, i) => i === index ? { ...w, span: parseInt(span) || 1 } : w);
-    console.log('updateSpan after', this._widgets);
     this.requestUpdate();
   }
 
   save = () => {
-    console.log('save', this._widgets);
     const total = this._widgets.reduce((sum, w) => sum + w.span, 0);
-    console.log('total', total);
     if (total > 12) {
       alert('Total span exceeds 12 columns.');
       return;
