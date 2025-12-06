@@ -201,6 +201,10 @@ export class ChatApp extends LitElement {
     document.removeEventListener('mouseup', this.stopResize);
   }
 
+  stripLeadingNewlines(content) {
+    return content.replace(/^\n+/, '');
+  }
+
   render() {
     return html`
       <div class="chat-container">
@@ -208,7 +212,7 @@ export class ChatApp extends LitElement {
           const isLastSystemMessage = msg.role === 'system' && index === this.messages.length - 1;
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${msg.content}</div>
+              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}</div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
