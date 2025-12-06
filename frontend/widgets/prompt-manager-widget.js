@@ -120,27 +120,54 @@ export class PromptManagerWidget extends LitElement {
       min-height: 0;
     }
 
-    .ordered-groups {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-bottom: 6px;
-      min-height: 20px;
-    }
+     .ordered-groups {
+       display: flex;
+       flex-direction: column;
+       gap: 4px;
+       margin-bottom: 6px;
+       min-height: 20px;
+       position: relative;
+     }
 
-    .group-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 2px 4px;
-      background: var(--dark-accent);
-      color: var(--light-text);
-      border-radius: 6px;
-      font-size: 0.7em;
-      font-family: monospace;
-      font-weight: 500;
-      white-space: nowrap;
-    }
+     .group-tag {
+       display: inline-flex;
+       align-items: center;
+       gap: 3px;
+       padding: 2px 4px;
+       background: var(--dark-accent);
+       color: var(--light-text);
+       border-radius: 6px;
+       font-size: 0.7em;
+       font-family: monospace;
+       font-weight: 500;
+       white-space: nowrap;
+       cursor: grab;
+     }
+
+     .group-tag.dragging {
+       opacity: 0.5;
+     }
+
+     .group-tag.drag-over {
+       background: var(--darker-accent);
+     }
+
+     .insert-indicator {
+       position: absolute;
+       left: 0;
+       right: 0;
+       height: 2px;
+       background: var(--dark-accent);
+       border-radius: 1px;
+       opacity: 0;
+       transition: opacity 0.2s ease;
+       pointer-events: none;
+       z-index: 10;
+     }
+
+     .insert-indicator.visible {
+       opacity: 1;
+     }
 
     .remove-group {
       cursor: pointer;
@@ -278,7 +305,8 @@ export class PromptManagerWidget extends LitElement {
     orderedGroups: { type: Array },
     result: { type: String },
     error: { type: String },
-    loading: { type: Boolean }
+    loading: { type: Boolean },
+    draggedIndex: { type: Number }
   };
 
   constructor() {
@@ -290,6 +318,7 @@ export class PromptManagerWidget extends LitElement {
     this.result = '';
     this.error = '';
     this.loading = false;
+    this.draggedIndex = null;
     this.loadData();
   }
 
@@ -334,6 +363,160 @@ export class PromptManagerWidget extends LitElement {
 
   removeFromOrder(groupPath) {
     this.orderedGroups = this.orderedGroups.filter(g => g !== groupPath);
+  }
+
+  handleDragStart(e, index) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.target.outerHTML);
+    e.target.classList.add('dragging');
+    this.draggedIndex = index;
+  }
+
+  handleContainerDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const tags = container.querySelectorAll('.group-tag');
+
+    if (tags.length === 0) {
+      // Empty container
+      this.updateInsertIndicator(0);
+      return;
+    }
+
+    // Find which item we're over
+    let insertIndex = tags.length;
+    for (let i = 0; i < tags.length; i++) {
+      const tagRect = tags[i].getBoundingClientRect();
+      const tagY = tagRect.top - rect.top;
+      if (y < tagY + tagRect.height / 2) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    this.updateInsertIndicator(insertIndex);
+  }
+
+  handleDragOver(e, index) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+    const insertIndex = y < height / 2 ? index : index + 1;
+
+    this.updateInsertIndicator(insertIndex);
+    return false;
+  }
+
+  handleDragEnter(e, index) {
+    // Keep for compatibility but main logic moved to dragover
+  }
+
+  handleDragLeave(e) {
+    // Keep for compatibility but main logic moved to dragover
+  }
+
+  handleDrop(e, dropIndex) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+    const insertIndex = y < height / 2 ? dropIndex : dropIndex + 1;
+
+    if (this.draggedIndex === insertIndex || this.draggedIndex === insertIndex - 1) return;
+
+    const draggedGroup = this.orderedGroups[this.draggedIndex];
+    const newOrderedGroups = [...this.orderedGroups];
+    newOrderedGroups.splice(this.draggedIndex, 1);
+    newOrderedGroups.splice(insertIndex > this.draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedGroup);
+
+    this.orderedGroups = newOrderedGroups;
+
+    this.hideInsertIndicator();
+
+    // Clean up drag classes
+    const tags = this.shadowRoot.querySelectorAll('.group-tag');
+    tags.forEach(tag => {
+      tag.classList.remove('dragging', 'drag-over');
+    });
+
+    return false;
+  }
+
+  handleDragEnd(e) {
+    this.hideInsertIndicator();
+
+    const tags = this.shadowRoot.querySelectorAll('.group-tag');
+    tags.forEach(tag => {
+      tag.classList.remove('dragging', 'drag-over');
+    });
+  }
+
+  updateInsertIndicator(insertIndex) {
+    const indicator = this.shadowRoot.querySelector('#insert-indicator');
+    const tags = this.shadowRoot.querySelectorAll('.group-tag');
+
+    if (insertIndex === 0) {
+      indicator.style.top = '-3px';
+    } else if (insertIndex >= tags.length) {
+      const lastTag = tags[tags.length - 1];
+      indicator.style.top = (lastTag.offsetTop + lastTag.offsetHeight - 3) + 'px';
+    } else {
+      const tag = tags[insertIndex];
+      indicator.style.top = (tag.offsetTop - 3) + 'px';
+    }
+
+    indicator.classList.add('visible');
+  }
+
+  hideInsertIndicator() {
+    const indicator = this.shadowRoot.querySelector('#insert-indicator');
+    indicator.classList.remove('visible');
+  }
+
+  handleContainerDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const tags = container.querySelectorAll('.group-tag');
+
+    let insertIndex = tags.length;
+    for (let i = 0; i < tags.length; i++) {
+      const tagRect = tags[i].getBoundingClientRect();
+      const tagY = tagRect.top - rect.top;
+      if (y < tagY + tagRect.height / 2) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    if (this.draggedIndex === insertIndex || this.draggedIndex === insertIndex - 1) return;
+
+    const draggedGroup = this.orderedGroups[this.draggedIndex];
+    const newOrderedGroups = [...this.orderedGroups];
+    newOrderedGroups.splice(this.draggedIndex, 1);
+    newOrderedGroups.splice(insertIndex > this.draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedGroup);
+
+    this.orderedGroups = newOrderedGroups;
+
+    this.hideInsertIndicator();
+
+    // Clean up drag classes
+    const tags2 = this.shadowRoot.querySelectorAll('.group-tag');
+    tags2.forEach(tag => {
+      tag.classList.remove('dragging', 'drag-over');
+    });
   }
 
   addSelectedToOrder() {
@@ -419,14 +602,24 @@ export class PromptManagerWidget extends LitElement {
             <div class="section build-section">
               <h3>Build Prompt</h3>
 
-              <div class="ordered-groups">
-                ${this.orderedGroups.map(groupPath => html`
-                  <span class="group-tag">
-                    ${groupPath}
-                    <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
-                  </span>
-                `)}
-              </div>
+               <div class="ordered-groups" @dragover=${this.handleContainerDragOver} @drop=${this.handleContainerDrop}>
+                 <div class="insert-indicator" id="insert-indicator"></div>
+                 ${this.orderedGroups.map((groupPath, index) => html`
+                   <span
+                     class="group-tag"
+                     draggable="true"
+                     @dragstart=${(e) => this.handleDragStart(e, index)}
+                     @dragover=${(e) => this.handleDragOver(e, index)}
+                     @dragenter=${(e) => this.handleDragEnter(e, index)}
+                     @dragleave=${this.handleDragLeave}
+                     @drop=${(e) => this.handleDrop(e, index)}
+                     @dragend=${this.handleDragEnd}
+                   >
+                     ${groupPath}
+                     <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
+                   </span>
+                 `)}
+               </div>
 
               <div class="add-group-section">
                 <input
