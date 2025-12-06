@@ -143,15 +143,6 @@ export class TopBar extends LitElement {
     this.requestUpdate();
   }
 
-  async switchSession(sessionId) {
-    this.currentSession = sessionId;
-    sessionStorage.setItem('currentSession', sessionId);
-    this.closeMenu();
-    // Dispatch global event for other components to listen
-    window.dispatchEvent(new CustomEvent('session-changed', { detail: { sessionId } }));
-    this.requestUpdate();
-  }
-
   async createNewSession() {
     try {
       const res = await fetch('/sessions', { method: 'POST' });
