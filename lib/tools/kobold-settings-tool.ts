@@ -1,6 +1,6 @@
 import { ToolboxTool } from "../../interfaces/ToolboxTool.js";
-import { readFile, writeFile } from "fs/promises";
-import { join } from "path";
+import { HasStorage, Storage } from "../../interfaces/Storage.js";
+import { readFile, unlink } from "fs/promises";
 
 interface KoboldSettings {
   baseUrl: string;
@@ -12,14 +12,13 @@ interface KoboldSettings {
   minP: number;
 }
 
-export class KoboldSettingsTool implements ToolboxTool {
-  private settingsFile: string;
+export class KoboldSettingsTool implements ToolboxTool, HasStorage {
+  private storage?: Storage;
   private settings: KoboldSettings;
   private onSettingsChange?: (settings: KoboldSettings) => void;
 
   constructor(toolboxCollector: any, onSettingsChange?: (settings: KoboldSettings) => void) {
     toolboxCollector.register('/widgets/kobold-settings-widget.js');
-    this.settingsFile = join(process.cwd(), 'kobold-settings.json');
     this.onSettingsChange = onSettingsChange;
     this.settings = {
       baseUrl: 'http://localhost:5001',
@@ -30,23 +29,26 @@ export class KoboldSettingsTool implements ToolboxTool {
       repetitionPenalty: 1.0,
       minP: 0.05
     };
-    this.loadSettings();
   }
 
   private async loadSettings() {
+    if (!this.storage) return;
+
     try {
-      const data = await readFile(this.settingsFile, 'utf-8');
-      const loadedSettings = JSON.parse(data);
-      this.settings = { ...this.settings, ...loadedSettings };
+      const rows = await this.storage.findAll();
+      if (rows.length > 0) {
+        this.settings = { ...this.settings, ...rows[0] };
+      }
     } catch (error) {
-      // File doesn't exist or is invalid, use defaults
       console.log('Using default KoboldCPP settings');
     }
   }
 
   private async saveSettings() {
+    if (!this.storage) return;
+
     try {
-      await writeFile(this.settingsFile, JSON.stringify(this.settings, null, 2));
+      await this.storage.update(1, this.settings);
     } catch (error) {
       console.error('Failed to save KoboldCPP settings:', error);
       throw error;
@@ -107,5 +109,56 @@ export class KoboldSettingsTool implements ToolboxTool {
         }
       }
     };
+  }
+
+  // HasStorage implementation
+  getFQDN(): string {
+    return 'tools.kobold.settings';
+  }
+
+  setStorage(storage: Storage): void {
+    this.storage = storage;
+  }
+
+  async init(storage: Storage): Promise<void> {
+    const tableName = storage.getTableName();
+
+    // Create table if needed
+    await storage.execute(
+      `CREATE TABLE IF NOT EXISTS ${tableName} (
+        id INTEGER PRIMARY KEY,
+        baseUrl TEXT NOT NULL,
+        maxLength INTEGER NOT NULL,
+        temperature REAL NOT NULL,
+        topK INTEGER NOT NULL,
+        topP REAL NOT NULL,
+        repetitionPenalty REAL NOT NULL,
+        minP REAL NOT NULL
+      )`
+    );
+
+    // Check version and migrate
+    const currentVersion = await storage.getComponentVersion();
+    if (currentVersion === null) {
+      await storage.setComponentVersion(1);
+      await this.migrateFromJSON();
+    }
+
+    // Load settings
+    await this.loadSettings();
+  }
+
+  private async migrateFromJSON(): Promise<void> {
+    try {
+      const data = await readFile('kobold-settings.json', 'utf-8');
+      const loadedSettings = JSON.parse(data);
+      const settings = { ...this.settings, ...loadedSettings };
+      await this.storage!.insert(settings);
+      await unlink('kobold-settings.json');
+      console.log('Migrated KoboldCPP settings from JSON to database');
+    } catch (error) {
+      // No JSON file or migration failed, insert defaults
+      await this.storage!.insert(this.settings);
+    }
   }
 }

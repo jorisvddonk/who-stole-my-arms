@@ -4,18 +4,28 @@ import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
 import { widgetCollector } from "./lib/widget-collector.js";
+import { DatabaseManager } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
 
+// Initialize database manager
+const dbManager = new DatabaseManager();
+
+// Create components
 const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) => {
   api.updateSettings(settings);
 });
-const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
+
+// Register global components
+await dbManager.registerGlobalComponent(koboldSettingsTool);
+
+// Create API after settings are loaded
+const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 
 // Initialize PromptManager and providers
 const promptManager = new PromptManager(toolboxCollector);
@@ -28,6 +38,26 @@ const routes = {
   ...koboldSettingsTool.getRoutes(),
   ...osMetricsDockWidget.getRoutes(),
   ...promptManager.getRoutes(),
+  "/sessions": {
+    GET: async (req) => {
+      const sessions = await dbManager.listSessions();
+      return new Response(JSON.stringify({ sessions }), { headers: { 'Content-Type': 'application/json' } });
+    },
+    POST: async (req) => {
+      // For now, generate a simple session ID
+      const sessionId = `session_${Date.now()}`;
+      // Note: actual session creation happens when storage is requested
+      return new Response(JSON.stringify({ sessionId }), { headers: { 'Content-Type': 'application/json' } });
+    }
+  },
+  "/sessions/:id": {
+    DELETE: async (req) => {
+      const url = new URL(req.url);
+      const sessionId = url.pathname.split('/').pop()!;
+      await dbManager.deleteSession(sessionId);
+      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+  },
   "/": async (req) => {
     try {
       const content = await readFile('./frontend/index.html');
