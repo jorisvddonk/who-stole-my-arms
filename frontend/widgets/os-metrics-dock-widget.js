@@ -4,7 +4,8 @@ export class OsMetricsDockWidget extends LitElement {
   static styles = css`
     :host {
       display: block;
-      background: var(--primary-bg);
+      background: var(--dock-widget-inset-bg);
+      box-shadow: inset 0 2px 4px var(--inset-shadow);
       border: 1px solid var(--border-color);
       border-radius: 4px;
       padding: 10px;

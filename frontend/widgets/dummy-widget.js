@@ -6,8 +6,8 @@ export class DummyWidget extends LitElement {
       display: block;
       min-height: 100%;
       border: 1px solid var(--border-color);
-      background: #a1887f;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+      background: var(--dock-widget-inset-bg);
+      box-shadow: inset 0 2px 4px var(--inset-shadow);
       border-radius: 4px;
       box-sizing: border-box;
     }
