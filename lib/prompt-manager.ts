@@ -2,6 +2,7 @@ import { minimatch } from 'minimatch';
 import { minimatch } from 'minimatch';
 import { ToolboxTool } from '../interfaces/ToolboxTool.js';
 import { logError } from './logging/logger.js';
+import { createMethodRouter } from './util/route-utils.js';
 
 export interface PromptItem {
   type: 'prompt';
@@ -23,9 +24,16 @@ export interface PromptProvider {
   getAvailablePromptGroups(): string[];
 }
 
+export interface PromptTemplate {
+  name: string;
+  groups: string[];
+  createdAt: Date;
+}
+
 export class PromptManager implements ToolboxTool {
   private providers: Map<string, PromptProvider> = new Map();
   private currentContext: any = {};
+  private templates: Map<string, PromptTemplate> = new Map();
 
   constructor(toolboxCollector?: any) {
     if (toolboxCollector) {
@@ -63,6 +71,35 @@ export class PromptManager implements ToolboxTool {
     return result;
   }
 
+  saveTemplate(name: string, groups: string[]): boolean {
+    if (!name || !groups || !Array.isArray(groups)) {
+      return false;
+    }
+
+    this.templates.set(name, {
+      name,
+      groups: [...groups], // copy the array
+      createdAt: new Date()
+    });
+
+    return true;
+  }
+
+  loadTemplate(name: string): string[] | null {
+    const template = this.templates.get(name);
+    return template ? [...template.groups] : null;
+  }
+
+  getAllTemplates(): PromptTemplate[] {
+    return Array.from(this.templates.values()).sort((a, b) =>
+      b.createdAt.getTime() - a.createdAt.getTime()
+    );
+  }
+
+  deleteTemplate(name: string): boolean {
+    return this.templates.delete(name);
+  }
+
   getRoutes(): Record<string, any> {
     return {
       "/prompts/build": {
@@ -96,7 +133,59 @@ export class PromptManager implements ToolboxTool {
           : allGroups;
 
         return new Response(JSON.stringify({ groups: filteredGroups }), { headers: { 'Content-Type': 'application/json' } });
-      }
+      },
+      "/prompts/templates": {
+        GET: (req) => {
+          const templates = this.getAllTemplates();
+          return new Response(JSON.stringify({ templates }), { headers: { 'Content-Type': 'application/json' } });
+        },
+        POST: async (req) => {
+          try {
+            const body = await req.json();
+            const { name, groups } = body;
+
+            if (!name || !groups || !Array.isArray(groups)) {
+              return new Response(JSON.stringify({ error: 'name and groups array are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            const success = this.saveTemplate(name, groups);
+            if (!success) {
+              return new Response(JSON.stringify({ error: 'Failed to save template' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      },
+      "/prompts/templates/:name": createMethodRouter({
+        GET: (req) => {
+          const url = new URL(req.url);
+          const pathParts = url.pathname.split('/');
+          const name = pathParts[pathParts.length - 1];
+          const groups = this.loadTemplate(decodeURIComponent(name));
+
+          if (groups === null) {
+            return new Response(JSON.stringify({ error: 'Template not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+          }
+
+          return new Response(JSON.stringify({ name, groups }), { headers: { 'Content-Type': 'application/json' } });
+        },
+        DELETE: (req) => {
+          const url = new URL(req.url);
+          const pathParts = url.pathname.split('/');
+          const name = pathParts[pathParts.length - 1];
+          const success = this.deleteTemplate(decodeURIComponent(name));
+
+          if (!success) {
+            return new Response(JSON.stringify({ error: 'Template not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+          }
+
+          return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+        }
+      })
     };
   }
 
