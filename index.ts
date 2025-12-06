@@ -93,7 +93,7 @@ const routeGroups = [
           return new Response('File not found', { status: 404 });
         }
       },
-      "/generate": createMethodRouter({
+      "/sessions/:sessionId/generate": createMethodRouter({
         POST: async (req) => {
           try {
             const body = await req.json();
@@ -110,7 +110,7 @@ const routeGroups = [
           }
         }
       }),
-      "/generateStream": createMethodRouter({
+      "/sessions/:sessionId/generateStream": createMethodRouter({
         POST: async (req) => {
           try {
             const body = await req.json();
@@ -158,6 +158,7 @@ const routeGroups = [
           }
         }
       }),
+
       "/llm/settings": (req) => {
         // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
         const supportsStreaming = api instanceof Object && 'generateStream' in api;

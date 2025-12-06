@@ -1,6 +1,7 @@
 console.log('Chat app module loaded');
 
 import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
+import { sessionManager } from './session-manager.js';
 
 export class ChatApp extends LitElement {
   static styles = css`
@@ -73,7 +74,23 @@ export class ChatApp extends LitElement {
     this.isResizing = false;
     this.startY = 0;
     this.supportsStreaming = false;
+    this.currentSession = sessionManager.getCurrentSession();
+    this.sessionChangeHandler = this.handleSessionChange.bind(this);
     this.checkLLMSettings();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    sessionManager.addSessionChangeListener(this.sessionChangeHandler);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
+  }
+
+  handleSessionChange(sessionId) {
+    this.currentSession = sessionId;
   }
 
   async checkLLMSettings() {
@@ -100,7 +117,7 @@ export class ChatApp extends LitElement {
     this.requestUpdate();
 
     try {
-      const endpoint = this.supportsStreaming ? '/generateStream' : '/generate';
+      const endpoint = this.supportsStreaming ? `/sessions/${this.currentSession}/generateStream` : `/sessions/${this.currentSession}/generate`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
