@@ -12,6 +12,7 @@ import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
 import { ChatHistory } from "./lib/chat-history.js";
+import { DockManager } from "./lib/dock-manager.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
 
 // Initialize database manager
@@ -23,6 +24,7 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) =
 });
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
+const dockManager = new DockManager();
 
 // Initialize ChatHistory
 const chatHistory = new ChatHistory(dbManager);
@@ -46,6 +48,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   osMetricsDockWidget,
+  dockManager,
   promptManager,
   chatHistory,
   {
@@ -259,17 +262,17 @@ const routeGroups = [
           }
         }
       }),
-      "/generate/abort": createMethodRouter({
-        POST: async (req) => {
-          try {
-            const success = await api.abortGeneration();
-            return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
-          } catch (error) {
-            logError(error.message);
-            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-          }
-        }
-      })
+       "/generate/abort": createMethodRouter({
+         POST: async (req) => {
+           try {
+             const success = await api.abortGeneration();
+             return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+           } catch (error) {
+             logError(error.message);
+             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           }
+         }
+       })
     }
   }
 ];

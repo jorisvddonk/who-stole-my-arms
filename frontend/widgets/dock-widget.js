@@ -4,6 +4,7 @@ import './empty-widget.js';
 import './dummy-widget.js';
 import './row-hamburger-button.js';
 import './edit-widgets-popup.js';
+import { sessionManager } from './session-manager.js';
 
 export class DockWidget extends LitElement {
   static widgetTypes = new Map([
@@ -100,12 +101,10 @@ export class DockWidget extends LitElement {
   constructor() {
     super();
     this.loading = false;
-    this.rows = [
-      { id: 1, widgets: [{ type: 'empty-widget', span: 12 }] },
-      { id: 2, widgets: [{ type: 'dummy-widget', span: 6 }, { type: 'empty-widget', span: 6 }] },
-      { id: 3, widgets: [{ type: 'dummy-widget', span: 3 }, { type: 'dummy-widget', span: 3 }, { type: 'dummy-widget', span: 6 }] }
-    ];
+    this.rows = [];
     this.visibleHamburgers = new Set();
+    this.sessionId = sessionManager.getCurrentSession();
+    this.sessionChangeHandler = this.handleSessionChange.bind(this);
   }
 
   connectedCallback() {
@@ -115,6 +114,43 @@ export class DockWidget extends LitElement {
       window.toolboxMenu.addItem('Add Row', [], () => this.addRow());
     }
     this.loadWidgets();
+    this.loadConfig();
+    sessionManager.addSessionChangeListener(this.sessionChangeHandler);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
+  }
+
+  async loadConfig() {
+    try {
+      const res = await fetch(`/sessions/${this.sessionId}/dock/config`);
+      if (res.ok) {
+        const data = await res.json();
+        this.rows = data.rows;
+        this.requestUpdate();
+      }
+    } catch (error) {
+      console.warn('Failed to load dock config:', error);
+    }
+  }
+
+  async saveConfig() {
+    try {
+      await fetch(`/sessions/${this.sessionId}/dock/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: this.rows })
+      });
+    } catch (error) {
+      console.warn('Failed to save dock config:', error);
+    }
+  }
+
+  handleSessionChange(sessionId) {
+    this.sessionId = sessionId;
+    this.loadConfig();
   }
 
   registerWidgetType(type, label) {
@@ -144,6 +180,7 @@ export class DockWidget extends LitElement {
     const id = Math.max(0, ...this.rows.map(r => r.id)) + 1;
     this.rows = [...this.rows, { id, widgets: [{ type: 'empty-widget', span: 12 }] }];
     this.requestUpdate();
+    this.saveConfig();
   }
 
   showHamburger(id) {
@@ -164,6 +201,7 @@ export class DockWidget extends LitElement {
       this.addRowAt(rowId, 'below');
     } else if (action === 'remove') {
       this.rows = this.rows.filter(r => r.id !== rowId);
+      this.saveConfig();
     } else if (action === 'edit-widgets') {
       this.editWidgets(rowId);
     }
@@ -179,6 +217,7 @@ export class DockWidget extends LitElement {
     } else {
       this.rows.splice(index + 1, 0, newRow);
     }
+    this.saveConfig();
   }
 
   editWidgets(rowId) {
@@ -196,6 +235,7 @@ export class DockWidget extends LitElement {
     if (row) {
       row.widgets = widgets;
       this.requestUpdate();
+      this.saveConfig();
     }
   }
 
