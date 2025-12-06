@@ -1,6 +1,6 @@
-import { LLMInvoke } from '../interfaces/LLMInvoke.js';
+import { NonStreamingLLMInvoke, StreamingLLMInvoke } from '../interfaces/LLMInvoke.js';
 
-export class KoboldAPI implements LLMInvoke {
+export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke {
   private baseUrl: string;
 
   constructor(baseUrl: string = 'http://localhost:5001') {
