@@ -24,17 +24,7 @@ export class ChatApp extends LitElement {
       cursor: ns-resize;
       flex-shrink: 0;
     }
-    .dock {
-      flex: 0 0 auto;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      padding: 20px;
-      background: var(--secondary-bg);
-      border-top: 1px solid var(--border-color);
-      gap: 10px;
-      min-height: 80px;
-    }
+
     .message {
       margin-bottom: 10px;
       padding: 10px;
@@ -53,30 +43,7 @@ export class ChatApp extends LitElement {
       color: var(--text-color);
       border: 1px solid var(--border-color);
     }
-    input {
-      flex: 1;
-      padding: 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      margin-right: 10px;
-      background: var(--input-bg);
-      color: var(--text-color);
-    }
-    button {
-      padding: 10px 20px;
-      background-color: var(--dark-accent);
-      color: var(--light-text);
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: var(--darker-accent);
-    }
-    button:disabled {
-      background-color: var(--disabled-bg);
-      cursor: not-allowed;
-    }
+
   `;
 
   static properties = {
@@ -94,14 +61,9 @@ export class ChatApp extends LitElement {
     this.startY = 0;
   }
 
-  async generate(e) {
-    e.preventDefault();
-    const input = this.shadowRoot.querySelector('#prompt');
-    const prompt = input.value.trim();
-    if (!prompt) return;
-
+  async handleGenerate(e) {
+    const { prompt } = e.detail;
     this.messages = [...this.messages, { role: 'user', content: prompt }];
-    input.value = '';
     this.loading = true;
 
     try {
@@ -132,7 +94,7 @@ export class ChatApp extends LitElement {
   startResize(e) {
     this.isResizing = true;
     this.startY = e.clientY;
-    this.initialHeight = this.dockHeight || this.shadowRoot.querySelector('.dock').offsetHeight;
+    this.initialHeight = this.dockHeight || this.shadowRoot.querySelector('dock-widget').offsetHeight;
     document.addEventListener('mousemove', this.handleResize);
     document.addEventListener('mouseup', this.stopResize);
   }
@@ -159,13 +121,7 @@ export class ChatApp extends LitElement {
         ${this.loading ? html`<div class="message system">Generating...</div>` : ''}
       </div>
       <div class="resizer" @mousedown=${this.startResize}></div>
-      <form class="dock" @submit=${this.generate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}>
-        <toolbox-menu .floating=${false}></toolbox-menu>
-        <input id="prompt" type="text" placeholder="Type your message..." required ?disabled=${this.loading}>
-        <button type="submit" ?disabled=${this.loading}>
-          Send
-        </button>
-      </form>
+      <dock-widget .loading=${this.loading} @generate=${this.handleGenerate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}></dock-widget>
     `;
   }
 }
