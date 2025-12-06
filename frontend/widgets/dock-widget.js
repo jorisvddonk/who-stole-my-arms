@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/al
 import './toolbox-menu.js';
 import './empty-widget.js';
 import './dummy-widget.js';
+import './row-hamburger-button.js';
 
 export class DockWidget extends LitElement {
   static styles = css`
@@ -30,22 +31,7 @@ export class DockWidget extends LitElement {
       position: relative;
       flex-shrink: 0;
     }
-    .hamburger {
-      position: absolute;
-      right: 0px;
-      top: 10px;
-      height: calc(100%);
-      width: 10px;
-      cursor: pointer;
-      background: var(--dark-accent);
-      border: 1px solid var(--border-color);
-      border-radius: 0 2px 2px 0;
-      z-index: 100;
-      font-size: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+
     .grid {
       height: 100%;
       padding: 10px;
@@ -131,14 +117,14 @@ export class DockWidget extends LitElement {
     this.requestUpdate();
   }
 
-  openContextMenu(id) {
-    const action = prompt('Action: remove, set-columns, add-widget');
+  handleMenuAction(e) {
+    const { action, rowId } = e.detail;
     if (action === 'remove') {
-      this.rows = this.rows.filter(r => r.id !== id);
+      this.rows = this.rows.filter(r => r.id !== rowId);
     } else if (action === 'set-columns') {
       const cols = parseInt(prompt('Number of columns (1-12):'));
       if (cols >= 1 && cols <= 12) {
-        const row = this.rows.find(r => r.id === id);
+        const row = this.rows.find(r => r.id === rowId);
         row.columns = cols;
         // Reset widgets if needed
         row.widgets = [{ type: 'empty-widget', span: cols }];
@@ -147,7 +133,7 @@ export class DockWidget extends LitElement {
       const type = prompt('Widget type: empty-widget, dummy-widget');
       const span = parseInt(prompt('Span (1-12):'));
       if (type && span >= 1 && span <= 12) {
-        const row = this.rows.find(r => r.id === id);
+        const row = this.rows.find(r => r.id === rowId);
         row.widgets.push({ type, span });
         // Adjust if total span > columns, but for simplicity, allow
       }
@@ -192,12 +178,12 @@ export class DockWidget extends LitElement {
       </div>
       <div class="rows-container">
         ${this.rows.map(row => html`
-          <div class="row" @mouseenter=${() => this.showHamburger(row.id)} @mouseleave=${() => this.hideHamburger(row.id)}>
-            <div class="hamburger" style="display: ${this.visibleHamburgers.has(row.id) ? 'flex' : 'none'}" @click=${() => this.openContextMenu(row.id)}>☰</div>
-            <div class="grid" style="display: grid; grid-template-columns: repeat(${row.columns}, 1fr);">
-              ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type)}</div>`)}
-            </div>
+        <div class="row" @mouseenter=${() => this.showHamburger(row.id)} @mouseleave=${() => this.hideHamburger(row.id)}>
+          <row-hamburger-button .rowId=${row.id} style="display: ${this.visibleHamburgers.has(row.id) ? 'block' : 'none'}" @menu-action=${this.handleMenuAction}></row-hamburger-button>
+          <div class="grid" style="display: grid; grid-template-columns: repeat(${row.columns}, 1fr);">
+            ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type)}</div>`)}
           </div>
+        </div>
         `)}
       </div>
     `;
