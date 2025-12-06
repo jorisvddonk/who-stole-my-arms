@@ -102,12 +102,17 @@ const routeGroups = [
              await promptManager.init(storage);
 
              const body = await req.json();
-             const prompt = body.prompt;
-             if (!prompt) {
+             const userPrompt = body.prompt;
+             if (!userPrompt) {
                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
              }
-             const text = await api.generate(prompt);
-             logGenerate(prompt, text.length);
+
+             // Get the chatMessage template prefix
+             const prefix = await promptManager.getPromptFromTemplate(storage, 'chatMessage');
+             const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
+
+             const text = await api.generate(fullPrompt);
+             logGenerate(userPrompt, text.length);
              return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
            } catch (error) {
              logError(error.message);
@@ -124,17 +129,21 @@ const routeGroups = [
              await promptManager.init(storage);
 
              const body = await req.json();
-             const prompt = body.prompt;
-             if (!prompt) {
+             const userPrompt = body.prompt;
+             if (!userPrompt) {
                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
              }
+
+             // Get the chatMessage template prefix
+             const prefix = await promptManager.getPromptFromTemplate(storage, 'chatMessage');
+             const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
              // For streaming, we'll use Server-Sent Events
              const stream = new ReadableStream({
                async start(controller) {
                  try {
                    let totalLength = 0;
-                   for await (const chunk of api.generateStream(prompt)) {
+                   for await (const chunk of api.generateStream(fullPrompt)) {
                      if (chunk.token) {
                        totalLength += chunk.token.length;
                        const data = JSON.stringify({ token: chunk.token });
@@ -142,7 +151,7 @@ const routeGroups = [
                      } else if (chunk.finishReason) {
                        const data = JSON.stringify({ finishReason: chunk.finishReason });
                        controller.enqueue(`data: ${data}\n\n`);
-                       logGenerate(prompt, totalLength);
+                       logGenerate(userPrompt, totalLength);
                        break;
                      }
                    }

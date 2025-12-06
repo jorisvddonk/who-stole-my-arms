@@ -274,6 +274,14 @@ export class PromptManager implements ToolboxTool, HasStorage {
     return { ...this.currentContext };
   }
 
+  async getPromptFromTemplate(storage: Storage, templateName: string): Promise<string> {
+    const templateGroups = await this.loadTemplate(storage, templateName);
+    if (templateGroups) {
+      return await this.getPrompt(templateGroups);
+    }
+    return '';
+  }
+
   async getPrompt(orderedGroups: string[], context?: any): Promise<string> {
     const mergedContext = { ...this.currentContext, ...context };
     const expandedGroups = this.expandGlobs(orderedGroups);
