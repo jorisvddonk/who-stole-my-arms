@@ -8,30 +8,33 @@ export class ChatApp extends LitElement {
       display: grid;
       grid-template-rows: 1fr auto;
       height: 100vh;
-      font-family: Arial, sans-serif;
+      font-family: 'Times New Roman', serif;
+      background: #d7ccc8;
+      color: #3e2723;
     }
     .chat-container {
       grid-row: 1;
       overflow-y: auto;
       padding: 20px;
-      background: #f5f5f5;
+      background: #d7ccc8;
     }
     .message {
       margin-bottom: 10px;
       padding: 10px;
       border-radius: 10px;
       max-width: 70%;
+      font-family: 'Times New Roman', serif;
     }
     .message.user {
-      background: #007bff;
-      color: white;
+      background: #8d6e63;
+      color: #f4f1e8;
       align-self: flex-end;
       margin-left: auto;
     }
     .message.system {
-      background: white;
-      color: black;
-      border: 1px solid #ccc;
+      background: #bcaaa4;
+      color: #3e2723;
+      border: 1px solid #8d6e63;
     }
     .input-container {
       grid-row: 2;
@@ -39,30 +42,32 @@ export class ChatApp extends LitElement {
       grid-template-columns: auto 1fr auto;
       align-items: center;
       padding: 20px;
-      background: white;
-      border-top: 1px solid #ccc;
+      background: #bcaaa4;
+      border-top: 1px solid #8d6e63;
       gap: 10px;
     }
     input {
       flex: 1;
       padding: 10px;
-      border: 1px solid #ccc;
+      border: 1px solid #8d6e63;
       border-radius: 4px;
       margin-right: 10px;
+      background: #d7ccc8;
+      color: #3e2723;
     }
     button {
       padding: 10px 20px;
-      background-color: #007bff;
-      color: white;
+      background-color: #5d4037;
+      color: #f4f1e8;
       border: none;
       border-radius: 4px;
       cursor: pointer;
     }
     button:hover {
-      background-color: #0056b3;
+      background-color: #3e2723;
     }
     button:disabled {
-      background-color: #ccc;
+      background-color: #a1887f;
       cursor: not-allowed;
     }
   `;

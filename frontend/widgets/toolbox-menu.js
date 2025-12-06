@@ -17,15 +17,18 @@ export class ToolboxMenu extends LitElement {
       width: 50px;
       height: 50px;
       border-radius: 50%;
-      background: #007bff;
-      color: white;
+      background: #5d4037;
+      color: #f4f1e8;
       border: none;
       font-size: 24px;
       cursor: pointer;
     }
+    button:hover {
+      background: #3e2723;
+    }
     .menu {
-      background: white;
-      border: 1px solid #ccc;
+      background: #bcaaa4;
+      border: 1px solid #8d6e63;
       border-radius: 4px;
       padding: 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -44,16 +47,17 @@ export class ToolboxMenu extends LitElement {
       position: relative;
       padding: 5px 10px;
       cursor: pointer;
+      color: #3e2723;
     }
     li:hover {
-      background: #f0f0f0;
+      background: #a1887f;
     }
     .submenu {
       position: absolute;
       left: 100%;
       top: 0;
-      background: white;
-      border: 1px solid #ccc;
+      background: #bcaaa4;
+      border: 1px solid #8d6e63;
       border-radius: 4px;
       padding: 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);

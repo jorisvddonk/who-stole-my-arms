@@ -10,6 +10,9 @@ export class PopupDialog extends LitElement {
       max-width: 500px;
       max-height: 80vh;
       overflow-y: auto;
+      background: #bcaaa4;
+      color: #3e2723;
+      font-family: 'Times New Roman', serif;
     }
     dialog::backdrop {
       background: rgba(0,0,0,0.5);
@@ -20,14 +23,14 @@ export class PopupDialog extends LitElement {
     button {
       margin-top: 10px;
       padding: 8px 16px;
-      background: #007bff;
-      color: white;
+      background: #5d4037;
+      color: #f4f1e8;
       border: none;
       border-radius: 4px;
       cursor: pointer;
     }
     button:hover {
-      background: #0056b3;
+      background: #3e2723;
     }
   `;
 
