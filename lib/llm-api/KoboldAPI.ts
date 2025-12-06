@@ -1,10 +1,38 @@
-import { NonStreamingLLMInvoke, StreamingLLMInvoke } from '../interfaces/LLMInvoke.js';
+import { NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl } from '../interfaces/LLMInvoke.js';
 
-export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke {
+export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl {
   private baseUrl: string;
+  private genkey: string;
 
   constructor(baseUrl: string = 'http://localhost:5001') {
     this.baseUrl = baseUrl;
+    this.genkey = `KCPP${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  }
+
+  private async _callApi(endpoint: string, payload?: any): Promise<any> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+
+    if (!response.ok) {
+      throw new Error(`Koboldcpp error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  private async _callApiGet(endpoint: string): Promise<any> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Koboldcpp error: ${response.status}`);
+    }
+
+    return response.json();
   }
 
   async generate(prompt: string): Promise<string> {
@@ -14,6 +42,7 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke {
       body: JSON.stringify({
         prompt: prompt,
         max_length: 100,
+        genkey: this.genkey,
       })
     });
 
@@ -32,6 +61,7 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke {
       body: JSON.stringify({
         prompt: prompt,
         max_length: 100,
+        genkey: this.genkey,
       })
     });
 
@@ -80,6 +110,61 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke {
       }
     } finally {
       reader.releaseLock();
+    }
+  }
+
+  // Info and utility methods
+  async getVersion(): Promise<any> {
+    return this._callApiGet('/api/extra/version');
+  }
+
+  async getModel(): Promise<string> {
+    const result = await this._callApiGet('/api/v1/model');
+    return result.result;
+  }
+
+  async getPerformanceStats(): Promise<any> {
+    return this._callApiGet('/api/extra/perf');
+  }
+
+  async getMaxContextLength(): Promise<number> {
+    const result = await this._callApiGet('/api/extra/true_max_context_length');
+    return result.value;
+  }
+
+  async countTokens(text: string): Promise<{ count: number; tokens: number[] }> {
+    const result = await this._callApi('/api/extra/tokencount', { prompt: text });
+    return {
+      count: result.value,
+      tokens: result.ids
+    };
+  }
+
+  async tokenize(text: string): Promise<number[]> {
+    const result = await this._callApi('/api/extra/tokenize', { prompt: text });
+    return result.ids;
+  }
+
+  async detokenize(tokenIds: number[]): Promise<string> {
+    const result = await this._callApi('/api/extra/detokenize', { ids: tokenIds });
+    return result.result;
+  }
+
+  async abortGeneration(): Promise<boolean> {
+    try {
+      await this._callApi('/api/extra/abort', { genkey: this.genkey });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async checkGeneration(): Promise<string | null> {
+    try {
+      const result = await this._callApi('/api/extra/generate/check', { genkey: this.genkey });
+      return result.results[0].text;
+    } catch {
+      return null;
     }
   }
 }

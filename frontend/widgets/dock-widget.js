@@ -74,6 +74,7 @@ export class DockWidget extends LitElement {
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      transition: background-color 0.2s;
     }
     button:hover {
       background-color: var(--darker-accent);
@@ -81,6 +82,12 @@ export class DockWidget extends LitElement {
     button:disabled {
       background-color: var(--disabled-bg);
       cursor: not-allowed;
+    }
+    button.abort {
+      background-color: var(--error-color, #dc3545);
+    }
+    button.abort:hover {
+      background-color: var(--darker-error-color, #c82333);
     }
   `;
 
@@ -193,11 +200,31 @@ export class DockWidget extends LitElement {
   }
 
   handleSubmit() {
-    const input = this.shadowRoot.querySelector('#prompt');
-    const prompt = input.value.trim();
-    if (prompt) {
-      this.dispatchEvent(new CustomEvent('generate', { detail: { prompt } }));
-      input.value = '';
+    if (this.loading) {
+      // Abort generation
+      this.abortGeneration();
+    } else {
+      // Start generation
+      const input = this.shadowRoot.querySelector('#prompt');
+      const prompt = input.value.trim();
+      if (prompt) {
+        this.dispatchEvent(new CustomEvent('generate', { detail: { prompt } }));
+        input.value = '';
+      }
+    }
+  }
+
+  async abortGeneration() {
+    try {
+      const response = await fetch('/generate/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        console.log('Generation aborted');
+      }
+    } catch (error) {
+      console.error('Failed to abort generation:', error);
     }
   }
 
@@ -229,8 +256,8 @@ export class DockWidget extends LitElement {
       <div class="chat-bar">
         <toolbox-menu .floating=${false}></toolbox-menu>
         <input id="prompt" type="text" placeholder="Type your message..." @keydown=${this.handleKeyDown} ?disabled=${this.loading}>
-        <button @click=${this.handleSubmit} ?disabled=${this.loading}>
-          Send
+        <button @click=${this.handleSubmit} ?disabled=${false} class=${this.loading ? 'abort' : ''}>
+          ${this.loading ? 'Abort' : 'Send'}
         </button>
       </div>
       <div class="rows-container">

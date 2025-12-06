@@ -120,6 +120,57 @@ const server = Bun.serve({
         supportsStreaming,
         model: 'KoboldCPP'
       }), { headers: { 'Content-Type': 'application/json' } });
+    },
+    "/llm/info": async (req) => {
+      logRequest(req);
+      try {
+        const [version, model, maxContext, perf] = await Promise.all([
+          api.getVersion().catch(() => ({ version: 'unknown' })),
+          api.getModel().catch(() => 'unknown'),
+          api.getMaxContextLength().catch(() => 0),
+          api.getPerformanceStats().catch(() => ({}))
+        ]);
+
+        return new Response(JSON.stringify({
+          version,
+          model,
+          maxContextLength: maxContext,
+          performance: perf
+        }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (error) {
+        logError(error.message);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+    },
+    "/llm/tokens": {
+      POST: async (req) => {
+        logRequest(req);
+        try {
+          const body = await req.json();
+          const text = body.text;
+          if (!text) {
+            return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+          }
+
+          const result = await api.countTokens(text);
+          return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+          logError(error.message);
+          return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+    },
+    "/generate/abort": {
+      POST: async (req) => {
+        logRequest(req);
+        try {
+          const success = await api.abortGeneration();
+          return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+          logError(error.message);
+          return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
     }
   },
   fetch(req) {
