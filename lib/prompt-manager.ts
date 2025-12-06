@@ -44,6 +44,17 @@ export class PromptManager implements ToolboxTool, HasStorage {
     const currentVersion = await storage.getComponentVersion();
     if (currentVersion === null) {
       await storage.setComponentVersion(1);
+
+      // Add default chatMessage template
+      const defaultTemplate = {
+        name: 'chatMessage',
+        groups: ['system/advanced'],
+        createdAt: new Date()
+      };
+      await storage.insert({
+        name: 'chatMessage',
+        data: JSON.stringify(defaultTemplate)
+      });
     }
   }
 
