@@ -1,17 +1,17 @@
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
-import { getOSMetrics } from "./lib/util/os-metrics.js";
 import { toolboxCollector } from "./lib/toolbox-collector.js";
+import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 
 const api = new KoboldAPI();
-
-// Register OS metrics frontend
-toolboxCollector.register('/widgets/os-metrics-widget.js');
+const osMetricsTool = new OsMetricsTool();
+osMetricsTool.init(toolboxCollector);
 
 const server = Bun.serve({
   port: 3000,
   routes: {
+    ...osMetricsTool.getRoutes(),
     "/": async (req) => {
       logRequest(req);
       try {
@@ -20,11 +20,6 @@ const server = Bun.serve({
       } catch {
         return new Response('Frontend not found', { status: 404 });
       }
-    },
-    "/metrics": (req) => {
-      logRequest(req);
-      const metrics = getOSMetrics();
-      return new Response(JSON.stringify(metrics), { headers: { 'Content-Type': 'application/json' } });
     },
     "/toolbox/list": (req) => {
       logRequest(req);
