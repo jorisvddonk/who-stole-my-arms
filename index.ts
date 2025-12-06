@@ -8,9 +8,12 @@ import { widgetCollector } from "./lib/widget-collector.js";
 import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
+
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
+import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
+
 import { ChatHistory } from "./lib/chat-history.js";
 import { DockManager } from "./lib/dock-manager.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
@@ -24,6 +27,7 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) =
 });
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
+const characterBioDockWidget = new CharacterBioDockWidget();
 const dockManager = new DockManager(toolboxCollector);
 
 // Initialize ChatHistory
@@ -33,6 +37,7 @@ const chatHistory = new ChatHistory(dbManager);
 const promptManager = new PromptManager(toolboxCollector);
 const systemPromptProvider = new SystemPromptProvider();
 promptManager.registerProvider('system', systemPromptProvider);
+promptManager.registerProvider('character-bio', characterBioDockWidget);
 promptManager.registerProvider('chat', chatHistory);
 
 // Register global components
@@ -48,6 +53,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   osMetricsDockWidget,
+  characterBioDockWidget,
   dockManager,
   promptManager,
   chatHistory,
@@ -102,15 +108,17 @@ const routeGroups = [
           return new Response('File not found', { status: 404 });
         }
       },
-       "/sessions/:sessionId/generate": createMethodRouter({
-         POST: async (req) => {
-           try {
-             const sessionId = (req as any).params.sessionId;
-             const db = await dbManager.getSessionDB(sessionId);
-             const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
-             await promptManager.init(promptStorage);
-             const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-             await chatHistory.init(chatStorage);
+        "/sessions/:sessionId/generate": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+              await promptManager.init(promptStorage);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
+              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+              await characterBioDockWidget.init(bioStorage);
 
              const body = await req.json();
              const userPrompt = body.prompt;
@@ -142,15 +150,17 @@ const routeGroups = [
            }
          }
        }),
-       "/sessions/:sessionId/generateStream": createMethodRouter({
-         POST: async (req) => {
-           try {
-             const sessionId = (req as any).params.sessionId;
-             const db = await dbManager.getSessionDB(sessionId);
-             const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
-             await promptManager.init(promptStorage);
-             const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-             await chatHistory.init(chatStorage);
+        "/sessions/:sessionId/generateStream": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+              await promptManager.init(promptStorage);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
+              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+              await characterBioDockWidget.init(bioStorage);
 
              const body = await req.json();
              const userPrompt = body.prompt;
@@ -216,13 +226,15 @@ const routeGroups = [
            }
          }
         }),
-        "/sessions/:sessionId/continue": createMethodRouter({
-          POST: async (req) => {
-            try {
-              const sessionId = (req as any).params.sessionId;
-              const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
+         "/sessions/:sessionId/continue": createMethodRouter({
+           POST: async (req) => {
+             try {
+               const sessionId = (req as any).params.sessionId;
+               const db = await dbManager.getSessionDB(sessionId);
+               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+               await chatHistory.init(chatStorage);
+               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+               await characterBioDockWidget.init(bioStorage);
 
               const body = await req.json();
               const { messageId } = body;
@@ -264,13 +276,15 @@ const routeGroups = [
             }
           }
         }),
-        "/sessions/:sessionId/continueStream": createMethodRouter({
-          POST: async (req) => {
-            try {
-              const sessionId = (req as any).params.sessionId;
-              const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
+         "/sessions/:sessionId/continueStream": createMethodRouter({
+           POST: async (req) => {
+             try {
+               const sessionId = (req as any).params.sessionId;
+               const db = await dbManager.getSessionDB(sessionId);
+               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+               await chatHistory.init(chatStorage);
+               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+               await characterBioDockWidget.init(bioStorage);
 
               const body = await req.json();
               const { messageId } = body;

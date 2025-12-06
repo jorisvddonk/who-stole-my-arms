@@ -276,6 +276,8 @@ export class DockWidget extends LitElement {
         return html`<dummy-widget></dummy-widget>`;
       case 'os-metrics-dock-widget':
         return html`<os-metrics-dock-widget></os-metrics-dock-widget>`;
+      case 'character-bio-dock-widget':
+        return html`<character-bio-dock-widget></character-bio-dock-widget>`;
       default:
         return html`<div>Unknown widget: ${type}</div>`;
     }
