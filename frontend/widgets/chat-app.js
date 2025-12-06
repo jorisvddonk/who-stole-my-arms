@@ -82,6 +82,7 @@ export class ChatApp extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     sessionManager.addSessionChangeListener(this.sessionChangeHandler);
+    this.loadChatHistory();
   }
 
   disconnectedCallback() {
@@ -91,6 +92,24 @@ export class ChatApp extends LitElement {
 
   handleSessionChange(sessionId) {
     this.currentSession = sessionId;
+    this.messages = [];
+    this.loadChatHistory();
+  }
+
+  async loadChatHistory() {
+    try {
+      const res = await fetch(`/sessions/${this.currentSession}/chat/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        this.messages = data.messages.map(msg => ({
+          role: msg.actor === 'user' ? 'user' : 'system',
+          content: msg.content
+        }));
+        this.requestUpdate();
+      }
+    } catch (error) {
+      console.warn('Failed to load chat history:', error);
+    }
   }
 
   async checkLLMSettings() {

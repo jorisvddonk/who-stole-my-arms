@@ -11,6 +11,7 @@ import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
+import { ChatHistory } from "./lib/chat-history.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
 
 // Initialize database manager
@@ -28,6 +29,9 @@ const promptManager = new PromptManager(toolboxCollector);
 const systemPromptProvider = new SystemPromptProvider();
 promptManager.registerProvider('system', systemPromptProvider);
 
+// Initialize ChatHistory
+const chatHistory = new ChatHistory();
+
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 
@@ -42,6 +46,7 @@ const routeGroups = [
   koboldSettingsTool,
   osMetricsDockWidget,
   promptManager,
+  chatHistory,
   {
     routes: {
       "/sessions": createMethodRouter({
@@ -98,8 +103,10 @@ const routeGroups = [
            try {
              const sessionId = (req as any).params.sessionId;
              const db = await dbManager.getSessionDB(sessionId);
-             const storage = new Storage(db, promptManager.getFQDN(), sessionId);
-             await promptManager.init(storage);
+             const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+             await promptManager.init(promptStorage);
+             const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+             await chatHistory.init(chatStorage);
 
              const body = await req.json();
              const userPrompt = body.prompt;
@@ -107,11 +114,18 @@ const routeGroups = [
                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
              }
 
+             // Add user message to history
+             await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+
              // Get the chatMessage template prefix
-             const prefix = await promptManager.getPromptFromTemplate(storage, 'chatMessage');
+             const prefix = await promptManager.getPromptFromTemplate(promptStorage, 'chatMessage');
              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
              const text = await api.generate(fullPrompt);
+
+             // Add generated message to history
+             await chatHistory.addMessage(chatStorage, 'game-master', text);
+
              logGenerate(userPrompt, text.length);
              return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
            } catch (error) {
@@ -125,8 +139,10 @@ const routeGroups = [
            try {
              const sessionId = (req as any).params.sessionId;
              const db = await dbManager.getSessionDB(sessionId);
-             const storage = new Storage(db, promptManager.getFQDN(), sessionId);
-             await promptManager.init(storage);
+             const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
+             await promptManager.init(promptStorage);
+             const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+             await chatHistory.init(chatStorage);
 
              const body = await req.json();
              const userPrompt = body.prompt;
@@ -134,8 +150,11 @@ const routeGroups = [
                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
              }
 
+             // Add user message to history
+             await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+
              // Get the chatMessage template prefix
-             const prefix = await promptManager.getPromptFromTemplate(storage, 'chatMessage');
+             const prefix = await promptManager.getPromptFromTemplate(promptStorage, 'chatMessage');
              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
              // For streaming, we'll use Server-Sent Events
@@ -143,20 +162,28 @@ const routeGroups = [
                async start(controller) {
                  try {
                    let totalLength = 0;
+                   let fullResponse = '';
                    for await (const chunk of api.generateStream(fullPrompt)) {
                      if (chunk.token) {
                        totalLength += chunk.token.length;
+                       fullResponse += chunk.token;
                        const data = JSON.stringify({ token: chunk.token });
                        controller.enqueue(`data: ${data}\n\n`);
                      } else if (chunk.finishReason) {
                        const data = JSON.stringify({ finishReason: chunk.finishReason });
                        controller.enqueue(`data: ${data}\n\n`);
+                       // Add generated message to history
+                       await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
                        logGenerate(userPrompt, totalLength);
                        break;
                      }
                    }
                  } catch (error) {
                    logError(error.message);
+                   // If there was partial response, store it as aborted
+                   if (fullResponse) {
+                     await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), 'abort');
+                   }
                    controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
                  } finally {
                    controller.close();
