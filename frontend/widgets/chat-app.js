@@ -144,8 +144,9 @@ export class ChatApp extends LitElement {
                       const container = this.shadowRoot.querySelector('.chat-container');
                       container.scrollTop = container.scrollHeight;
                     }, 0);
-                  } else if (data.done) {
-                    // Generation completed
+                  } else if (data.finishReason) {
+                    // Generation completed with finish reason
+                    console.log('Generation finished:', data.finishReason);
                     break;
                   } else if (data.error) {
                     this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${data.error}` };

@@ -76,27 +76,31 @@ const routes = {
           return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
         }
 
-        // For streaming, we'll use Server-Sent Events
-        const stream = new ReadableStream({
-          async start(controller) {
-            try {
-              let totalLength = 0;
-              for await (const token of api.generateStream(prompt)) {
-                totalLength += token.length;
-                const data = JSON.stringify({ token });
-                controller.enqueue(`data: ${data}\n\n`);
+          // For streaming, we'll use Server-Sent Events
+          const stream = new ReadableStream({
+            async start(controller) {
+              try {
+                let totalLength = 0;
+                for await (const chunk of api.generateStream(prompt)) {
+                  if (chunk.token) {
+                    totalLength += chunk.token.length;
+                    const data = JSON.stringify({ token: chunk.token });
+                    controller.enqueue(`data: ${data}\n\n`);
+                  } else if (chunk.finishReason) {
+                    const data = JSON.stringify({ finishReason: chunk.finishReason });
+                    controller.enqueue(`data: ${data}\n\n`);
+                    logGenerate(prompt, totalLength);
+                    break;
+                  }
+                }
+              } catch (error) {
+                logError(error.message);
+                controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+              } finally {
+                controller.close();
               }
-              // Send completion signal
-              controller.enqueue(`data: ${JSON.stringify({ done: true })}\n\n`);
-              logGenerate(prompt, totalLength);
-            } catch (error) {
-              logError(error.message);
-              controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-            } finally {
-              controller.close();
             }
-          }
-        });
+          });
 
         return new Response(stream, {
           headers: {
