@@ -58,6 +58,24 @@ const server = Bun.serve({
           if (!prompt) {
             return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
           }
+          const text = await api.generate(prompt);
+          logGenerate(prompt, text.length);
+          return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+          logError(error.message);
+          return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+    },
+    "/generateStream": {
+      POST: async (req) => {
+        logRequest(req);
+        try {
+          const body = await req.json();
+          const prompt = body.prompt;
+          if (!prompt) {
+            return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+          }
 
           // For streaming, we'll use Server-Sent Events
           const stream = new ReadableStream({
@@ -93,6 +111,15 @@ const server = Bun.serve({
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
         }
       }
+    },
+    "/llm/settings": (req) => {
+      logRequest(req);
+      // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
+      const supportsStreaming = api instanceof Object && 'generateStream' in api;
+      return new Response(JSON.stringify({
+        supportsStreaming,
+        model: 'KoboldCPP'
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
   },
   fetch(req) {

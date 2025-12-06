@@ -60,7 +60,8 @@ export class ChatApp extends LitElement {
   static properties = {
     messages: { type: Array },
     loading: { type: Boolean },
-    dockHeight: { type: Number }
+    dockHeight: { type: Number },
+    supportsStreaming: { type: Boolean }
   };
 
   constructor() {
@@ -70,6 +71,21 @@ export class ChatApp extends LitElement {
     this.dockHeight = 0;
     this.isResizing = false;
     this.startY = 0;
+    this.supportsStreaming = false;
+    this.checkLLMSettings();
+  }
+
+  async checkLLMSettings() {
+    try {
+      const res = await fetch('/llm/settings');
+      if (res.ok) {
+        const settings = await res.json();
+        this.supportsStreaming = settings.supportsStreaming;
+      }
+    } catch (error) {
+      console.warn('Failed to check LLM settings:', error);
+      this.supportsStreaming = false;
+    }
   }
 
   async handleGenerate(e) {
@@ -77,13 +93,14 @@ export class ChatApp extends LitElement {
     this.messages = [...this.messages, { role: 'user', content: prompt }];
     this.loading = true;
 
-    // Add a new system message that we'll update with streaming content
+    // Add a new system message that we'll update with content
     const systemMessageIndex = this.messages.length;
     this.messages = [...this.messages, { role: 'system', content: '' }];
     this.requestUpdate();
 
     try {
-      const res = await fetch('/generate', {
+      const endpoint = this.supportsStreaming ? '/generateStream' : '/generate';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
@@ -96,49 +113,62 @@ export class ChatApp extends LitElement {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (this.supportsStreaming) {
+        // Handle streaming response
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+          buffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE messages
-        while (buffer.includes('\n\n')) {
-          const messageEnd = buffer.indexOf('\n\n');
-          const message = buffer.slice(0, messageEnd);
-          buffer = buffer.slice(messageEnd + 2);
+          // Process complete SSE messages
+          while (buffer.includes('\n\n')) {
+            const messageEnd = buffer.indexOf('\n\n');
+            const message = buffer.slice(0, messageEnd);
+            buffer = buffer.slice(messageEnd + 2);
 
-          for (const line of message.split('\n')) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.token) {
-                  this.messages[systemMessageIndex].content += data.token;
-                  this.requestUpdate();
-                  // Scroll to bottom
-                  setTimeout(() => {
-                    const container = this.shadowRoot.querySelector('.chat-container');
-                    container.scrollTop = container.scrollHeight;
-                  }, 0);
-                } else if (data.done) {
-                  // Generation completed
-                  break;
-                } else if (data.error) {
-                  this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${data.error}` };
-                  this.requestUpdate();
-                  return;
+            for (const line of message.split('\n')) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.token) {
+                    this.messages[systemMessageIndex].content += data.token;
+                    this.requestUpdate();
+                    // Scroll to bottom
+                    setTimeout(() => {
+                      const container = this.shadowRoot.querySelector('.chat-container');
+                      container.scrollTop = container.scrollHeight;
+                    }, 0);
+                  } else if (data.done) {
+                    // Generation completed
+                    break;
+                  } else if (data.error) {
+                    this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${data.error}` };
+                    this.requestUpdate();
+                    return;
+                  }
+                } catch (e) {
+                  // Skip malformed JSON
+                  continue;
                 }
-              } catch (e) {
-                // Skip malformed JSON
-                continue;
               }
             }
           }
         }
+      } else {
+        // Handle non-streaming response
+        const data = await res.json();
+        this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response' };
+        this.requestUpdate();
+        // Scroll to bottom
+        setTimeout(() => {
+          const container = this.shadowRoot.querySelector('.chat-container');
+          container.scrollTop = container.scrollHeight;
+        }, 0);
       }
     } catch (error) {
       this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${error.message}` };
