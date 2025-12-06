@@ -21,16 +21,24 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) =
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 
-// Register global components
-await dbManager.registerGlobalComponent(koboldSettingsTool);
-
-// Create API after settings are loaded
-const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
-
 // Initialize PromptManager and providers
 const promptManager = new PromptManager(toolboxCollector);
 const systemPromptProvider = new SystemPromptProvider();
 promptManager.registerProvider('system', systemPromptProvider);
+
+// Register global components
+await dbManager.registerGlobalComponent(koboldSettingsTool);
+
+// Register session components
+await dbManager.registerSessionComponent(promptManager);
+
+// Initialize default session for prompt manager
+const defaultSessionStorage = await dbManager.getComponentSessionStorage('default', promptManager);
+promptManager.setStorage(defaultSessionStorage);
+await promptManager.init(defaultSessionStorage);
+
+// Create API after settings are loaded
+const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 
 // Define routes without logging (logging will be applied via middleware)
 const routes = {

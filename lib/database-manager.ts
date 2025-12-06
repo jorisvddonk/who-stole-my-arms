@@ -160,8 +160,10 @@ export class DatabaseManager {
     this.sessionComponents.set(component.getFQDN(), component);
   }
 
-  getSessionStorage(sessionId: string): SessionStorage {
+  async getComponentSessionStorage(sessionId: string, component: HasStorage): Promise<SessionStorage> {
     const dbPath = join(this.sessionsDir, `${sessionId}.db`);
+    // Ensure sessions directory exists
+    await mkdir(this.sessionsDir, { recursive: true });
     const db = new Database(dbPath);
 
     // Init shared tables in session DB
@@ -172,16 +174,7 @@ export class DatabaseManager {
       )
     `);
 
-    // Inject storage into session components
-    for (const component of this.sessionComponents.values()) {
-      const componentStorage = new SessionStorage(db, component.getFQDN(), sessionId);
-      component.setStorage(componentStorage);
-      component.init(componentStorage).catch(error => {
-        console.warn(`Failed to initialize session component ${component.getFQDN()}:`, error);
-      });
-    }
-
-    return new SessionStorage(db, '', sessionId); // Main session storage
+    return new SessionStorage(db, component.getFQDN(), sessionId);
   }
 
   // Utility methods
