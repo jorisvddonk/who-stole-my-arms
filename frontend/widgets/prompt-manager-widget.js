@@ -217,9 +217,120 @@ export class PromptManagerWidget extends LitElement {
       white-space: nowrap;
     }
 
-    .add-button:hover {
-      background-color: var(--darker-accent);
-    }
+     .add-button:hover {
+       background-color: var(--darker-accent);
+     }
+
+     .templates-section {
+       border-top: 1px solid var(--border-color);
+       padding-top: 6px;
+       margin-top: 6px;
+     }
+
+     .template-header {
+       margin-bottom: 6px;
+       padding: 4px 6px;
+       background: var(--secondary-bg);
+       border-radius: 4px;
+       display: flex;
+       align-items: center;
+       justify-content: space-between;
+     }
+
+     .current-template {
+       display: flex;
+       align-items: center;
+       gap: 8px;
+     }
+
+     .save-button {
+       padding: 2px 8px;
+       background: var(--dark-accent);
+       color: var(--light-text);
+       border: none;
+       border-radius: 3px;
+       cursor: pointer;
+       font-size: 0.8em;
+       font-weight: 500;
+     }
+
+     .save-button:hover {
+       background: var(--darker-accent);
+     }
+
+     .no-template {
+       color: var(--text-color);
+       opacity: 0.6;
+       font-style: italic;
+     }
+
+     .template-management {
+       flex: 0 1 min-content;
+       display: grid;
+       border-bottom: 1px solid var(--border-color);
+       padding-bottom: 8px;
+       margin-bottom: 8px;
+     }
+
+     .template-instruction {
+       color: var(--text-color);
+       opacity: 0.7;
+       font-size: 0.85em;
+       margin-top: 4px;
+     }
+
+     .main-content {
+       flex: 1 0 auto;
+       min-height: 0;
+       display: flex;
+       flex-direction: column;
+     }
+
+     .main-content.disabled {
+       opacity: 0.5;
+       pointer-events: none;
+     }
+
+     .group-item.disabled {
+       cursor: not-allowed;
+       opacity: 0.6;
+     }
+
+     .group-item.disabled:hover {
+       background: var(--input-bg);
+     }
+
+     .template-controls {
+       display: flex;
+       gap: 6px;
+       align-items: center;
+     }
+
+     .template-select {
+       flex: 1;
+       padding: 4px 6px;
+       border: 1px solid var(--border-color);
+       border-radius: 2px;
+       background: var(--input-bg);
+       color: var(--text-color);
+       font-family: monospace;
+       font-size: 0.8em;
+       min-height: 28px;
+     }
+
+
+
+     .template-name-input {
+       flex: 1;
+       padding: 4px 6px;
+       border: 1px solid var(--border-color);
+       border-radius: 2px;
+       background: var(--input-bg);
+       color: var(--text-color);
+       font-family: monospace;
+       font-size: 0.8em;
+       min-height: 28px;
+     }
 
     .action-area {
       height: 32px;
@@ -309,7 +420,10 @@ export class PromptManagerWidget extends LitElement {
     result: { type: String },
     error: { type: String },
     loading: { type: Boolean },
-    draggedIndex: { type: Number }
+    draggedIndex: { type: Number },
+    templates: { type: Array },
+    currentTemplateName: { type: String },
+    isNewTemplate: { type: Boolean }
   };
 
   constructor() {
@@ -322,14 +436,18 @@ export class PromptManagerWidget extends LitElement {
     this.error = '';
     this.loading = false;
     this.draggedIndex = null;
+    this.templates = [];
+    this.currentTemplateName = null;
+    this.isNewTemplate = false;
     this.loadData();
   }
 
   async loadData() {
     try {
-      const [providersRes, groupsRes] = await Promise.all([
+      const [providersRes, groupsRes, templatesRes] = await Promise.all([
         fetch('/prompts/providers'),
-        fetch('/prompts/groups')
+        fetch('/prompts/groups'),
+        fetch('/prompts/templates')
       ]);
 
       if (providersRes.ok) {
@@ -340,6 +458,11 @@ export class PromptManagerWidget extends LitElement {
       if (groupsRes.ok) {
         const groupsData = await groupsRes.json();
         this.groups = groupsData.groups;
+      }
+
+      if (templatesRes.ok) {
+        const templatesData = await templatesRes.json();
+        this.templates = templatesData.templates;
       }
     } catch (error) {
       this.error = 'Failed to load prompt data: ' + error.message;
@@ -564,90 +687,194 @@ export class PromptManagerWidget extends LitElement {
     }
   }
 
+  createNewTemplate() {
+    const templateName = prompt('Enter template name:');
+    if (!templateName || !templateName.trim()) {
+      return; // User cancelled or entered empty name
+    }
+
+    // Clear current state for new template
+    this.orderedGroups = [];
+    this.selectedGroups = [];
+    this.result = '';
+    this.error = '';
+    this.currentTemplateName = templateName.trim();
+    this.isNewTemplate = true;
+  }
+
+  async saveCurrentTemplate() {
+    if (!this.currentTemplateName) {
+      this.error = 'No template is currently open.';
+      return;
+    }
+
+    try {
+      const response = await fetch('/prompts/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: this.currentTemplateName,
+          groups: this.orderedGroups
+        })
+      });
+
+      if (response.ok) {
+        this.isNewTemplate = false; // Mark as saved
+        await this.loadData(); // Refresh templates list
+        this.error = '';
+      } else {
+        const errorData = await response.json();
+        this.error = errorData.error || 'Failed to save template';
+      }
+    } catch (error) {
+      this.error = 'Failed to save template: ' + error.message;
+    }
+  }
+
+  async loadTemplate(templateName) {
+    try {
+      const response = await fetch(`/prompts/templates/${encodeURIComponent(templateName)}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        this.orderedGroups = data.groups;
+        this.selectedGroups = [];
+        this.result = '';
+        this.error = '';
+        this.currentTemplateName = templateName;
+        this.isNewTemplate = false;
+      } else {
+        const errorData = await response.json();
+        this.error = errorData.error || 'Failed to load template';
+      }
+    } catch (error) {
+      this.error = 'Failed to load template: ' + error.message;
+    }
+  }
+
   render() {
     const hasResult = this.result || this.error || this.loading;
+    const isTemplateActive = !!this.currentTemplateName;
+
     return html`
       <div class="prompt-manager ${hasResult ? 'has-result' : ''}">
-        <div class="top-row">
-          <div class="left-panel">
-            <div class="section">
-              <h3>Available Groups</h3>
-              <div class="groups-list">
-                ${this.groups.map(providerGroup => html`
-                  ${providerGroup.groups.map(groupName => {
-                    const groupPath = `${providerGroup.provider}/${groupName}`;
-                    const isSelected = this.selectedGroups.includes(groupPath);
-                     return html`
-                       <div class="group-item" @click=${() => this.handleGroupToggle(groupPath, !isSelected)}>
-                         <input
-                           type="checkbox"
-                           class="group-checkbox"
-                           .checked=${isSelected}
-                           @change=${(e) => e.stopPropagation()}
-                           @click=${(e) => e.stopPropagation()}
-                         >
-                         <span class="group-name">${groupPath}</span>
-                         <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
-                       </div>
-                     `;
-                  })}
-                `)}
-              </div>
-              <div class="action-area">
-                ${this.selectedGroups.length > 0 ? html`
-                  <button class="add-button" @click=${this.addSelectedToOrder}>
-                    Add Selected (${this.selectedGroups.length}) to Order
-                  </button>
-                ` : html`${unsafeHTML('<div class="placeholder-text">' + this.getPlaceholderText().trim() + '</div>')}`}
-              </div>
-            </div>
+        <!-- Template Management Section - Always visible -->
+        <div class="template-management">
+          <div class="template-controls">
+            <button class="add-button" @click=${this.createNewTemplate}>
+              New Template
+            </button>
+            <select
+              class="template-select"
+              .value=${this.currentTemplateName || ''}
+              @change=${(e) => {
+                const selectedName = e.target.value;
+                if (selectedName && selectedName !== this.currentTemplateName) {
+                  this.loadTemplate(selectedName);
+                }
+              }}
+            >
+              <option value="">Load Template...</option>
+              ${this.templates.map(template => html`
+                <option value="${template.name}">
+                  ${template.name}${template.name === this.currentTemplateName && this.isNewTemplate ? ' (unsaved)' : ''}
+                </option>
+              `)}
+            </select>
+            ${this.currentTemplateName ? html`
+              <button class="save-button" @click=${this.saveCurrentTemplate}>Save</button>
+            ` : ''}
           </div>
-
-          <div class="right-panel">
-            <div class="section build-section">
-              <h3>Build Prompt</h3>
-
-               <div class="ordered-groups" @dragover=${this.handleContainerDragOver} @drop=${this.handleContainerDrop}>
-                 <div class="insert-indicator" id="insert-indicator"></div>
-                 ${this.orderedGroups.map((groupPath, index) => html`
-                   <span
-                     class="group-tag"
-                     draggable="true"
-                     @dragstart=${(e) => this.handleDragStart(e, index)}
-                     @dragover=${(e) => this.handleDragOver(e, index)}
-                     @dragenter=${(e) => this.handleDragEnter(e, index)}
-                     @dragleave=${this.handleDragLeave}
-                     @drop=${(e) => this.handleDrop(e, index)}
-                     @dragend=${this.handleDragEnd}
-                   >
-                     ${groupPath}
-                     <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
-                   </span>
-                 `)}
-               </div>
-
-              <div class="add-group-section">
-                <input
-                  type="text"
-                  class="group-input"
-                  placeholder="Enter group path (e.g., system/basic or system/*)"
-                  @keydown=${(e) => e.key === 'Enter' && this.addToOrder()}
-                >
-                <button class="add-button" @click=${this.addToOrder}>Add</button>
-              </div>
-            </div>
-          </div>
+          ${!this.currentTemplateName ? html`
+            <div class="template-instruction">Select a template to edit or create a new one</div>
+          ` : ''}
         </div>
 
-        <div class="bottom-section">
-          <button class="build-button" @click=${this.buildPrompt} ?disabled=${this.loading}>${this.loading ? 'Building...' : 'Build Prompt'}</button>
+        <!-- Main Content - Only enabled when template is active -->
+        <div class="main-content ${isTemplateActive ? '' : 'disabled'}">
+          <div class="top-row">
+            <div class="left-panel">
+              <div class="section">
+                <h3>Available Groups</h3>
+                <div class="groups-list">
+                  ${this.groups.map(providerGroup => html`
+                    ${providerGroup.groups.map(groupName => {
+                      const groupPath = `${providerGroup.provider}/${groupName}`;
+                      const isSelected = this.selectedGroups.includes(groupPath);
+                      return html`
+                        <div class="group-item ${isTemplateActive ? '' : 'disabled'}" @click=${isTemplateActive ? () => this.handleGroupToggle(groupPath, !isSelected) : null}>
+                          <input
+                            type="checkbox"
+                            class="group-checkbox"
+                            .checked=${isSelected}
+                            ?disabled=${!isTemplateActive}
+                            @change=${(e) => e.stopPropagation()}
+                            @click=${(e) => e.stopPropagation()}
+                          >
+                          <span class="group-name">${groupPath}</span>
+                          <span class="group-preview">${this.getGroupPreview(providerGroup.provider, groupName)}</span>
+                        </div>
+                      `;
+                    })}
+                  `)}
+                </div>
+                <div class="action-area">
+                  ${this.selectedGroups.length > 0 && isTemplateActive ? html`
+                    <button class="add-button" @click=${this.addSelectedToOrder}>
+                      Add Selected (${this.selectedGroups.length}) to Order
+                    </button>
+                  ` : html`${unsafeHTML('<div class="placeholder-text">' + (isTemplateActive ? this.getPlaceholderText().trim() : 'Select a template first') + '</div>')}`}
+                </div>
+              </div>
+            </div>
 
-          ${this.error ? html`<div class="error">${this.error}</div>` : ''}
-          ${this.loading ? html`<div class="loading">Building prompt...</div>` : ''}
+            <div class="right-panel">
+              <div class="section build-section">
+                <h3>Build Prompt</h3>
 
-          ${this.result ? html`
-            <div class="result-section">${this.result}</div>
-          ` : ''}
+                <div class="ordered-groups">
+                  <div class="insert-indicator" id="insert-indicator"></div>
+                  ${this.orderedGroups.map((groupPath, index) => html`
+                    <span
+                      class="group-tag"
+                      draggable="true"
+                      @dragstart=${(e) => this.handleDragStart(e, index)}
+                      @dragover=${(e) => this.handleDragOver(e, index)}
+                      @dragenter=${(e) => this.handleDragEnter(e, index)}
+                      @dragleave=${this.handleDragLeave}
+                      @drop=${(e) => this.handleDrop(e, index)}
+                      @dragend=${this.handleDragEnd}
+                    >
+                      ${groupPath}
+                      <span class="remove-group" @click=${() => this.removeFromOrder(groupPath)}>×</span>
+                    </span>
+                  `)}
+                </div>
+
+                <div class="add-group-section">
+                  <input
+                    type="text"
+                    class="group-input"
+                    placeholder="Enter group path (e.g., system/basic or system/*)"
+                    ?disabled=${!isTemplateActive}
+                    @keydown=${(e) => e.key === 'Enter' && isTemplateActive && this.addToOrder()}
+                  >
+                  <button class="add-button" @click=${isTemplateActive ? this.addToOrder : null} ?disabled=${!isTemplateActive}>Add</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom-section">
+            <button class="build-button" @click=${isTemplateActive ? this.buildPrompt : null} ?disabled=${this.loading || !isTemplateActive}>${this.loading ? 'Building...' : 'Build Prompt'}</button>
+
+            ${this.error ? html`<div class="error">${this.error}</div>` : ''}
+            ${this.loading ? html`<div class="loading">Building prompt...</div>` : ''}
+
+            ${this.result ? html`
+              <div class="result-section">${this.result}</div>
+            ` : ''}
+          </div>
         </div>
       </div>
     `;
