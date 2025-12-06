@@ -33,6 +33,7 @@ export class ChatApp extends LitElement {
       max-width: 70%;
       font-family: 'Times New Roman', serif;
       white-space: pre-wrap;
+      position: relative;
     }
     .message.user {
       background: var(--user-msg-bg);
@@ -42,7 +43,6 @@ export class ChatApp extends LitElement {
     }
     .message-container {
       margin-bottom: 10px;
-      position: relative;
     }
     .message-container:hover .delete-button {
       opacity: 1;
@@ -292,8 +292,7 @@ export class ChatApp extends LitElement {
           const isLastSystemMessage = msg.role === 'system' && index === this.messages.length - 1;
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}</div>
-              <button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>
+              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button></div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
