@@ -4,6 +4,7 @@ import { PromptProvider, NamedGroup, Item } from "./prompt-manager.js";
 import { logError } from './logging/logger.js';
 import { createMethodRouter } from './util/route-utils.js';
 import { DatabaseManager } from "./database-manager.js";
+import { FormatterRegistry } from "./formatters.js";
 
 export interface ChatMessage {
   id: number;
@@ -32,10 +33,12 @@ export class ChatHistory implements HasStorage, PromptProvider {
       const db = await this.dbManager.getSessionDB(context.sessionId);
       const storage = new Storage(db, this.getFQDN(), context.sessionId);
       const messages = await this.getMessages(storage);
+      const registry = FormatterRegistry.getInstance();
+      const formatter = registry.get('chatHistoryMessageFormatter');
       const items: Item[] = messages.map(msg => ({
         type: 'prompt' as const,
         name: msg.actor,
-        prompt: msg.content,
+        prompt: formatter ? formatter(msg) : msg.content,
         tags: []
       }));
       return {
