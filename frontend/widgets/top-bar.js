@@ -76,7 +76,8 @@ export class TopBar extends LitElement {
   static properties = {
     currentSession: { type: String },
     sessions: { type: Array },
-    menuOpen: { type: Boolean }
+    menuOpen: { type: Boolean },
+    isDarkTheme: { type: Boolean }
   };
 
   constructor() {
@@ -84,7 +85,9 @@ export class TopBar extends LitElement {
     this.currentSession = sessionManager.getCurrentSession();
     this.sessions = [];
     this.menuOpen = false;
+    this.isDarkTheme = this.getStoredTheme();
     this.sessionChangeHandler = this.handleSessionChange.bind(this);
+    this.themeChangeHandler = this.handleThemeChange.bind(this);
     this.initialize();
   }
 
@@ -99,12 +102,19 @@ export class TopBar extends LitElement {
     super.connectedCallback();
     document.addEventListener('click', this.handleClickOutside);
     sessionManager.addSessionChangeListener(this.sessionChangeHandler);
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.themeChangeHandler);
+    }
+    this.applyTheme();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('click', this.handleClickOutside);
     sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.themeChangeHandler);
+    }
   }
 
   handleClickOutside(event) {
@@ -143,6 +153,50 @@ export class TopBar extends LitElement {
     this.requestUpdate();
   }
 
+  getStoredTheme() {
+    const stored = localStorage.getItem('theme');
+    if (stored) {
+      return stored === 'dark';
+    }
+    // Check system preference if no stored preference
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  applyTheme() {
+    const html = document.documentElement;
+    const hasStoredPreference = localStorage.getItem('theme') !== null;
+
+    if (hasStoredPreference) {
+      html.classList.add('theme-overridden');
+      if (this.isDarkTheme) {
+        html.classList.add('dark-theme');
+      } else {
+        html.classList.remove('dark-theme');
+      }
+    } else {
+      // No stored preference, let media query handle it
+      html.classList.remove('theme-overridden');
+      html.classList.remove('dark-theme');
+    }
+  }
+
+  handleThemeChange(event) {
+    // Only auto-switch if no manual preference is stored
+    if (!localStorage.getItem('theme')) {
+      this.isDarkTheme = event.matches;
+      this.applyTheme();
+      this.requestUpdate();
+    }
+  }
+
+  toggleTheme() {
+    this.isDarkTheme = !this.isDarkTheme;
+    localStorage.setItem('theme', this.isDarkTheme ? 'dark' : 'light');
+    this.applyTheme();
+    this.requestUpdate();
+    this.closeMenu();
+  }
+
   async createNewSession() {
     try {
       const res = await fetch('/sessions', { method: 'POST' });
@@ -170,6 +224,10 @@ export class TopBar extends LitElement {
               ${session}
             </div>
           `)}
+          <div class="menu-divider"></div>
+          <div class="menu-item" @click=${(e) => { e.stopPropagation(); this.toggleTheme(); }}>
+            ${this.isDarkTheme ? '🌙 Dark Theme' : '☀️ Light Theme'}
+          </div>
           <div class="menu-divider"></div>
           <div class="menu-item new-session" @click=${(e) => { e.stopPropagation(); this.createNewSession(); }}>
             + New Session
