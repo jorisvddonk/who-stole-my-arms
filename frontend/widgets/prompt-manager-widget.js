@@ -428,6 +428,15 @@ export class PromptManagerWidget extends LitElement {
 
   constructor() {
     super();
+    this.reset();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.reset();
+  }
+
+  reset() {
     this.providers = [];
     this.groups = [];
     this.selectedGroups = [];

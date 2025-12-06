@@ -158,7 +158,7 @@ export class PopupDialog extends LitElement {
     `;
   }
 
-  updated(changedProperties) {
+   updated(changedProperties) {
     super.updated(changedProperties);
     const dialog = this.shadowRoot.querySelector('dialog');
     if (changedProperties.has('open')) {
@@ -166,6 +166,9 @@ export class PopupDialog extends LitElement {
         dialog.showModal();
       } else {
         dialog.close();
+        // Clear content when closing to ensure fresh content on reopen
+        this.content = '';
+        this.contentTemplate = null;
       }
     }
   }
