@@ -21,6 +21,7 @@ export class DockWidget extends LitElement {
     .rows-container {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
       gap: var(--grid-gap);
@@ -31,14 +32,19 @@ export class DockWidget extends LitElement {
     }
     .hamburger {
       position: absolute;
-      right: 10px;
+      right: 0px;
       top: 10px;
+      height: calc(100%);
+      width: 10px;
       cursor: pointer;
-      background: var(--menu-bg);
+      background: var(--dark-accent);
       border: 1px solid var(--border-color);
-      padding: 5px;
-      border-radius: 4px;
-      z-index: 10;
+      border-radius: 0 2px 2px 0;
+      z-index: 100;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .grid {
       height: 100%;
@@ -187,7 +193,7 @@ export class DockWidget extends LitElement {
       <div class="rows-container">
         ${this.rows.map(row => html`
           <div class="row" @mouseenter=${() => this.showHamburger(row.id)} @mouseleave=${() => this.hideHamburger(row.id)}>
-            <div class="hamburger" ?hidden=${!this.visibleHamburgers.has(row.id)} @click=${() => this.openContextMenu(row.id)}>☰</div>
+            <div class="hamburger" style="display: ${this.visibleHamburgers.has(row.id) ? 'flex' : 'none'}" @click=${() => this.openContextMenu(row.id)}>☰</div>
             <div class="grid" style="display: grid; grid-template-columns: repeat(${row.columns}, 1fr);">
               ${row.widgets.map(widget => html`<div style="grid-column: span ${widget.span};">${this.renderWidget(widget.type)}</div>`)}
             </div>
