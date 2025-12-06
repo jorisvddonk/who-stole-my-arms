@@ -121,6 +121,7 @@ export class KoboldSettingsTool implements ToolboxTool, HasStorage {
   }
 
   async init(storage: Storage): Promise<void> {
+    this.storage = storage;
     const tableName = storage.getTableName();
 
     // Create table if needed
