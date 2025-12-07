@@ -1,5 +1,5 @@
 // Configuration: Set to true to use OpenRouter, false to use KoboldCPP
-const USE_OPENROUTER = true;
+const USE_OPENROUTER = false;
 
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
@@ -13,6 +13,7 @@ import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
+import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
@@ -28,6 +29,7 @@ import { createMethodRouter } from "./lib/util/route-utils.js";
 import { LLMToolManager } from "./lib/llm-tool-manager.js";
 import { DieTool } from "./lib/tools/die-tool.js";
 import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
+import { FormatterRegistry } from "./lib/formatters.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -41,6 +43,7 @@ const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_
   api.updateSettings(settings);
 } : undefined);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
+const formatterSettingsTool = new FormatterSettingsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 const characterBioDockWidget = new CharacterBioDockWidget();
 const dockManager = new DockManager(toolboxCollector);
@@ -58,6 +61,8 @@ promptManager.registerProvider('chat', chatHistory);
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 await dbManager.registerGlobalComponent(openRouterSettingsTool);
+
+// Session components are now stateless and initialize storage per request
 
 // Session components are now stateless and initialize storage per request
 
@@ -83,6 +88,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   openRouterSettingsTool,
+  formatterSettingsTool,
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,
@@ -150,6 +156,8 @@ const routeGroups = [
               await chatHistory.init(chatStorage);
               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
               await characterBioDockWidget.init(bioStorage);
+              const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
+              await formatterSettingsTool.init(formatterStorage);
 
               const body = await req.json();
               const userPrompt = body.prompt;
@@ -272,15 +280,17 @@ const routeGroups = [
            }
          }
         }),
-         "/sessions/:sessionId/continue": createMethodRouter({
-           POST: async (req) => {
-             try {
-               const sessionId = (req as any).params.sessionId;
-               const db = await dbManager.getSessionDB(sessionId);
-               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-               await chatHistory.init(chatStorage);
-               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
-               await characterBioDockWidget.init(bioStorage);
+        "/sessions/:sessionId/continue": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
+              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+              await characterBioDockWidget.init(bioStorage);
+              const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
+              await formatterSettingsTool.init(formatterStorage);
 
               const body = await req.json();
               const { messageId } = body;
@@ -322,15 +332,17 @@ const routeGroups = [
             }
           }
         }),
-         "/sessions/:sessionId/continueStream": createMethodRouter({
-           POST: async (req) => {
-             try {
-               const sessionId = (req as any).params.sessionId;
-               const db = await dbManager.getSessionDB(sessionId);
-               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-               await chatHistory.init(chatStorage);
-               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
-               await characterBioDockWidget.init(bioStorage);
+        "/sessions/:sessionId/continueStream": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionId;
+              const db = await dbManager.getSessionDB(sessionId);
+              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
+              await chatHistory.init(chatStorage);
+              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
+              await characterBioDockWidget.init(bioStorage);
+              const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
+              await formatterSettingsTool.init(formatterStorage);
 
               const body = await req.json();
               const { messageId } = body;
@@ -445,23 +457,27 @@ const routeGroups = [
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
         }
       },
-      "/llm/tokens": createMethodRouter({
-        POST: async (req) => {
-          try {
-            const body = await req.json();
-            const text = body.text;
-            if (!text) {
-              return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-            }
+       "/llm/tokens": createMethodRouter({
+         POST: async (req) => {
+           try {
+             const body = await req.json();
+             const text = body.text;
+             if (!text) {
+               return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+             }
 
-            const result = await api.countTokens(text);
-            return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
-          } catch (error) {
-            logError(error.message);
-            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-          }
-        }
-      }),
+             const result = await api.countTokens(text);
+             return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+           } catch (error) {
+             logError(error.message);
+             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           }
+         }
+       }),
+       "/formatters/list": (req) => {
+         const formatters = FormatterRegistry.getInstance().getAvailableFormatters();
+         return new Response(JSON.stringify({ formatters }), { headers: { 'Content-Type': 'application/json' } });
+       },
         "/generate/abort": createMethodRouter({
           POST: async (req) => {
             try {
