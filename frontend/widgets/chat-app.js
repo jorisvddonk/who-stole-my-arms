@@ -276,17 +276,17 @@ export class ChatApp extends LitElement {
                      }, 0);
                     } else if (data.tool_call) {
                       // Handle tool call message
-                      console.log('🎯 Frontend received tool_call:', data.tool_call);
-                      this.messages[systemMessageIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
-                      this.requestUpdate();
+                      //console.log('🎯 Frontend received tool_call:', data.tool_call);
+                      //this.messages[systemMessageIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
+                      //this.requestUpdate();
                     } else if (data.tool_result) {
                       // Handle tool result message
-                      console.log('🎯 Frontend received tool_result:', data.tool_result);
-                      const resultContent = data.tool_result.error
-                        ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
-                        : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
-                      this.messages[systemMessageIndex].content += `<div class="tool-item">${resultContent}</div>`;
-                      this.requestUpdate();
+                      //console.log('🎯 Frontend received tool_result:', data.tool_result);
+                      //const resultContent = data.tool_result.error
+                      //  ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
+                      //  : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
+                      //this.messages[systemMessageIndex].content += `<div class="tool-item">${resultContent}</div>`;
+                      //this.requestUpdate();
                     } else if (data.finishReason) {
                       console.log('Generation finished:', data.finishReason);
                       break;
@@ -460,23 +460,23 @@ export class ChatApp extends LitElement {
                       }
                     } else if (data.tool_call) {
                       // Handle tool call message
-                      console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
-                      const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                      if (msgIndex !== -1) {
-                        this.messages[msgIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
-                        this.requestUpdate();
-                      }
+                      //console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
+                      //const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                      //if (msgIndex !== -1) {
+                      //  this.messages[msgIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
+                      //  this.requestUpdate();
+                      //}
                     } else if (data.tool_result) {
                       // Handle tool result message
-                      console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
-                      const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                      if (msgIndex !== -1) {
-                        const resultContent = data.tool_result.error
-                          ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
-                          : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
-                        this.messages[msgIndex].content += `<div class="tool-item">${resultContent}</div>`;
-                        this.requestUpdate();
-                      }
+                      //console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                      //const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                      //if (msgIndex !== -1) {
+                      //  const resultContent = data.tool_result.error
+                      //    ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
+                      //    : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
+                      //  this.messages[msgIndex].content += `<div class="tool-item">${resultContent}</div>`;
+                      //  this.requestUpdate();
+                      //}
                     } else if (data.finishReason) {
                      // Generation completed
                      console.log('Continue generation finished:', data.finishReason);
