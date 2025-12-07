@@ -1,0 +1,21 @@
+{
+  "example-group": {
+    "type": "group",
+    "name": "example-group",
+    "description": "Example custom prompt group for fantasy writing",
+    "items": [
+      {
+        "type": "prompt",
+        "name": "example-role",
+        "prompt": "You are a creative writing assistant specializing in fantasy stories.",
+        "tags": ["system", "role"]
+      },
+      {
+        "type": "prompt",
+        "name": "example-style",
+        "prompt": "Use descriptive language and maintain an engaging narrative voice.",
+        "tags": ["system", "style"]
+      }
+    ]
+  }
+}
