@@ -1,5 +1,9 @@
+// Configuration: Set to true to use OpenRouter, false to use KoboldCPP
+const USE_OPENROUTER = true;
+
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
+import { OpenRouterAPI } from "./lib/llm-api/OpenRouterAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { applyStorageMiddleware } from "./lib/middleware/database.js";
@@ -8,12 +12,15 @@ import { widgetCollector } from "./lib/widget-collector.js";
 import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
+import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
 import { ToolPromptProvider } from "./lib/providers/tool-prompt-provider.js";
+
+let currentAbortController: AbortController | null = null;
 
 import { ChatHistory } from "./lib/chat-history.js";
 import { DockManager } from "./lib/dock-manager.js";
@@ -27,9 +34,12 @@ const dbManager = new DatabaseManager();
 let api;
 
 // Create components
-const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) => {
+const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, USE_OPENROUTER ? undefined : (settings) => {
   api.updateSettings(settings);
 });
+const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_OPENROUTER ? (settings) => {
+  api.updateSettings(settings);
+} : undefined);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const osMetricsDockWidget = new OsMetricsDockWidget();
 const characterBioDockWidget = new CharacterBioDockWidget();
@@ -47,11 +57,14 @@ promptManager.registerProvider('chat', chatHistory);
 
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
+await dbManager.registerGlobalComponent(openRouterSettingsTool);
 
 // Session components are now stateless and initialize storage per request
 
 // Create API after settings are loaded
-const baseApi = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+const baseApi = USE_OPENROUTER
+  ? new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings())
+  : new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
 
 // Initialize LLM tool system
 const toolManager = new LLMToolManager();
@@ -69,6 +82,7 @@ api = new ToolCallingLLM(baseApi, toolManager);
 const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
+  openRouterSettingsTool,
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,
@@ -193,25 +207,29 @@ const routeGroups = [
               }
               const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
-             // For streaming, we'll use Server-Sent Events
-             const stream = new ReadableStream({
-               async start(controller) {
-                 try {
-                    let totalLength = 0;
-                    let fullResponse = '';
-                     for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
-                      if (chunk.token) {
-                        totalLength += chunk.token.length;
-                        fullResponse += chunk.token;
-                        const data = JSON.stringify({ token: chunk.token });
-                        controller.enqueue(`data: ${data}\n\n`);
-                       } else if (chunk.tool_call) {
-                         const data = JSON.stringify({ tool_call: chunk.tool_call });
+              // For streaming, we'll use Server-Sent Events
+              currentAbortController = new AbortController();
+              const stream = new ReadableStream({
+                async start(controller) {
+                  try {
+                     let totalLength = 0;
+                     let fullResponse = '';
+                       for await (const chunk of api.generateStream(fullPrompt, sessionId, currentAbortController!.signal)) {
+                       if (chunk.token) {
+                         totalLength += chunk.token.length;
+                         fullResponse += chunk.token;
+                         const data = JSON.stringify({ token: chunk.token });
                          controller.enqueue(`data: ${data}\n\n`);
-                       } else if (chunk.tool_result) {
-                         const data = JSON.stringify({ tool_result: chunk.tool_result });
-                         controller.enqueue(`data: ${data}\n\n`);
-                        } else if (chunk.finishReason) {
+                        } else if (chunk.tool_call) {
+                          const data = JSON.stringify({ tool_call: chunk.tool_call });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.tool_result) {
+                          const data = JSON.stringify({ tool_result: chunk.tool_result });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.reasoning) {
+                          const data = JSON.stringify({ reasoning: chunk.reasoning });
+                          controller.enqueue(`data: ${data}\n\n`);
+                         } else if (chunk.finishReason) {
                          const data = JSON.stringify({ finishReason: chunk.finishReason });
                          controller.enqueue(`data: ${data}\n\n`);
                          // Add user message to history
@@ -347,19 +365,22 @@ const routeGroups = [
                   try {
                     let totalLength = 0;
                     let additionalResponse = '';
-                     for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
-                       if (chunk.token) {
-                         totalLength += chunk.token.length;
-                         additionalResponse += chunk.token;
-                         const data = JSON.stringify({ token: chunk.token });
-                         controller.enqueue(`data: ${data}\n\n`);
-                       } else if (chunk.tool_call) {
-                         const data = JSON.stringify({ tool_call: chunk.tool_call });
-                         controller.enqueue(`data: ${data}\n\n`);
-                       } else if (chunk.tool_result) {
-                         const data = JSON.stringify({ tool_result: chunk.tool_result });
-                         controller.enqueue(`data: ${data}\n\n`);
-                       } else if (chunk.finishReason) {
+                      for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
+                        if (chunk.token) {
+                          totalLength += chunk.token.length;
+                          additionalResponse += chunk.token;
+                          const data = JSON.stringify({ token: chunk.token });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.tool_call) {
+                          const data = JSON.stringify({ tool_call: chunk.tool_call });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.tool_result) {
+                          const data = JSON.stringify({ tool_result: chunk.tool_result });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.reasoning) {
+                          const data = JSON.stringify({ reasoning: chunk.reasoning });
+                          controller.enqueue(`data: ${data}\n\n`);
+                        } else if (chunk.finishReason) {
                          const data = JSON.stringify({ finishReason: chunk.finishReason });
                          controller.enqueue(`data: ${data}\n\n`);
                          // Append to existing message
@@ -377,6 +398,7 @@ const routeGroups = [
                     controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
                   } finally {
                     controller.close();
+                    currentAbortController = null;
                   }
                 }
               });
@@ -396,13 +418,13 @@ const routeGroups = [
         }),
 
        "/llm/settings": (req) => {
-        // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
-        const supportsStreaming = api instanceof Object && 'generateStream' in api;
-        return new Response(JSON.stringify({
-          supportsStreaming,
-          model: 'KoboldCPP'
-        }), { headers: { 'Content-Type': 'application/json' } });
-      },
+         // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
+         const supportsStreaming = api instanceof Object && 'generateStream' in api;
+         return new Response(JSON.stringify({
+           supportsStreaming,
+           model: USE_OPENROUTER ? 'OpenRouter' : 'KoboldCPP'
+         }), { headers: { 'Content-Type': 'application/json' } });
+       },
       "/llm/info": async (req) => {
         try {
           const [version, model, maxContext, perf] = await Promise.all([
@@ -440,23 +462,28 @@ const routeGroups = [
           }
         }
       }),
-       "/generate/abort": createMethodRouter({
-         POST: async (req) => {
-           try {
-             const success = await api.abortGeneration();
-             return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
-           } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-           }
-         }
-       })
+        "/generate/abort": createMethodRouter({
+          POST: async (req) => {
+            try {
+              if (currentAbortController) {
+                currentAbortController.abort();
+                currentAbortController = null;
+              }
+              const success = await api.abortGeneration();
+              return new Response(JSON.stringify({ success }), { headers: { 'Content-Type': 'application/json' } });
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        })
     }
   }
 ];
 
 const server = Bun.serve({
   port: 3000,
+  idleTimeout: 255,
   routes: applyStorageMiddleware(dbManager, routeGroups.map(item => {
     if (item.routes) {
       return { routes: applyLoggingMiddleware(item.routes), component: item.component };

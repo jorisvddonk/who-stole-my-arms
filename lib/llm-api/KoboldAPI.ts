@@ -85,7 +85,7 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLM
     return data.results ? data.results[0].text : '';
   }
 
-  async *generateStream(prompt: string): AsyncIterable<{ token?: string; finishReason?: string }> {
+  async *generateStream(prompt: string, sessionId?: string | null, abortSignal?: AbortSignal): AsyncIterable<{ token?: string; finishReason?: string }> {
     const response = await fetch(`${this.baseUrl}/api/extra/generate/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -98,7 +98,8 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLM
         rep_pen: this.settings.repetitionPenalty,
         min_p: this.settings.minP,
         genkey: this.genkey,
-      })
+      }),
+      signal: abortSignal
     });
 
     if (!response.ok) {

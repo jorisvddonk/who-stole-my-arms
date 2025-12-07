@@ -18,7 +18,7 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
   }
 
   private parseToolCall(response: string): ToolCall | null {
-    console.log(`[TOOL_DEBUG] Parsing tool call from: ${response.slice(-100)}`);
+    // console.log(`[TOOL_DEBUG] Parsing tool call from: ${response.slice(-100)}`);
     // Look for XML-like tool call tags: <|tool_call|>...JSON...<|tool_call_end|>
     const toolCallRegex = /<\|tool_call\|>(.*?)<\|tool_call_end\|>/s;
     const match = response.match(toolCallRegex);
@@ -38,7 +38,7 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
         console.log(`[TOOL_DEBUG] Error parsing tool call:`, e);
       }
     }
-    console.log(`[TOOL_DEBUG] No tool call found`);
+    // console.log(`[TOOL_DEBUG] No tool call found`);
     return null;
   }
 
@@ -81,7 +81,7 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
     return response;
   }
 
-  async *generateStream(prompt: string, sessionId?: string | null): AsyncIterable<{ token?: string; finishReason?: string; tool_call?: any; tool_result?: any }> {
+  async *generateStream(prompt: string, sessionId?: string | null, abortSignal?: AbortSignal): AsyncIterable<{ token?: string; finishReason?: string; tool_call?: any; tool_result?: any; reasoning?: string }> {
     let currentPrompt = prompt;
 
     // Loop to handle multiple tool calls by restarting generation
@@ -89,16 +89,22 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
       let accumulatedResponse = '';
       let toolCallDetected = false;
 
-      console.log(`[TOOL_DEBUG] Starting streaming generation with prompt length: ${currentPrompt.length}`);
+      // console.log(`[TOOL_DEBUG] Starting streaming generation with prompt length: ${currentPrompt.length}`);
 
-      // Stream the current prompt
-      for await (const chunk of this.llm.generateStream(currentPrompt)) {
-        if (chunk.token) {
-          console.log(`\x1b[31m[TOOL_DEBUG]\x1b[0m \x1b[90mReceived token:\x1b[0m \x1b[95m\`${chunk.token}\`\x1b[0m`);
-          accumulatedResponse += chunk.token;
+       // Stream the current prompt
+        for await (const chunk of this.llm.generateStream(currentPrompt, sessionId, abortSignal)) {
+         if (chunk.token || chunk.reasoning) {
+           if (chunk.token) {
+             // console.log(`\x1b[31m[TOOL_DEBUG]\x1b[0m \x1b[90mReceived token:\x1b[0m \x1b[95m\`${chunk.token}\`\x1b[0m`);
+             accumulatedResponse += chunk.token;
+           }
+           if (chunk.reasoning) {
+             // console.log(`\x1b[31m[TOOL_DEBUG]\x1b[0m \x1b[90mReceived reasoning:\x1b[0m \x1b[95m\`${chunk.reasoning}\`\x1b[0m`);
+             // not accumulating here
+           }
 
-          // Always yield the token first
-          yield chunk;
+           // Always yield the chunk first
+           yield chunk;
 
           // Then check for complete tool calls in the accumulated response
           const toolCall = this.parseToolCall(accumulatedResponse);

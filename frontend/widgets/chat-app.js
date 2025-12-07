@@ -120,13 +120,22 @@ export class ChatApp extends LitElement {
        margin-left: 10px;
        font-style: italic;
      }
-     .tool-item {
-       border: 1px solid var(--border-color);
-       padding: 4px;
-       margin: 2px 0;
-       background: var(--primary-bg);
-       border-radius: 4px;
-     }
+      .tool-item {
+        border: 1px solid var(--border-color);
+        padding: 4px;
+        margin: 2px 0;
+        background: var(--primary-bg);
+        border-radius: 4px;
+      }
+      .reasoning-item {
+        border: 1px solid #2196F3;
+        padding: 4px;
+        margin: 2px 0;
+        background: var(--primary-bg);
+        border-radius: 4px;
+        font-style: italic;
+        color: #2196F3;
+      }
 
   `;
 
@@ -264,10 +273,19 @@ export class ChatApp extends LitElement {
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
-                   if (data.token) {
-                     fullContent += data.token;
-                     this.messages[systemMessageIndex].content += data.token;
-                     this.requestUpdate();
+                    if (data.token) {
+                      fullContent += data.token;
+                      this.messages[systemMessageIndex].content += data.token;
+                      this.requestUpdate();
+                    } else if (data.reasoning) {
+                      // Append reasoning to content with marker, concatenating consecutive reasoning
+                      if (this.messages[systemMessageIndex].content.endsWith('</reasoning>')) {
+                        // Insert before the closing tag to concatenate
+                        this.messages[systemMessageIndex].content = this.messages[systemMessageIndex].content.slice(0, -12) + data.reasoning + '</reasoning>';
+                      } else {
+                        this.messages[systemMessageIndex].content += `<reasoning>${data.reasoning}</reasoning>`;
+                      }
+                      this.requestUpdate();
 
                     // Scroll to bottom
                     setTimeout(() => {
@@ -356,18 +374,29 @@ export class ChatApp extends LitElement {
   }
 
   getDisplayContent(content) {
-    console.log('getDisplayContent called with:', JSON.stringify(content));
     const toolCallTag = '<|tool_call|>';
     const toolCallEndTag = '<|tool_call_end|>';
     const toolResultTag = '<|tool_result|>';
     const toolResultEndTag = '<|tool_result_end|>';
+    const reasoningTag = '<reasoning>';
+    const reasoningEndTag = '</reasoning>';
     let html = '';
     let pos = 0;
     while (pos < content.length) {
       let callStart = content.indexOf(toolCallTag, pos);
       let resultStart = content.indexOf(toolResultTag, pos);
-      //console.log('pos:', pos, 'callStart:', callStart, 'resultStart:', resultStart);
-      if (callStart !== -1 && (resultStart === -1 || callStart < resultStart)) {
+      let reasoningStart = content.indexOf(reasoningTag, pos);
+      // Find the earliest tag
+      let earliest = Math.min(
+        callStart !== -1 ? callStart : Infinity,
+        resultStart !== -1 ? resultStart : Infinity,
+        reasoningStart !== -1 ? reasoningStart : Infinity
+      );
+      if (earliest === Infinity) {
+        html += this.escapeHtml(content.slice(pos));
+        break;
+      }
+      if (earliest === callStart) {
         // process tool_call
         html += this.escapeHtml(content.slice(pos, callStart));
         let callEnd = content.indexOf(toolCallEndTag, callStart);
@@ -384,7 +413,7 @@ export class ChatApp extends LitElement {
           html += this.escapeHtml(content.slice(callStart, callEnd + toolCallEndTag.length));
         }
         pos = callEnd + toolCallEndTag.length;
-      } else if (resultStart !== -1) {
+      } else if (earliest === resultStart) {
         // process tool_result
         html += this.escapeHtml(content.slice(pos, resultStart));
         let resultEnd = content.indexOf(toolResultEndTag, resultStart);
@@ -404,9 +433,17 @@ export class ChatApp extends LitElement {
           html += this.escapeHtml(content.slice(resultStart, resultEnd + toolResultEndTag.length));
         }
         pos = resultEnd + toolResultEndTag.length;
-      } else {
-        html += this.escapeHtml(content.slice(pos));
-        break;
+      } else if (earliest === reasoningStart) {
+        // process reasoning
+        html += this.escapeHtml(content.slice(pos, reasoningStart));
+        let reasoningEnd = content.indexOf(reasoningEndTag, reasoningStart);
+        if (reasoningEnd === -1) {
+          html += this.escapeHtml(content.slice(reasoningStart));
+          break;
+        }
+        let reasoningText = content.slice(reasoningStart + reasoningTag.length, reasoningEnd);
+        html += `<div class="reasoning-item">🧠 ${this.escapeHtml(reasoningText)}</div>`;
+        pos = reasoningEnd + reasoningEndTag.length;
       }
     }
     return html;
@@ -472,15 +509,27 @@ export class ChatApp extends LitElement {
                          this.messages[msgIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
                          this.requestUpdate();
                        }
-                     } else if (data.tool_result) {
-                       // Handle tool result message
-                       console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
-                       const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                       if (msgIndex !== -1) {
-                         this.messages[msgIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
-                         this.requestUpdate();
-                       }
-                    } else if (data.finishReason) {
+                      } else if (data.tool_result) {
+                        // Handle tool result message
+                        console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                        const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                        if (msgIndex !== -1) {
+                          this.messages[msgIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                          this.requestUpdate();
+                        }
+                      } else if (data.reasoning) {
+                        // Handle reasoning during continue
+                        const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                        if (msgIndex !== -1) {
+                          if (this.messages[msgIndex].content.endsWith('</reasoning>')) {
+                            // Insert before the closing tag to concatenate
+                            this.messages[msgIndex].content = this.messages[msgIndex].content.slice(0, -12) + data.reasoning + '</reasoning>';
+                          } else {
+                            this.messages[msgIndex].content += `<reasoning>${data.reasoning}</reasoning>`;
+                          }
+                          this.requestUpdate();
+                        }
+                     } else if (data.finishReason) {
                      // Generation completed
                      console.log('Continue generation finished:', data.finishReason);
                      break;
