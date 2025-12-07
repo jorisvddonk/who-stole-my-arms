@@ -27,21 +27,21 @@ export class ChatApp extends LitElement {
       flex-shrink: 0;
     }
 
-    .message {
-      margin-bottom: 10px;
-      padding: 10px;
-      border-radius: 10px;
-      max-width: 70%;
-      font-family: 'Times New Roman', serif;
-      white-space: pre-wrap;
-      position: relative;
-    }
-    .message.user {
-      background: var(--user-msg-bg);
-      color: var(--light-text);
-      align-self: flex-end;
-      margin-left: auto;
-    }
+     .message {
+       margin-bottom: 10px;
+       padding: 10px;
+       border-radius: 10px;
+       max-width: 70%;
+       font-family: 'Times New Roman', serif;
+       white-space: pre-wrap;
+       position: relative;
+     }
+     .message.user {
+       background: var(--user-msg-bg);
+       color: var(--text-color);
+       align-self: flex-end;
+       margin-left: auto;
+     }
     .message-container {
       margin-bottom: 10px;
     }
@@ -93,11 +93,10 @@ export class ChatApp extends LitElement {
     .continue-button:hover {
       background: var(--hover-bg);
     }
-    .message.system {
-      background: var(--system-msg-bg);
-      color: var(--text-color);
-      border: 1px solid var(--border-color);
-    }
+     .message.system {
+       background: var(--system-msg-bg);
+       color: var(--text-color);
+     }
     .message.tool-call {
       background: var(--user-msg-bg);
       color: var(--text-color);
@@ -127,15 +126,29 @@ export class ChatApp extends LitElement {
         background: var(--primary-bg);
         border-radius: 4px;
       }
-      .reasoning-item {
-        border: 1px solid #2196F3;
-        padding: 4px;
-        margin: 2px 0;
-        background: var(--primary-bg);
-        border-radius: 4px;
-        font-style: italic;
-        color: #2196F3;
-      }
+     .reasoning-item {
+         border: 1px solid #2196F3;
+         padding: 4px;
+         margin: 2px 0;
+         background: var(--primary-bg);
+         border-radius: 4px;
+         font-style: italic;
+         color: #2196F3;
+       }
+       .quote {
+         font-style: italic;
+         color: var(--quote-color);
+       }
+       .emphasis {
+         font-style: italic;
+         color: var(--emphasized-text-color);
+       }
+       .code {
+         font-family: 'Courier New', monospace;
+         background: var(--secondary-bg);
+         padding: 2px 4px;
+         border-radius: 3px;
+       }
 
   `;
 
@@ -406,6 +419,15 @@ export class ChatApp extends LitElement {
     return div.innerHTML;
   }
 
+  parseMarkdown(text) {
+    // text has HTML entities escaped except for quotes, asterisks, underscores, backticks
+    return text
+      .replace(/"([^"]*)"/g, '<span class="quote">"$1"</span>')
+      .replace(/\*\*([^*]*)\*\*/g, '<strong>$1</strong>')
+      .replace(/_([^_]*)_/g, '<span class="emphasis">$1</span>')
+      .replace(/`([^`]*)`/g, '<code>$1</code>');
+  }
+
   getDisplayContent(content) {
     const toolCallTag = '<|tool_call|>';
     const toolCallEndTag = '<|tool_call_end|>';
@@ -426,15 +448,24 @@ export class ChatApp extends LitElement {
         reasoningStart !== -1 ? reasoningStart : Infinity
       );
       if (earliest === Infinity) {
-        html += this.escapeHtml(content.slice(pos));
+        let plainText = content.slice(pos);
+        plainText = this.escapeHtml(plainText);
+        plainText = this.parseMarkdown(plainText);
+        html += plainText;
         break;
       }
       if (earliest === callStart) {
         // process tool_call
-        html += this.escapeHtml(content.slice(pos, callStart));
+        let plainText = content.slice(pos, callStart);
+        plainText = this.escapeHtml(plainText);
+        plainText = this.parseMarkdown(plainText);
+        html += plainText;
         let callEnd = content.indexOf(toolCallEndTag, callStart);
         if (callEnd === -1) {
-          html += this.escapeHtml(content.slice(callStart));
+          plainText = content.slice(callStart);
+          plainText = this.escapeHtml(plainText);
+          plainText = this.parseMarkdown(plainText);
+          html += plainText;
           break;
         }
         let json = content.slice(callStart + toolCallTag.length, callEnd);
@@ -443,15 +474,24 @@ export class ChatApp extends LitElement {
           console.log('Processing tool_call in getDisplayContent:', toolCall.name);
           html += `<div class="tool-item">🔧 Calling tool: ${this.escapeHtml(toolCall.name)}(${this.escapeHtml(JSON.stringify(toolCall.arguments))})</div>`;
         } catch (e) {
-          html += this.escapeHtml(content.slice(callStart, callEnd + toolCallEndTag.length));
+          plainText = content.slice(callStart, callEnd + toolCallEndTag.length);
+          plainText = this.escapeHtml(plainText);
+          plainText = this.parseMarkdown(plainText);
+          html += plainText;
         }
         pos = callEnd + toolCallEndTag.length;
       } else if (earliest === resultStart) {
         // process tool_result
-        html += this.escapeHtml(content.slice(pos, resultStart));
+        let plainText = content.slice(pos, resultStart);
+        plainText = this.escapeHtml(plainText);
+        plainText = this.parseMarkdown(plainText);
+        html += plainText;
         let resultEnd = content.indexOf(toolResultEndTag, resultStart);
         if (resultEnd === -1) {
-          html += this.escapeHtml(content.slice(resultStart));
+          plainText = content.slice(resultStart);
+          plainText = this.escapeHtml(plainText);
+          plainText = this.parseMarkdown(plainText);
+          html += plainText;
           break;
         }
         let json = content.slice(resultStart + toolResultTag.length, resultEnd);
@@ -463,15 +503,24 @@ export class ChatApp extends LitElement {
             : `✅ ${toolResult.name} result: ${JSON.stringify(toolResult.result)}`;
           html += `<div class="tool-item">${this.escapeHtml(resultContent)}</div>`;
         } catch (e) {
-          html += this.escapeHtml(content.slice(resultStart, resultEnd + toolResultEndTag.length));
+          plainText = content.slice(resultStart, resultEnd + toolResultEndTag.length);
+          plainText = this.escapeHtml(plainText);
+          plainText = this.parseMarkdown(plainText);
+          html += plainText;
         }
         pos = resultEnd + toolResultEndTag.length;
       } else if (earliest === reasoningStart) {
         // process reasoning
-        html += this.escapeHtml(content.slice(pos, reasoningStart));
+        let plainText = content.slice(pos, reasoningStart);
+        plainText = this.escapeHtml(plainText);
+        plainText = this.parseMarkdown(plainText);
+        html += plainText;
         let reasoningEnd = content.indexOf(reasoningEndTag, reasoningStart);
         if (reasoningEnd === -1) {
-          html += this.escapeHtml(content.slice(reasoningStart));
+          plainText = content.slice(reasoningStart);
+          plainText = this.escapeHtml(plainText);
+          plainText = this.parseMarkdown(plainText);
+          html += plainText;
           break;
         }
         let reasoningText = content.slice(reasoningStart + reasoningTag.length, reasoningEnd);

@@ -11,8 +11,10 @@
       --accent-bg: #8d6e63;
       --dark-accent: #5d4037;
       --darker-accent: #3e2723;
-      --text-color: #3e2723;
-      --light-text: #f4f1e8;
+       --text-color: #2e1b0f;
+       --muted-text-color: #5d4037;
+       --emphasized-text-color: #4a362f;
+       --light-text: #f4f1e8;
       --border-color: #8d6e63;
       --hover-bg: #a1887f;
       --disabled-bg: #a1887f;
@@ -34,8 +36,9 @@
       --error-bg: #f8e8e8;
       --error-text: #4d2e2e;
       --error-border: #d5a8a8;
-      --error-color: #8d6e63;
-      --darker-error-color: #5d4037;
+       --error-color: #8d6e63;
+        --darker-error-color: #5d4037;
+        --quote-color: #e7dcc3;
     }
 
     .dark-theme {
@@ -44,7 +47,8 @@
       --accent-bg: #3d2518;
       --dark-accent: #5d3a29;
       --darker-accent: #7d4e37;
-      --text-color: #e8dcc0;
+      --text-color: #bdb092;
+      --emphasized-text-color: #9d978a;
       --light-text: #ffffff;
       --border-color: #3d2518;
       --hover-bg: #4a2e1f;
@@ -67,44 +71,19 @@
       --error-bg: #3a1a1a;
       --error-text: #e6b8b8;
       --error-border: #8a4a4a;
-      --error-color: #3d2518;
-      --darker-error-color: #5d3a29;
+       --error-color: #3d2518;
+       --darker-error-color: #5d3a29;
+       --quote-color: #ffffff;
     }
 
-    @media (prefers-color-scheme: dark) {
-      html:not(.theme-overridden) {
-        --primary-bg: #1a0f0a;
-        --secondary-bg: #2a1810;
-        --accent-bg: #3d2518;
-        --dark-accent: #5d3a29;
-        --darker-accent: #7d4e37;
-        --text-color: #e8dcc0;
-        --light-text: #ffffff;
-        --border-color: #3d2518;
-        --hover-bg: #4a2e1f;
-        --disabled-bg: #4a2e1f;
-        --dock-widget-bg: #2a1810; /* widget background for regular dock widgets */
-        --dock-widget-inset-bg: #4a2e1f; /* widget background for inset widgets - use together with --inset-shadow as box-shadow */
-        --user-msg-bg: #3d2518;
-        --system-msg-bg: #2a1810;
-        --input-bg: #1a0f0a;
-        --menu-bg: #2a1810;
-        --submenu-bg: #2a1810;
-        --dialog-bg: #2a1810;
-        --shadow-color: rgba(0, 0, 0, 0.5);
-        --inset-shadow: rgba(255, 255, 255, 0.1);
-        --backdrop-color: rgba(0, 0, 0, 0.7);
-        --grid-gap: 3px;
-        --success-bg: #1a3a1a;
-        --success-text: #b8e6b8;
-        --success-border: #4a8a4a;
-        --error-bg: #3a1a1a;
-        --error-text: #e6b8b8;
-        --error-border: #8a4a4a;
-        --error-color: #3d2518;
-        --darker-error-color: #5d3a29;
-      }
     }
+
+
+
+    html {
+      background: var(--primary-bg);
+    }
+
     body {
       margin: 0;
       padding: 0;
