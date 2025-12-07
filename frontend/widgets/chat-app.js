@@ -264,29 +264,26 @@ export class ChatApp extends LitElement {
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
-                  if (data.token) {
-                    fullContent += data.token;
-                    this.messages[systemMessageIndex].content += data.token;
-                    this.requestUpdate();
+                   if (data.token) {
+                     fullContent += data.token;
+                     this.messages[systemMessageIndex].content += data.token;
+                     this.requestUpdate();
 
                     // Scroll to bottom
                     setTimeout(() => {
                       const container = this.shadowRoot.querySelector('.chat-container');
                        container.scrollTop = container.scrollHeight;
                      }, 0);
-                    } else if (data.tool_call) {
-                      // Handle tool call message
-                      //console.log('🎯 Frontend received tool_call:', data.tool_call);
-                      //this.messages[systemMessageIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
-                      //this.requestUpdate();
-                    } else if (data.tool_result) {
-                      // Handle tool result message
-                      //console.log('🎯 Frontend received tool_result:', data.tool_result);
-                      //const resultContent = data.tool_result.error
-                      //  ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
-                      //  : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
-                      //this.messages[systemMessageIndex].content += `<div class="tool-item">${resultContent}</div>`;
-                      //this.requestUpdate();
+                     } else if (data.tool_call) {
+                       // Handle tool call message
+                       console.log('🎯 Frontend received tool_call:', data.tool_call);
+                       // this.messages[systemMessageIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
+                       this.requestUpdate();
+                      } else if (data.tool_result) {
+                        // Handle tool result message
+                        console.log('🎯 Frontend received tool_result:', data.tool_result);
+                        // this.messages[systemMessageIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                        this.requestUpdate();
                     } else if (data.finishReason) {
                       console.log('Generation finished:', data.finishReason);
                       break;
@@ -352,58 +349,67 @@ export class ChatApp extends LitElement {
     return content.replace(/^\n+/, '');
   }
 
-  parseAndDisplayToolCall(fullContent, systemMessageIndex) {
-    // Find tool call JSON
-    const toolCallStart = fullContent.indexOf('{"tool_call"');
-    if (toolCallStart === -1) return;
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
-    const toolCallEnd = fullContent.indexOf('}', toolCallStart) + 1;
-    const toolCallJson = fullContent.slice(toolCallStart, toolCallEnd);
-
-    try {
-      const toolCallData = JSON.parse(toolCallJson);
-      const toolCall = toolCallData.tool_call;
-
-      // Find tool result
-      const resultMatch = fullContent.match(/Tool result for ([^:]+): (\{.*?\})/);
-      if (resultMatch) {
-        const toolName = resultMatch[1];
-        const result = resultMatch[2];
-
-        // Update the system message to only include content before tool call
-        const beforeToolCall = fullContent.slice(0, toolCallStart).trim();
-        if (beforeToolCall) {
-          this.messages[systemMessageIndex].content = beforeToolCall;
-        } else {
-          // Remove the system message if it only contained the tool call
-          this.messages.splice(systemMessageIndex, 1);
-          systemMessageIndex--;
+  getDisplayContent(content) {
+    console.log('getDisplayContent called with:', JSON.stringify(content));
+    const toolCallTag = '<|tool_call|>';
+    const toolCallEndTag = '<|tool_call_end|>';
+    const toolResultTag = '<|tool_result|>';
+    const toolResultEndTag = '<|tool_result_end|>';
+    let html = '';
+    let pos = 0;
+    while (pos < content.length) {
+      let callStart = content.indexOf(toolCallTag, pos);
+      let resultStart = content.indexOf(toolResultTag, pos);
+      //console.log('pos:', pos, 'callStart:', callStart, 'resultStart:', resultStart);
+      if (callStart !== -1 && (resultStart === -1 || callStart < resultStart)) {
+        // process tool_call
+        html += this.escapeHtml(content.slice(pos, callStart));
+        let callEnd = content.indexOf(toolCallEndTag, callStart);
+        if (callEnd === -1) {
+          html += this.escapeHtml(content.slice(callStart));
+          break;
         }
-
-        // Add tool call message
-        this.messages.splice(systemMessageIndex + 1, 0, {
-          role: 'tool-call',
-          content: `🔧 Calling tool: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`
-        });
-
-        // Add tool result message
-        this.messages.splice(systemMessageIndex + 2, 0, {
-          role: 'tool-result',
-          content: `✅ ${toolName} result: ${result}`
-        });
-
-        // Add remaining content after tool result
-        const afterResult = fullContent.split(resultMatch[0])[1]?.trim();
-        if (afterResult) {
-          this.messages.splice(systemMessageIndex + 3, 0, {
-            role: 'system',
-            content: afterResult
-          });
+        let json = content.slice(callStart + toolCallTag.length, callEnd);
+        try {
+          const toolCall = JSON.parse(json);
+          console.log('Processing tool_call in getDisplayContent:', toolCall.name);
+          html += `<div class="tool-item">🔧 Calling tool: ${this.escapeHtml(toolCall.name)}(${this.escapeHtml(JSON.stringify(toolCall.arguments))})</div>`;
+        } catch (e) {
+          html += this.escapeHtml(content.slice(callStart, callEnd + toolCallEndTag.length));
         }
+        pos = callEnd + toolCallEndTag.length;
+      } else if (resultStart !== -1) {
+        // process tool_result
+        html += this.escapeHtml(content.slice(pos, resultStart));
+        let resultEnd = content.indexOf(toolResultEndTag, resultStart);
+        if (resultEnd === -1) {
+          html += this.escapeHtml(content.slice(resultStart));
+          break;
+        }
+        let json = content.slice(resultStart + toolResultTag.length, resultEnd);
+        try {
+          const toolResult = JSON.parse(json);
+          console.log('Processing tool_result in getDisplayContent:', toolResult.name);
+          const resultContent = toolResult.error
+            ? `❌ ${toolResult.name} error: ${toolResult.error}`
+            : `✅ ${toolResult.name} result: ${JSON.stringify(toolResult.result)}`;
+          html += `<div class="tool-item">${this.escapeHtml(resultContent)}</div>`;
+        } catch (e) {
+          html += this.escapeHtml(content.slice(resultStart, resultEnd + toolResultEndTag.length));
+        }
+        pos = resultEnd + toolResultEndTag.length;
+      } else {
+        html += this.escapeHtml(content.slice(pos));
+        break;
       }
-    } catch (e) {
-      console.warn('Failed to parse tool call:', e);
     }
+    return html;
   }
 
   async handleContinue(messageId) {
@@ -458,25 +464,22 @@ export class ChatApp extends LitElement {
                          container.scrollTop = container.scrollHeight;
                         }, 0);
                       }
-                    } else if (data.tool_call) {
-                      // Handle tool call message
-                      //console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
-                      //const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                      //if (msgIndex !== -1) {
-                      //  this.messages[msgIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
-                      //  this.requestUpdate();
-                      //}
-                    } else if (data.tool_result) {
-                      // Handle tool result message
-                      //console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
-                      //const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                      //if (msgIndex !== -1) {
-                      //  const resultContent = data.tool_result.error
-                      //    ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
-                      //    : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
-                      //  this.messages[msgIndex].content += `<div class="tool-item">${resultContent}</div>`;
-                      //  this.requestUpdate();
-                      //}
+                     } else if (data.tool_call) {
+                       // Handle tool call message
+                       console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
+                       const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                       if (msgIndex !== -1) {
+                         this.messages[msgIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
+                         this.requestUpdate();
+                       }
+                     } else if (data.tool_result) {
+                       // Handle tool result message
+                       console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                       const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                       if (msgIndex !== -1) {
+                         this.messages[msgIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                         this.requestUpdate();
+                       }
                     } else if (data.finishReason) {
                      // Generation completed
                      console.log('Continue generation finished:', data.finishReason);
@@ -526,7 +529,7 @@ export class ChatApp extends LitElement {
           const isDeletable = msg.role === 'system' || msg.role === 'user';
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(msg.content))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
+               <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
