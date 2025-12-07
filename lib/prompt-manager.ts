@@ -1,6 +1,6 @@
 import { minimatch } from 'minimatch';
 import { ToolboxTool } from '../interfaces/ToolboxTool.js';
-import { Storage } from '../interfaces/Storage.js';
+import { Storage, HasStorage } from '../interfaces/Storage.js';
 
 import { logError } from './logging/logger.js';
 import { createMethodRouter } from './util/route-utils.js';
@@ -18,7 +18,12 @@ export interface NamedGroup {
   items: Item[];
 }
 
-export type Item = PromptItem | NamedGroup;
+export interface NamedGroupReference {
+  type: 'groupRef';
+  name: string;
+}
+
+export type Item = PromptItem | NamedGroup | NamedGroupReference;
 
 export interface PromptProvider {
   getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null>;
@@ -47,12 +52,12 @@ export class PromptManager implements ToolboxTool, HasStorage {
     if (currentVersion === null) {
       await storage.setComponentVersion(1);
 
-      // Add default chatMessage template
-      const defaultTemplate = {
-        name: 'chatMessage',
-        groups: ['system/advanced', 'tools/tools', 'chat/chatHistory', 'character-bio/bio'],
-        createdAt: new Date()
-      };
+       // Add default chatMessage template
+       const defaultTemplate = {
+         name: 'chatMessage',
+         groups: ['system/advanced', 'tools/tools', 'character-bio/bio', 'chat/chat'],
+         createdAt: new Date()
+       };
       await storage.insert({
         name: 'chatMessage',
         data: JSON.stringify(defaultTemplate)
@@ -292,15 +297,15 @@ export class PromptManager implements ToolboxTool, HasStorage {
       try {
         const group = await this.resolveGroup(groupPath, mergedContext);
         if (group) {
-          const flattened = this.flattenToString(group);
+          const flattened = await this.flattenToString(group, mergedContext);
           if (flattened.trim()) {
             prompts.push(flattened);
           }
         } else {
-          console.warn(`PromptManager: Group not found: ${groupPath}`);
+          console.log(`PromptManager: Group not found: ${groupPath}`);
         }
       } catch (error) {
-        console.warn(`PromptManager: Error resolving group ${groupPath}:`, error);
+        console.log(`PromptManager: Error resolving group ${groupPath}:`, error);
       }
     }
 
@@ -357,11 +362,18 @@ export class PromptManager implements ToolboxTool, HasStorage {
     return await provider.getNamedPromptGroup(groupName, context);
   }
 
-  private flattenToString(item: Item): string {
+  private async flattenToString(item: Item, context?: any): Promise<string> {
     if (item.type === 'prompt') {
       return item.prompt;
     } else if (item.type === 'group') {
-      return item.items.map(subItem => this.flattenToString(subItem)).join('\n\n');
+      const subStrings = await Promise.all(item.items.map(subItem => this.flattenToString(subItem, context)));
+      return subStrings.join('\n\n');
+    } else if (item.type === 'groupRef') {
+      const group = await this.resolveGroup(item.name, context);
+      if (group) {
+        return await this.flattenToString(group, context);
+      }
+      return '';
     }
     return '';
   }

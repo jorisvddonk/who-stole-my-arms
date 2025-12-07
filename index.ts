@@ -168,10 +168,11 @@ const routeGroups = [
                // Get the chatMessage template prefix
                const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
                let prefix = '';
+               console.log(`template groups: `, templateGroups)
                if (templateGroups) {
-                 prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+                 prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
                }
-                const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
+               const fullPrompt = prefix || userPrompt;
 
                 const text = await api.generate(fullPrompt, sessionId);
 
@@ -210,10 +211,11 @@ const routeGroups = [
               // Get the chatMessage template prefix
               const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
               let prefix = '';
+              console.log(`template groups: `, templateGroups)
               if (templateGroups) {
-                prefix = await promptManager.getPrompt(templateGroups, { sessionId });
+                prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
               }
-              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
+              const fullPrompt = prefix || userPrompt;
 
               // For streaming, we'll use Server-Sent Events
               currentAbortController = new AbortController();

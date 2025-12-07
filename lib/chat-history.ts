@@ -23,10 +23,55 @@ export class ChatHistory implements HasStorage, PromptProvider {
   }
 
   getAvailablePromptGroups(): { name: string; description: string }[] {
-    return [{ name: 'chatHistory', description: 'Recent chat messages for context' }];
+    return [
+      { name: 'chatHistory', description: 'Recent chat messages for context' },
+      { name: 'chat', description: 'Full chat context including history and current user prompt' },
+      { name: 'currentUserPrompt', description: 'The current user prompt being processed' }
+    ];
   }
 
   async getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null> {
+    if (groupName === 'currentUserPrompt') {
+      if (!context?.currentPrompt) {
+        return null;
+      }
+
+      // Get formatter settings from session storage
+      const selectedFormatterName = await FormatterSettingsTool.getSelectedFormatter(this.dbManager, context.sessionId);
+      const registry = FormatterRegistry.getInstance();
+      const formatter = registry.get(selectedFormatterName);
+
+      let formattedPrompt = formatter?.userPrompt ? formatter.userPrompt(context.currentPrompt) : context.currentPrompt;
+      let pre = formatter?.preUserPrompt ? formatter.preUserPrompt(context.currentPrompt) : '';
+      let post = formatter?.postUserPrompt ? formatter.postUserPrompt(context.currentPrompt) : '';
+      let prompt = pre + formattedPrompt + post;
+
+      return {
+        type: 'group',
+        name: 'currentUserPrompt',
+        items: [{
+          type: 'prompt' as const,
+          name: 'Current User',
+          prompt,
+          tags: []
+        }]
+      };
+    }
+
+    if (groupName === 'chat') {
+      if (!context?.sessionId) {
+        return null;
+      }
+      return {
+        type: 'group',
+        name: 'chat',
+        items: [
+          { type: 'groupRef', name: 'chat/chatHistory' },
+          { type: 'groupRef', name: 'chat/currentUserPrompt' }
+        ]
+      };
+    }
+
     if (groupName !== 'chatHistory' || !context?.sessionId) {
       return null;
     }
@@ -40,12 +85,29 @@ export class ChatHistory implements HasStorage, PromptProvider {
 
       const registry = FormatterRegistry.getInstance();
       const formatter = registry.get(selectedFormatterName);
-      const items: Item[] = messages.map(msg => ({
+      const items: Item[] = [];
+      if (formatter?.preFirstMessage && messages.length > 0) {
+        items.push({
+          type: 'prompt' as const,
+          name: 'Pre',
+          prompt: formatter.preFirstMessage(messages[0]),
+          tags: []
+        });
+      }
+      items.push(...messages.map(msg => ({
         type: 'prompt' as const,
         name: msg.actor,
-        prompt: formatter ? formatter(msg) : msg.content,
+        prompt: formatter ? formatter.historyMessage(msg) : msg.content,
         tags: []
-      }));
+      })));
+      if (formatter?.postLastHistoryMessage && messages.length > 0) {
+        items.push({
+          type: 'prompt' as const,
+          name: 'Post',
+          prompt: formatter.postLastHistoryMessage(messages[messages.length - 1]),
+          tags: []
+        });
+      }
       return {
         type: 'group',
         name: 'chatHistory',

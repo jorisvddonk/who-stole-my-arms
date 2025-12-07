@@ -191,7 +191,8 @@ export class FormatterSettingsWidget extends LitElement {
 
   getSelectedFormatterInfo() {
     const selected = this.formatters.find(f => f.name === this.settings.selectedFormatter);
-    return selected ? selected.code : 'No formatter selected';
+    if (!selected) return 'No formatter selected';
+    return Object.entries(selected.functions).map(([funcName, code]) => `${funcName}:\n${code}`).join('\n\n');
   }
 
   render() {
@@ -215,7 +216,7 @@ export class FormatterSettingsWidget extends LitElement {
         </div>
 
         <div class="setting-group">
-          <label>Formatter Code:</label>
+          <label>Formatter Functions:</label>
           <div class="formatter-info">${this.getSelectedFormatterInfo()}</div>
         </div>
 
