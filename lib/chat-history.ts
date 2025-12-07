@@ -102,6 +102,16 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
+  async deleteMessagesFrom(storage: Storage, messageId: number): Promise<boolean> {
+    try {
+      await storage.execute(`DELETE FROM ${storage.getTableName()} WHERE id >= ?`, [messageId]);
+      return true;
+    } catch (error) {
+      logError(`Failed to delete messages after: ${error.message}`);
+      return false;
+    }
+  }
+
   async appendToMessage(storage: Storage, messageId: number, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
     try {
       const existingMessage = await storage.findById(messageId);
@@ -156,6 +166,26 @@ export class ChatHistory implements HasStorage, PromptProvider {
               return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
             } else {
               return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+            }
+          } catch (error) {
+            logError(error.message);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }),
+      "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
+        DELETE: async (req) => {
+          try {
+            const storage = (req as any).context.get('storage');
+            const messageId = parseInt(req.params.messageid);
+            if (isNaN(messageId)) {
+              return new Response(JSON.stringify({ error: 'Invalid message ID' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+            }
+            const success = await this.deleteMessagesFrom(storage, messageId);
+            if (success) {
+              return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+            } else {
+              return new Response(JSON.stringify({ error: 'Failed to delete messages' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
             }
           } catch (error) {
             logError(error.message);

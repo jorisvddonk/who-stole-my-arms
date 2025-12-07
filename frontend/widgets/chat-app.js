@@ -198,9 +198,12 @@ export class ChatApp extends LitElement {
     }
   }
 
-  async deleteMessage(messageId) {
+  async deleteMessage(event, messageId) {
     try {
-      const res = await fetch(`/sessions/${this.currentSession}/chat/messages/${messageId}`, {
+      const endpoint = event.shiftKey
+        ? `/sessions/${this.currentSession}/chat/messages/${messageId}/delete-after`
+        : `/sessions/${this.currentSession}/chat/messages/${messageId}`;
+      const res = await fetch(endpoint, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -523,7 +526,7 @@ export class ChatApp extends LitElement {
           const isDeletable = msg.role === 'system' || msg.role === 'user';
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(msg.content))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
+              <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(msg.content))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
