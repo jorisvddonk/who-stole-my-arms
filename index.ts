@@ -24,6 +24,7 @@ import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
+let api;
 
 // Create components
 const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, (settings) => {
@@ -62,7 +63,7 @@ const toolPromptProvider = new ToolPromptProvider(toolManager);
 promptManager.registerProvider('tools', toolPromptProvider);
 
 // Wrap API with tool calling
-const api = new ToolCallingLLM(baseApi, toolManager);
+api = new ToolCallingLLM(baseApi, toolManager);
 
 // Define route groups
 const routeGroups = [
