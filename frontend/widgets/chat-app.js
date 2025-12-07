@@ -143,9 +143,10 @@ export class ChatApp extends LitElement {
          font-style: italic;
          color: var(--emphasized-text-color);
        }
-       .code {
+       code, .code {
          font-family: 'Courier New', monospace;
-         background: var(--secondary-bg);
+         color: var(--emphasized-text-color);
+         background: var(--input-bg);
          padding: 2px 4px;
          border-radius: 3px;
        }
