@@ -31,6 +31,8 @@ import { LLMToolManager } from "./lib/llm-tool-manager.js";
 import { DieTool } from "./lib/tools/die-tool.js";
 import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
 import { FormatterRegistry } from "./lib/formatters.js";
+import { MarkdownParser } from "./lib/markdown-parser.js";
+import { DebugLogger } from "./lib/debug-logger.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -84,6 +86,11 @@ promptManager.registerProvider('tools', toolPromptProvider);
 
 // Wrap API with tool calling
 api = new ToolCallingLLM(baseApi, toolManager);
+
+// Initialize MarkdownParser with debug logging
+const markdownParser = new MarkdownParser();
+const debugLogger = new DebugLogger();
+markdownParser.registerHandler(debugLogger);
 
 // Define route groups
 const routeGroups = [
@@ -182,11 +189,13 @@ const routeGroups = [
                  // Add user message to history
                 await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
 
-                 // Add generated message to history
-                const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
+                  // Add generated message to history
+                 const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
 
-              logGenerate(userPrompt, text.length);
-              return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
+               logGenerate(userPrompt, text.length);
+               // Parse the generated text with MarkdownParser
+               markdownParser.parse(text);
+               return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
            } catch (error) {
              logError(error.message);
              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
@@ -247,12 +256,14 @@ const routeGroups = [
                           controller.enqueue(`data: ${data}\n\n`);
                           // Add user message to history
                           await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
-                          // Add generated message to history
-                          const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
-                          const idData = JSON.stringify({ messageId });
-                          controller.enqueue(`data: ${idData}\n\n`);
-                          logGenerate(userPrompt, totalLength);
-                          break;
+                           // Add generated message to history
+                           const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
+                           const idData = JSON.stringify({ messageId });
+                           controller.enqueue(`data: ${idData}\n\n`);
+                           logGenerate(userPrompt, totalLength);
+                           // Parse the generated text with MarkdownParser
+                           markdownParser.parse(fullResponse);
+                           break;
                         }
                      }
                    } catch (error) {
@@ -326,11 +337,13 @@ const routeGroups = [
 
                const text = await api.generate(fullPrompt, sessionId);
 
-               // Append to existing message
-              await chatHistory.appendToMessage(chatStorage, messageId, text);
+                // Append to existing message
+               await chatHistory.appendToMessage(chatStorage, messageId, text);
 
-              logGenerate(`Continue on message ${messageId}`, text.length);
-              return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
+               logGenerate(`Continue on message ${messageId}`, text.length);
+               // Parse the appended text with MarkdownParser
+               markdownParser.parse(text);
+               return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
             } catch (error) {
               logError(error.message);
               return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
@@ -400,10 +413,12 @@ const routeGroups = [
                         } else if (chunk.finishReason) {
                          const data = JSON.stringify({ finishReason: chunk.finishReason });
                          controller.enqueue(`data: ${data}\n\n`);
-                         // Append to existing message
-                         await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, chunk.finishReason);
-                         logGenerate(`Continue on message ${messageId}`, totalLength);
-                         break;
+                          // Append to existing message
+                          await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, chunk.finishReason);
+                          logGenerate(`Continue on message ${messageId}`, totalLength);
+                          // Parse the appended text with MarkdownParser
+                          markdownParser.parse(additionalResponse);
+                          break;
                        }
                      }
                   } catch (error) {
