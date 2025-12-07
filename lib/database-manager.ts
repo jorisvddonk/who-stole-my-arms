@@ -2,8 +2,9 @@ import { Database } from "bun:sqlite";
 import { join } from "path";
 import { mkdir, readdir, unlink } from "fs/promises";
 import { HasStorage, Storage } from "../interfaces/Storage.js";
+import { randomUUID } from 'crypto';
 
-export class Storage implements Storage {
+export class DBStorage implements Storage {
   constructor(private db: Database, private fqdn: string, private sessionId?: string) {}
 
   getTableName(): string {
@@ -39,16 +40,18 @@ export class Storage implements Storage {
     this.execute('INSERT OR REPLACE INTO component_versions (fqdn, version) VALUES (?, ?)', [this.fqdn, version]);
   }
 
-  async insert(data: Record<string, any>): Promise<number> {
+  async insert(data: Record<string, any>, id?: string): Promise<string> {
+    const insertId = id || randomUUID();
+    data.id = insertId;
     const keys = Object.keys(data);
     const values = Object.values(data);
     const placeholders = keys.map(() => '?').join(', ');
     const sql = `INSERT INTO ${this.getTableName()} (${keys.join(', ')}) VALUES (${placeholders})`;
-    const result = this.execute(sql, values);
-    return result.lastInsertRowid;
+    this.execute(sql, values);
+    return insertId;
   }
 
-  async update(id: number, data: Record<string, any>): Promise<void> {
+  async update(id: string, data: Record<string, any>): Promise<void> {
     const keys = Object.keys(data);
     const values = Object.values(data);
     const setClause = keys.map(key => `${key} = ?`).join(', ');
@@ -56,7 +59,7 @@ export class Storage implements Storage {
     this.execute(sql, [...values, id]);
   }
 
-  async findById(id: number): Promise<Record<string, any> | null> {
+  async findById(id: string): Promise<Record<string, any> | null> {
     const rows = this.query(`SELECT * FROM ${this.getTableName()} WHERE id = ?`, [id]);
     return rows.length > 0 ? rows[0] : null;
   }
@@ -65,7 +68,7 @@ export class Storage implements Storage {
     return this.query(`SELECT * FROM ${this.getTableName()}`);
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: string): Promise<void> {
     this.execute(`DELETE FROM ${this.getTableName()} WHERE id = ?`, [id]);
   }
 }
@@ -97,7 +100,7 @@ export class DatabaseManager {
 
   async registerGlobalComponent(component: HasStorage): Promise<void> {
     try {
-      const storage = new Storage(this.globalDB, component.getFQDN());
+      const storage = new DBStorage(this.globalDB, component.getFQDN());
       await component.init(storage);
     } catch (error) {
       console.warn(`Failed to initialize global component ${component.getFQDN()}:`, error);
@@ -146,3 +149,5 @@ export class DatabaseManager {
     return db;
   }
 }
+
+export { DBStorage as Storage };

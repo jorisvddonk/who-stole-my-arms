@@ -227,7 +227,8 @@ export class ChatApp extends LitElement {
 
   async handleGenerate(e) {
     const { prompt } = e.detail;
-    this.messages = [...this.messages, { role: 'user', content: prompt }];
+    const userMessageId = crypto.randomUUID();
+    this.messages = [...this.messages, { id: userMessageId, role: 'user', content: prompt }];
     this.loading = true;
 
      // Add a new system message that we'll update with content
@@ -244,11 +245,11 @@ export class ChatApp extends LitElement {
 
      try {
       const endpoint = this.supportsStreaming ? `/sessions/${this.currentSession}/generateStream` : `/sessions/${this.currentSession}/generate`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
+       const res = await fetch(endpoint, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ prompt, userMessageId })
+       });
 
       if (!res.ok) {
         const errorData = await res.json();
@@ -348,20 +349,22 @@ export class ChatApp extends LitElement {
                 }
               }
             }
-          }
-        }
-        } else {
+           }
+         }
+         this.loadChatHistory();
+         } else {
           // Handle non-streaming response
-          const data = await res.json();
-          this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
-           this.requestUpdate();
-          // Scroll to bottom
-          if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
-            setTimeout(() => {
-              const container = this.shadowRoot.querySelector('.chat-container');
-              container.scrollTop = container.scrollHeight;
-            }, 0);
-          }
+           const data = await res.json();
+           this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
+            this.requestUpdate();
+           // Scroll to bottom
+           if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+             setTimeout(() => {
+               const container = this.shadowRoot.querySelector('.chat-container');
+               container.scrollTop = container.scrollHeight;
+             }, 0);
+           }
+           this.loadChatHistory();
        }
     } catch (error) {
       this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${error.message}` };

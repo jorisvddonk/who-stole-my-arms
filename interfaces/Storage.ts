@@ -5,15 +5,15 @@ export interface HasStorage {
 
 export interface Storage {
   getTableName(): string;
-  getDB(): Database;
+  getDB(): any;
   getSessionId(): string | undefined;
   execute(sql: string, params?: any[]): any;
   query(sql: string, params?: any[]): any[];
   getComponentVersion(): Promise<number | null>;
   setComponentVersion(version: number): Promise<void>;
-  insert(data: Record<string, any>): Promise<number>;
-  update(id: number, data: Record<string, any>): Promise<void>;
-  findById(id: number): Promise<Record<string, any> | null>;
+  insert(data: Record<string, any>, id?: string): Promise<string>;
+  update(id: string, data: Record<string, any>): Promise<void>;
+  findById(id: string): Promise<Record<string, any> | null>;
   findAll(): Promise<Record<string, any>[]>;
-  delete(id: number): Promise<void>;
+  delete(id: string): Promise<void>;
 }

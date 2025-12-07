@@ -162,28 +162,28 @@ const routeGroups = [
               const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
               await formatterSettingsTool.init(formatterStorage);
 
-              const body = await req.json();
-              const userPrompt = body.prompt;
-              if (!userPrompt) {
-                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-              }
-
-               // Get the chatMessage template prefix
-               const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
-               let prefix = '';
-               console.log(`template groups: `, templateGroups)
-               if (templateGroups) {
-                 prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
+               const body = await req.json();
+               const { prompt: userPrompt, userMessageId } = body;
+               if (!userPrompt) {
+                 return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                }
-               const fullPrompt = prefix || userPrompt;
 
-                const text = await api.generate(fullPrompt, sessionId);
+                // Get the chatMessage template prefix
+                const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+                let prefix = '';
+                console.log(`template groups: `, templateGroups)
+                if (templateGroups) {
+                  prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
+                }
+                const fullPrompt = prefix || userPrompt;
 
-                // Add user message to history
-               await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+                 const text = await api.generate(fullPrompt, sessionId);
 
-                // Add generated message to history
-               const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
+                 // Add user message to history
+                await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+
+                 // Add generated message to history
+                const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
 
               logGenerate(userPrompt, text.length);
               return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
@@ -205,56 +205,56 @@ const routeGroups = [
               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
               await characterBioDockWidget.init(bioStorage);
 
-              const body = await req.json();
-              const userPrompt = body.prompt;
-              if (!userPrompt) {
-                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-              }
+               const body = await req.json();
+               const { prompt: userPrompt, userMessageId } = body;
+               if (!userPrompt) {
+                 return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+               }
 
-              // Get the chatMessage template prefix
-              const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
-              let prefix = '';
-              console.log(`template groups: `, templateGroups)
-              if (templateGroups) {
-                prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
-              }
-              const fullPrompt = prefix || userPrompt;
+               // Get the chatMessage template prefix
+               const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
+               let prefix = '';
+               console.log(`template groups: `, templateGroups)
+               if (templateGroups) {
+                 prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
+               }
+               const fullPrompt = prefix || userPrompt;
 
-              // For streaming, we'll use Server-Sent Events
-              currentAbortController = new AbortController();
-              const stream = new ReadableStream({
-                async start(controller) {
-                  try {
-                     let totalLength = 0;
-                     let fullResponse = '';
-                       for await (const chunk of api.generateStream(fullPrompt, sessionId, currentAbortController!.signal)) {
-                       if (chunk.token) {
-                         totalLength += chunk.token.length;
-                         fullResponse += chunk.token;
-                         const data = JSON.stringify({ token: chunk.token });
-                         controller.enqueue(`data: ${data}\n\n`);
-                        } else if (chunk.tool_call) {
-                          const data = JSON.stringify({ tool_call: chunk.tool_call });
+               // For streaming, we'll use Server-Sent Events
+               currentAbortController = new AbortController();
+               const stream = new ReadableStream({
+                 async start(controller) {
+                   try {
+                      let totalLength = 0;
+                      let fullResponse = '';
+                        for await (const chunk of api.generateStream(fullPrompt, sessionId, currentAbortController!.signal)) {
+                        if (chunk.token) {
+                          totalLength += chunk.token.length;
+                          fullResponse += chunk.token;
+                          const data = JSON.stringify({ token: chunk.token });
                           controller.enqueue(`data: ${data}\n\n`);
-                        } else if (chunk.tool_result) {
-                          const data = JSON.stringify({ tool_result: chunk.tool_result });
+                         } else if (chunk.tool_call) {
+                           const data = JSON.stringify({ tool_call: chunk.tool_call });
+                           controller.enqueue(`data: ${data}\n\n`);
+                         } else if (chunk.tool_result) {
+                           const data = JSON.stringify({ tool_result: chunk.tool_result });
+                           controller.enqueue(`data: ${data}\n\n`);
+                         } else if (chunk.reasoning) {
+                           const data = JSON.stringify({ reasoning: chunk.reasoning });
+                           controller.enqueue(`data: ${data}\n\n`);
+                          } else if (chunk.finishReason) {
+                          const data = JSON.stringify({ finishReason: chunk.finishReason });
                           controller.enqueue(`data: ${data}\n\n`);
-                        } else if (chunk.reasoning) {
-                          const data = JSON.stringify({ reasoning: chunk.reasoning });
-                          controller.enqueue(`data: ${data}\n\n`);
-                         } else if (chunk.finishReason) {
-                         const data = JSON.stringify({ finishReason: chunk.finishReason });
-                         controller.enqueue(`data: ${data}\n\n`);
-                         // Add user message to history
-                         await chatHistory.addMessage(chatStorage, 'user', userPrompt);
-                         // Add generated message to history
-                         const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
-                         const idData = JSON.stringify({ messageId });
-                         controller.enqueue(`data: ${idData}\n\n`);
-                         logGenerate(userPrompt, totalLength);
-                         break;
-                       }
-                    }
+                          // Add user message to history
+                          await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+                          // Add generated message to history
+                          const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
+                          const idData = JSON.stringify({ messageId });
+                          controller.enqueue(`data: ${idData}\n\n`);
+                          logGenerate(userPrompt, totalLength);
+                          break;
+                        }
+                     }
                    } catch (error) {
                       logError(error.message);
                       // If there was partial response, store it as aborted
