@@ -19,18 +19,20 @@ export class FormatterSettingsTool implements ToolboxTool, HasStorage {
     };
   }
 
+  static async ensureTableExists(storage: Storage) {
+    const tableName = storage.getTableName();
+    await storage.execute(`CREATE TABLE IF NOT EXISTS ${tableName} (
+      id INTEGER PRIMARY KEY,
+      selectedFormatter TEXT NOT NULL
+    )`);
+  }
+
   static async getSelectedFormatter(dbManager: DatabaseManager, sessionId: string): Promise<string> {
     const db = await dbManager.getSessionDB(sessionId);
     // Get formatter settings from session storage
     const formatterStorage = new Storage(db, 'tools.formatter.settings', sessionId);
     // Ensure table exists
-    const tableName = formatterStorage.getTableName();
-    await formatterStorage.execute(
-      `CREATE TABLE IF NOT EXISTS ${tableName} (
-        id INTEGER PRIMARY KEY,
-        selectedFormatter TEXT NOT NULL
-      )`
-    );
+    await FormatterSettingsTool.ensureTableExists(formatterStorage);
     const formatterSettings = await formatterStorage.findAll();
     return formatterSettings.length > 0 ? formatterSettings[0].selectedFormatter : 'chatHistoryMessageFormatter_Basic';
   }
@@ -74,13 +76,7 @@ export class FormatterSettingsTool implements ToolboxTool, HasStorage {
           try {
             const storage = (req as any).context.get('storage');
             // Ensure table exists
-            const tableName = storage.getTableName();
-            await storage.execute(
-              `CREATE TABLE IF NOT EXISTS ${tableName} (
-                id INTEGER PRIMARY KEY,
-                selectedFormatter TEXT NOT NULL
-              )`
-            );
+            await FormatterSettingsTool.ensureTableExists(storage);
             const rows = await storage.findAll();
             const settings = rows.length > 0 ? rows[0] : { selectedFormatter: 'chatHistoryMessageFormatter_Basic' };
             return new Response(JSON.stringify(settings), { headers: { 'Content-Type': 'application/json' } });
@@ -93,13 +89,7 @@ export class FormatterSettingsTool implements ToolboxTool, HasStorage {
           try {
             const storage = (req as any).context.get('storage');
             // Ensure table exists
-            const tableName = storage.getTableName();
-            await storage.execute(
-              `CREATE TABLE IF NOT EXISTS ${tableName} (
-                id INTEGER PRIMARY KEY,
-                selectedFormatter TEXT NOT NULL
-              )`
-            );
+            await FormatterSettingsTool.ensureTableExists(storage);
             const newSettings = await req.json();
 
             // Validate settings
@@ -147,12 +137,7 @@ export class FormatterSettingsTool implements ToolboxTool, HasStorage {
     const tableName = storage.getTableName();
 
     // Create table if needed
-    await storage.execute(
-      `CREATE TABLE IF NOT EXISTS ${tableName} (
-        id INTEGER PRIMARY KEY,
-        selectedFormatter TEXT NOT NULL
-      )`
-    );
+    await FormatterSettingsTool.ensureTableExists(storage);
 
     const currentVersion = await storage.getComponentVersion();
     if (currentVersion === null) {
