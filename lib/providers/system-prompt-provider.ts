@@ -1,7 +1,25 @@
 import { PromptProvider, NamedGroup, PromptItem } from '../prompt-manager.js';
+import { existsSync, readFileSync } from 'node:fs';
 
 export class SystemPromptProvider implements PromptProvider {
+  private customPrompts: Record<string, NamedGroup> = {};
+
+  constructor() {
+    if (existsSync('system-prompts.json')) {
+      try {
+        const data = readFileSync('system-prompts.json', 'utf-8');
+        this.customPrompts = JSON.parse(data);
+      } catch (error) {
+        console.warn("Invalid json for system-prompts.json, ignoring");
+        // Invalid JSON, ignore
+      }
+    }
+  }
   async getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null> {
+    if (this.customPrompts[groupName]) {
+      return this.customPrompts[groupName];
+    }
+
     switch (groupName) {
       case 'basic':
         return {
@@ -43,9 +61,16 @@ export class SystemPromptProvider implements PromptProvider {
   }
 
   getAvailablePromptGroups(): { name: string; description: string }[] {
-    return [
+    const groups = [
       { name: 'basic', description: 'Simple system prompt' },
       { name: 'advanced', description: 'Detailed system prompt with formatting' }
     ];
+
+    for (const name in this.customPrompts) {
+      const group = this.customPrompts[name];
+      groups.push({ name, description: group.description || `Custom prompt group: ${name}` });
+    }
+
+    return groups;
   }
 }

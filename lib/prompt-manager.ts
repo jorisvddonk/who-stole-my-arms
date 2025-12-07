@@ -16,6 +16,7 @@ export interface NamedGroup {
   type: 'group';
   name: string;
   items: Item[];
+  description?: string;
 }
 
 export interface NamedGroupReference {
