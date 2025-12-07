@@ -17,6 +17,9 @@ import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js"
 import { ChatHistory } from "./lib/chat-history.js";
 import { DockManager } from "./lib/dock-manager.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
+import { LLMToolManager } from "./lib/llm-tool-manager.js";
+import { DieTool } from "./lib/tools/die-tool.js";
+import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -46,7 +49,15 @@ await dbManager.registerGlobalComponent(koboldSettingsTool);
 // Session components are now stateless and initialize storage per request
 
 // Create API after settings are loaded
-const api = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+const baseApi = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+
+// Initialize LLM tool system
+const toolManager = new LLMToolManager();
+const dieTool = new DieTool();
+toolManager.registerTool(dieTool);
+
+// Wrap API with tool calling
+const api = new ToolCallingLLM(baseApi, toolManager);
 
 // Define route groups
 const routeGroups = [
@@ -135,11 +146,11 @@ const routeGroups = [
               if (templateGroups) {
                 prefix = await promptManager.getPrompt(templateGroups, { sessionId });
               }
-              const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
+               const fullPrompt = prefix ? prefix + '\n\n' + userPrompt : userPrompt;
 
-              const text = await api.generate(fullPrompt);
+               const text = await api.generate(fullPrompt, sessionId);
 
-              // Add generated message to history
+               // Add generated message to history
               const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
 
               logGenerate(userPrompt, text.length);
@@ -183,9 +194,9 @@ const routeGroups = [
              const stream = new ReadableStream({
                async start(controller) {
                  try {
-                   let totalLength = 0;
-                   let fullResponse = '';
-                   for await (const chunk of api.generateStream(fullPrompt)) {
+                    let totalLength = 0;
+                    let fullResponse = '';
+                    for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
                      if (chunk.token) {
                        totalLength += chunk.token.length;
                        fullResponse += chunk.token;
@@ -266,11 +277,11 @@ const routeGroups = [
               // Get all messages up to this point for context
               const contextMessages = messages.filter(m => m.finishedAt <= message.finishedAt);
               const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
-              const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
+               const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
 
-              const text = await api.generate(fullPrompt);
+               const text = await api.generate(fullPrompt, sessionId);
 
-              // Append to existing message
+               // Append to existing message
               await chatHistory.appendToMessage(chatStorage, messageId, text);
 
               logGenerate(`Continue on message ${messageId}`, text.length);
@@ -324,7 +335,7 @@ const routeGroups = [
                   try {
                     let totalLength = 0;
                     let additionalResponse = '';
-                    for await (const chunk of api.generateStream(fullPrompt)) {
+                    for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
                       if (chunk.token) {
                         totalLength += chunk.token.length;
                         additionalResponse += chunk.token;

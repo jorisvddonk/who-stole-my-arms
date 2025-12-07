@@ -17,25 +17,25 @@ export class SystemPromptProvider implements PromptProvider {
           ]
         };
 
-      case 'advanced':
-        return {
-          type: 'group',
-          name: 'advanced',
-          items: [
-            {
-              type: 'prompt',
-              name: 'system-role',
-              prompt: 'You are a dungeon master AI assistant.',
-              tags: ['system', 'role']
-            },
-            {
-              type: 'prompt',
-              name: 'response-style',
-              prompt: 'Always respond in a fantastical manner that makes for an enjoyable game.',
-              tags: ['system', 'style']
-            }
-          ]
-        };
+       case 'advanced':
+         return {
+           type: 'group',
+           name: 'advanced',
+           items: [
+             {
+               type: 'prompt',
+               name: 'system-role',
+               prompt: 'You are an AI assistant with access to tools. Use tools when they would be helpful for the user\'s request.',
+               tags: ['system', 'role']
+             },
+             {
+               type: 'prompt',
+               name: 'response-style',
+               prompt: 'Be helpful and use available tools when appropriate.',
+               tags: ['system', 'style']
+             }
+           ]
+         };
 
       default:
         return null;
