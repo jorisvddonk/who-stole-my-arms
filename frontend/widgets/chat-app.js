@@ -157,7 +157,10 @@ export class ChatApp extends LitElement {
     messages: { type: Array },
     loading: { type: Boolean },
     dockHeight: { type: Number },
-    supportsStreaming: { type: Boolean }
+    supportsStreaming: { type: Boolean },
+    voiceEventSource: { type: Object },
+    voiceQueue: { type: Array },
+    isPlayingVoice: { type: Boolean }
   };
 
   constructor() {
@@ -171,6 +174,9 @@ export class ChatApp extends LitElement {
     this.currentSession = sessionManager.getCurrentSession();
     this.sessionChangeHandler = this.handleSessionChange.bind(this);
     this.currentToolCall = null;
+    this.voiceEventSource = null;
+    this.voiceQueue = [];
+    this.isPlayingVoice = false;
     this.checkLLMSettings();
   }
 
@@ -178,11 +184,28 @@ export class ChatApp extends LitElement {
     super.connectedCallback();
     sessionManager.addSessionChangeListener(this.sessionChangeHandler);
     this.loadChatHistory();
+    // Connect to voice events
+    this.voiceEventSource = new EventSource('/voice/events');
+    this.voiceEventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.audioDataUrl) {
+          this.voiceQueue.push(data.audioDataUrl);
+          this.playNextVoice();
+        }
+      } catch (e) {
+        console.warn('Failed to parse voice event:', e);
+      }
+    };
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
+    if (this.voiceEventSource) {
+      this.voiceEventSource.close();
+      this.voiceEventSource = null;
+    }
   }
 
   handleSessionChange(sessionId) {
@@ -656,6 +679,22 @@ export class ChatApp extends LitElement {
       this.loading = false;
       this.requestUpdate();
     }
+  }
+
+  playNextVoice() {
+    if (this.isPlayingVoice || this.voiceQueue.length === 0) return;
+    this.isPlayingVoice = true;
+    const audioUrl = this.voiceQueue.shift();
+    const audio = new Audio(audioUrl);
+    audio.onended = () => {
+      this.isPlayingVoice = false;
+      this.playNextVoice();
+    };
+    audio.play().catch(err => {
+      console.warn('Failed to play voice:', err);
+      this.isPlayingVoice = false;
+      this.playNextVoice();
+    });
   }
 
   render() {

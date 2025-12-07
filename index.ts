@@ -33,6 +33,8 @@ import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
 import { FormatterRegistry } from "./lib/formatters.js";
 import { MarkdownParser } from "./lib/markdown-parser.js";
 import { DebugLogger } from "./lib/debug-logger.js";
+import { ChatterboxVoiceEngine } from "./lib/chatterbox-voice-engine.js";
+import { voiceEmitter } from "./lib/voice-emitter.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -91,6 +93,10 @@ api = new ToolCallingLLM(baseApi, toolManager);
 const markdownParser = new MarkdownParser();
 const debugLogger = new DebugLogger();
 markdownParser.registerHandler(debugLogger);
+
+// Initialize Chatterbox Voice Engine
+const voiceEngine = new ChatterboxVoiceEngine();
+markdownParser.registerHandler(voiceEngine);
 
 // Define route groups
 const routeGroups = [
@@ -512,7 +518,33 @@ const routeGroups = [
               return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
             }
           }
-        })
+        }),
+        "/voice/events": (req) => {
+          const stream = new ReadableStream({
+            start(controller) {
+              const listener = (data: any) => {
+                try {
+                  controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+                } catch (e) {
+                  // Controller might be closed
+                  voiceEmitter.off('voice', listener);
+                }
+              };
+              voiceEmitter.on('voice', listener);
+              req.signal.addEventListener('abort', () => {
+                voiceEmitter.off('voice', listener);
+                controller.close();
+              });
+            }
+          });
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            }
+          });
+        }
     }
   }
 ];
