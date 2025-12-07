@@ -13,3 +13,4 @@ build/
 package-lock.json
 yarn.lock
 kobold-settings.json
+keys.json
