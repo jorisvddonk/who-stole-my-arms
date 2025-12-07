@@ -6,5 +6,6 @@ export interface LLMTool {
     properties: Record<string, any>;
     required?: string[];
   };
+  prompt?: string; // Optional custom prompt for this tool
   execute: (args: Record<string, any>) => Promise<any>;
 }

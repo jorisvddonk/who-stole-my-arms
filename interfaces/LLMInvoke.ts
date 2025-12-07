@@ -3,7 +3,7 @@ export interface NonStreamingLLMInvoke {
 }
 
 export interface StreamingLLMInvoke {
-  generateStream(prompt: string): AsyncIterable<{ token?: string; finishReason?: string }>;
+  generateStream(prompt: string): AsyncIterable<{ token?: string; finishReason?: string; tool_call?: any; tool_result?: any }>;
 }
 
 export interface LLMInfo {

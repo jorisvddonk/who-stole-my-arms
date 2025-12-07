@@ -17,6 +17,10 @@ export class DieTool implements LLMTool {
     required: ['sides']
   };
 
+  prompt = `Tool: roll_die
+Description: Roll a die with the specified number of sides. Returns a random number between 1 and the number of sides.
+Parameters: ${JSON.stringify(this.parameters.properties)}`;
+
   async execute(args: Record<string, any>): Promise<{ result: number; sides: number }> {
     const { sides } = args;
     if (typeof sides !== 'number' || sides < 2 || sides > 100) {

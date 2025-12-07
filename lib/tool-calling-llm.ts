@@ -17,75 +17,61 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
     this.toolManager = toolManager;
   }
 
-  private buildToolPrompt(tools: any[]): string {
-    if (tools.length === 0) return '';
-
-    let prompt = 'SYSTEM: You have access to these tools. When the user asks for something a tool can do, use the tool by responding ONLY with JSON.\n\nTOOLS:\n';
-    for (const tool of tools) {
-      prompt += `Name: ${tool.name}\nDescription: ${tool.description}\nParameters: ${JSON.stringify(tool.parameters.properties)}\n\n`;
-    }
-    prompt += 'TOOL CALL FORMAT: {"tool_call": {"name": "tool_name", "arguments": {...}}}\n\n';
-    prompt += 'IMPORTANT: If you need to use a tool, your response must be ONLY the JSON above. No other text.\n\n';
-    return prompt;
-  }
-
   private parseToolCall(response: string): ToolCall | null {
-    // Find the last complete JSON object in the response
-    const lines = response.split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith('{') && line.endsWith('}')) {
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.tool_call && parsed.tool_call.name && parsed.tool_call.arguments) {
-            return {
-              id: `call_${Date.now()}`,
-              name: parsed.tool_call.name,
-              arguments: parsed.tool_call.arguments
-            };
-          }
-        } catch (e) {
-          // Not valid JSON, continue
+    console.log(`[TOOL_DEBUG] Parsing tool call from: ${response.slice(-100)}`);
+    // Look for XML-like tool call tags: <|tool_call|>...JSON...<|tool_call_end|>
+    const toolCallRegex = /<\|tool_call\|>(.*?)<\|tool_call_end\|>/s;
+    const match = response.match(toolCallRegex);
+    if (match) {
+      try {
+        const toolCallJson = match[1].trim();
+        const toolCallObj = JSON.parse(toolCallJson);
+        if (toolCallObj.name && toolCallObj.arguments) {
+          console.log(`[TOOL_DEBUG] 🎯 DETECTED TOOL CALL: ${toolCallObj.name}(${JSON.stringify(toolCallObj.arguments)})`);
+          return {
+            id: `call_${Date.now()}`,
+            name: toolCallObj.name,
+            arguments: toolCallObj.arguments
+          };
         }
+      } catch (e) {
+        console.log(`[TOOL_DEBUG] Error parsing tool call:`, e);
       }
     }
+    console.log(`[TOOL_DEBUG] No tool call found`);
     return null;
   }
 
   private removeToolCallFromResponse(response: string, toolCall: ToolCall): string {
-    // Remove the tool call JSON from the response
-    const toolCallStr = JSON.stringify({ tool_call: { name: toolCall.name, arguments: toolCall.arguments } });
+    // Remove the tool call XML tags and JSON from the response
+    const toolCallStr = `<|tool_call|>${JSON.stringify({ name: toolCall.name, arguments: toolCall.arguments })}<|tool_call_end|>`;
     return response.replace(toolCallStr, '').trim();
   }
 
   async generate(prompt: string, sessionId?: string | null): Promise<string> {
-    const tools = this.toolManager.getToolDefinitions();
-    const toolPrompt = this.buildToolPrompt(tools);
-    const fullPrompt = prompt + '\n\n' + toolPrompt;
-
-    console.log(`[TOOL_DEBUG] Tools available: ${tools.length}`);
-    console.log(`[TOOL_DEBUG] Tool prompt length: ${toolPrompt.length}`);
-    console.log(`[TOOL_DEBUG] Full prompt ends with: ${fullPrompt.slice(-200)}`);
-
-    let response = await this.llm.generate(fullPrompt);
-    console.log(`[TOOL_DEBUG] Response contains tool_call: ${response.includes('tool_call')}`);
+    let response = await this.llm.generate(prompt);
     let toolCall = this.parseToolCall(response);
+    console.log(`[TOOL_DEBUG] Parsed tool call:`, toolCall);
 
     while (toolCall) {
       try {
+        console.log(`[TOOL_DEBUG] 🔧 EXECUTING TOOL CALL: ${toolCall.name} with args:`, toolCall.arguments);
         const result = await this.toolManager.executeTool(toolCall.name, toolCall.arguments);
+        console.log(`[TOOL_DEBUG] ✅ TOOL RESULT: ${toolCall.name} returned:`, result);
         logToolCall(toolCall.name, toolCall.arguments, result, sessionId);
         const toolResultPrompt = `\n\nTool result for ${toolCall.name}: ${JSON.stringify(result)}\n\n`;
         response = this.removeToolCallFromResponse(response, toolCall);
-        const continuationPrompt = fullPrompt + response + toolResultPrompt;
+        const continuationPrompt = prompt + response + toolResultPrompt;
         const continuationResponse = await this.llm.generate(continuationPrompt);
+        console.log(`[TOOL_DEBUG] Continuation response: ${continuationResponse.slice(0, 100)}`);
         response += continuationResponse;
         toolCall = this.parseToolCall(continuationResponse);
       } catch (error) {
+        console.log(`[TOOL_DEBUG] Tool execution error: ${(error as Error).message}`);
         logToolCall(toolCall.name, toolCall.arguments, { error: (error as Error).message }, sessionId);
         const errorPrompt = `\n\nTool error for ${toolCall!.name}: ${(error as Error).message}\n\n`;
         response = this.removeToolCallFromResponse(response, toolCall!);
-        const continuationPrompt = fullPrompt + response + errorPrompt;
+        const continuationPrompt = prompt + response + errorPrompt;
         const continuationResponse = await this.llm.generate(continuationPrompt);
         response += continuationResponse;
         toolCall = this.parseToolCall(continuationResponse);
@@ -95,75 +81,143 @@ export class ToolCallingLLM implements NonStreamingLLMInvoke, StreamingLLMInvoke
     return response;
   }
 
-  async *generateStream(prompt: string, sessionId?: string | null): AsyncIterable<{ token?: string; finishReason?: string }> {
-    const tools = this.toolManager.getToolDefinitions();
-    const toolPrompt = this.buildToolPrompt(tools);
-    const fullPrompt = prompt + '\n\n' + toolPrompt;
+  async *generateStream(prompt: string, sessionId?: string | null): AsyncIterable<{ token?: string; finishReason?: string; tool_call?: any; tool_result?: any }> {
+    let currentPrompt = prompt;
 
-    let accumulatedResponse = '';
-    let toolCall: ToolCall | null = null;
+    // Loop to handle multiple tool calls by restarting generation
+    while (true) {
+      let accumulatedResponse = '';
+      let toolCallDetected = false;
 
-    // First stream: generate initial response
-    for await (const chunk of this.llm.generateStream(fullPrompt)) {
-      if (chunk.token) {
-        accumulatedResponse += chunk.token;
-        yield chunk;
+      console.log(`[TOOL_DEBUG] Starting streaming generation with prompt length: ${currentPrompt.length}`);
 
-        // Check if we have a complete tool call
-        if (!toolCall) {
-          toolCall = this.parseToolCall(accumulatedResponse);
+      // Stream the current prompt
+      for await (const chunk of this.llm.generateStream(currentPrompt)) {
+        if (chunk.token) {
+          console.log(`\x1b[31m[TOOL_DEBUG]\x1b[0m \x1b[90mReceived token:\x1b[0m \x1b[95m\`${chunk.token}\`\x1b[0m`);
+          accumulatedResponse += chunk.token;
+
+          // Always yield the token first
+          yield chunk;
+
+          // Then check for complete tool calls in the accumulated response
+          const toolCall = this.parseToolCall(accumulatedResponse);
           if (toolCall) {
-            // Stop yielding tokens until tool is executed
-            break;
+            console.log(`[TOOL_DEBUG] 🎯 STREAMING TOOL CALL DETECTED:`, toolCall);
+            toolCallDetected = true;
+
+            // Abort current generation
+            console.log(`[TOOL_DEBUG] Aborting current generation for tool execution`);
+            await this.llm.abortGeneration();
+
+            try {
+              console.log(`[TOOL_DEBUG] 🔧 STREAMING TOOL EXECUTION: ${toolCall.name} with args:`, toolCall.arguments);
+              const result = await this.toolManager.executeTool(toolCall.name, toolCall.arguments);
+              console.log(`[TOOL_DEBUG] ✅ STREAMING TOOL RESULT: ${toolCall.name} returned:`, result);
+              logToolCall(toolCall.name, toolCall.arguments, result, sessionId);
+
+              // Send tool call and result messages
+              yield { tool_call: toolCall };
+              yield { tool_result: { name: toolCall.name, result } };
+
+              // Yield the tool result as formatted text
+              const toolResultText = `<|tool_result|>{"name": "${toolCall.name}", "result": ${JSON.stringify(result)}}<|tool_result_end|>`;
+              for (const char of toolResultText) {
+                yield { token: char };
+              }
+
+              // Create new prompt for continuation
+              const toolResultPrompt = `\n\n${toolResultText}\n\n`;
+              currentPrompt = currentPrompt + accumulatedResponse + toolResultPrompt;
+
+              console.log(`[TOOL_DEBUG] Restarting generation with updated prompt`);
+              break; // Exit inner loop to restart with new prompt
+
+            } catch (error) {
+              console.log(`[TOOL_DEBUG] Tool execution error: ${(error as Error).message}`);
+              logToolCall(toolCall.name, toolCall.arguments, { error: (error as Error).message }, sessionId);
+
+              // Send error result
+              yield { tool_call: toolCall };
+              yield { tool_result: { name: toolCall.name, error: (error as Error).message } };
+
+              // Yield the tool error as formatted text
+              const toolErrorText = `<|tool_result|>{"name": "${toolCall.name}", "error": "${(error as Error).message}"}<|tool_result_end|>`;
+              for (const char of toolErrorText) {
+                yield { token: char };
+              }
+
+              // Create error continuation prompt
+              const errorPrompt = `\n\n${toolErrorText}\n\n`;
+              currentPrompt = currentPrompt + accumulatedResponse + errorPrompt;
+
+              console.log(`[TOOL_DEBUG] Restarting generation after tool error`);
+              break; // Exit inner loop to restart with new prompt
+            }
+          }
+        } else if (chunk.finishReason) {
+          console.log(`[TOOL_DEBUG] Generation finished with reason: ${chunk.finishReason}`);
+
+          // Final check for tool calls in the complete response
+          const finalToolCall = this.parseToolCall(accumulatedResponse);
+          if (finalToolCall) {
+            console.log(`[TOOL_DEBUG] 🎯 FINAL TOOL CALL DETECTED:`, finalToolCall);
+
+            try {
+              console.log(`[TOOL_DEBUG] 🔧 FINAL TOOL EXECUTION: ${finalToolCall.name} with args:`, finalToolCall.arguments);
+              const result = await this.toolManager.executeTool(finalToolCall.name, finalToolCall.arguments);
+              console.log(`[TOOL_DEBUG] ✅ FINAL TOOL RESULT: ${finalToolCall.name} returned:`, result);
+              logToolCall(finalToolCall.name, finalToolCall.arguments, result, sessionId);
+
+              // Send tool call and result messages
+              yield { tool_call: finalToolCall };
+              yield { tool_result: { name: finalToolCall.name, result } };
+
+              // Yield the tool result as formatted text
+              const toolResultText = `<|tool_result|>{"name": "${finalToolCall.name}", "result": ${JSON.stringify(result)}}<|tool_result_end|>`;
+              for (const char of toolResultText) {
+                yield { token: char };
+              }
+
+              // Create new prompt for continuation
+              const toolResultPrompt = `\n\n${toolResultText}\n\n`;
+              currentPrompt = currentPrompt + accumulatedResponse + toolResultPrompt;
+
+              console.log(`[TOOL_DEBUG] Restarting generation after final tool call`);
+              break; // Exit inner loop to restart with new prompt
+
+            } catch (error) {
+              console.log(`[TOOL_DEBUG] Final tool execution error: ${(error as Error).message}`);
+              logToolCall(finalToolCall.name, finalToolCall.arguments, { error: (error as Error).message }, sessionId);
+
+              // Send error result
+              yield { tool_call: finalToolCall };
+              yield { tool_result: { name: finalToolCall.name, error: (error as Error).message } };
+
+              // Yield the tool error as formatted text
+              const toolErrorText = `<|tool_result|>{"name": "${finalToolCall.name}", "error": "${(error as Error).message}"}<|tool_result_end|>`;
+              for (const char of toolErrorText) {
+                yield { token: char };
+              }
+
+              // Create error continuation prompt
+              const errorPrompt = `\n\n${toolErrorText}\n\n`;
+              currentPrompt = currentPrompt + accumulatedResponse + errorPrompt;
+
+              console.log(`[TOOL_DEBUG] Restarting generation after final tool error`);
+              break; // Exit inner loop to restart with new prompt
+            }
+          } else {
+            yield chunk;
+            return; // No more tool calls, end streaming
           }
         }
-      } else if (chunk.finishReason) {
-        yield chunk;
-        return;
       }
-    }
 
-    // If we have a tool call, execute it and continue streaming
-    while (toolCall) {
-      try {
-        const result = await this.toolManager.executeTool(toolCall.name, toolCall.arguments);
-        logToolCall(toolCall.name, toolCall.arguments, result, sessionId);
-        const toolResultPrompt = `\n\nTool result for ${toolCall.name}: ${JSON.stringify(result)}\n\n`;
-        accumulatedResponse = this.removeToolCallFromResponse(accumulatedResponse, toolCall);
-        const continuationPrompt = fullPrompt + accumulatedResponse + toolResultPrompt;
-
-        let continuationResponse = '';
-        for await (const chunk of this.llm.generateStream(continuationPrompt)) {
-          if (chunk.token) {
-            continuationResponse += chunk.token;
-            yield chunk;
-          } else if (chunk.finishReason) {
-            yield chunk;
-            return;
-          }
-        }
-
-        accumulatedResponse += continuationResponse;
-        toolCall = this.parseToolCall(continuationResponse);
-      } catch (error) {
-        logToolCall(toolCall.name, toolCall.arguments, { error: (error as Error).message }, sessionId);
-        const errorPrompt = `\n\nTool error for ${toolCall.name}: ${(error as Error).message}\n\n`;
-        accumulatedResponse = this.removeToolCallFromResponse(accumulatedResponse, toolCall);
-        const continuationPrompt = fullPrompt + accumulatedResponse + errorPrompt;
-
-        let continuationResponse = '';
-        for await (const chunk of this.llm.generateStream(continuationPrompt)) {
-          if (chunk.token) {
-            continuationResponse += chunk.token;
-            yield chunk;
-          } else if (chunk.finishReason) {
-            yield chunk;
-            return;
-          }
-        }
-
-        accumulatedResponse += continuationResponse;
-        toolCall = this.parseToolCall(continuationResponse);
+      // If no tool call was detected in this iteration, we're done
+      if (!toolCallDetected) {
+        console.log(`[TOOL_DEBUG] No tool call detected, ending stream`);
+        break;
       }
     }
   }

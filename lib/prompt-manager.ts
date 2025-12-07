@@ -50,7 +50,7 @@ export class PromptManager implements ToolboxTool, HasStorage {
       // Add default chatMessage template
       const defaultTemplate = {
         name: 'chatMessage',
-        groups: ['system/advanced', 'chat/chatHistory', 'character-bio/bio'],
+        groups: ['system/advanced', 'tools/tools', 'chat/chatHistory', 'character-bio/bio'],
         createdAt: new Date()
       };
       await storage.insert({

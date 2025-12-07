@@ -23,11 +23,7 @@ export class LLMToolManager {
     return await tool.execute(args);
   }
 
-  getToolDefinitions(): any[] {
-    return this.getTools().map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters
-    }));
+  getToolDefinitions(): LLMTool[] {
+    return this.getTools();
   }
 }

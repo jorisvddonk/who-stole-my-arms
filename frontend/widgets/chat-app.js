@@ -1,6 +1,7 @@
 console.log('Chat app module loaded');
 
 import { LitElement, html, css } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
+import { unsafeHTML } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/all/lit-all.min.js';
 import { sessionManager } from './session-manager.js';
 
 export class ChatApp extends LitElement {
@@ -97,14 +98,35 @@ export class ChatApp extends LitElement {
       color: var(--text-color);
       border: 1px solid var(--border-color);
     }
-    .generating-indicator {
-      font-size: 0.8em;
+    .message.tool-call {
+      background: var(--user-msg-bg);
       color: var(--text-color);
-      opacity: 0.7;
-      margin-top: 4px;
-      margin-left: 10px;
-      font-style: italic;
+      border: 2px solid #4CAF50;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
     }
+    .message.tool-result {
+      background: var(--system-msg-bg);
+      color: var(--text-color);
+      border: 2px solid #2196F3;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+     .generating-indicator {
+       font-size: 0.8em;
+       color: var(--text-color);
+       opacity: 0.7;
+       margin-top: 4px;
+       margin-left: 10px;
+       font-style: italic;
+     }
+     .tool-item {
+       border: 1px solid var(--border-color);
+       padding: 4px;
+       margin: 2px 0;
+       background: var(--primary-bg);
+       border-radius: 4px;
+     }
 
   `;
 
@@ -125,6 +147,7 @@ export class ChatApp extends LitElement {
     this.supportsStreaming = false;
     this.currentSession = sessionManager.getCurrentSession();
     this.sessionChangeHandler = this.handleSessionChange.bind(this);
+    this.currentToolCall = null;
     this.checkLLMSettings();
   }
 
@@ -220,6 +243,7 @@ export class ChatApp extends LitElement {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let fullContent = '';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -238,17 +262,31 @@ export class ChatApp extends LitElement {
                 try {
                   const data = JSON.parse(line.slice(6));
                   if (data.token) {
+                    fullContent += data.token;
                     this.messages[systemMessageIndex].content += data.token;
                     this.requestUpdate();
+
                     // Scroll to bottom
                     setTimeout(() => {
                       const container = this.shadowRoot.querySelector('.chat-container');
-                      container.scrollTop = container.scrollHeight;
-                    }, 0);
-                   } else if (data.finishReason) {
-                     // Generation completed with finish reason
-                     console.log('Generation finished:', data.finishReason);
-                     break;
+                       container.scrollTop = container.scrollHeight;
+                     }, 0);
+                    } else if (data.tool_call) {
+                      // Handle tool call message
+                      console.log('🎯 Frontend received tool_call:', data.tool_call);
+                      this.messages[systemMessageIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
+                      this.requestUpdate();
+                    } else if (data.tool_result) {
+                      // Handle tool result message
+                      console.log('🎯 Frontend received tool_result:', data.tool_result);
+                      const resultContent = data.tool_result.error
+                        ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
+                        : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
+                      this.messages[systemMessageIndex].content += `<div class="tool-item">${resultContent}</div>`;
+                      this.requestUpdate();
+                    } else if (data.finishReason) {
+                      console.log('Generation finished:', data.finishReason);
+                      break;
                    } else if (data.messageId) {
                      // Set the message id for continuation
                      this.messages[systemMessageIndex].id = data.messageId;
@@ -266,17 +304,17 @@ export class ChatApp extends LitElement {
             }
           }
         }
-       } else {
-         // Handle non-streaming response
-         const data = await res.json();
-         this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
-         this.requestUpdate();
-        // Scroll to bottom
-        setTimeout(() => {
-          const container = this.shadowRoot.querySelector('.chat-container');
-          container.scrollTop = container.scrollHeight;
-        }, 0);
-      }
+        } else {
+          // Handle non-streaming response
+          const data = await res.json();
+          this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
+          this.requestUpdate();
+         // Scroll to bottom
+         setTimeout(() => {
+           const container = this.shadowRoot.querySelector('.chat-container');
+           container.scrollTop = container.scrollHeight;
+         }, 0);
+       }
     } catch (error) {
       this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${error.message}` };
       this.requestUpdate();
@@ -309,6 +347,60 @@ export class ChatApp extends LitElement {
 
   stripLeadingNewlines(content) {
     return content.replace(/^\n+/, '');
+  }
+
+  parseAndDisplayToolCall(fullContent, systemMessageIndex) {
+    // Find tool call JSON
+    const toolCallStart = fullContent.indexOf('{"tool_call"');
+    if (toolCallStart === -1) return;
+
+    const toolCallEnd = fullContent.indexOf('}', toolCallStart) + 1;
+    const toolCallJson = fullContent.slice(toolCallStart, toolCallEnd);
+
+    try {
+      const toolCallData = JSON.parse(toolCallJson);
+      const toolCall = toolCallData.tool_call;
+
+      // Find tool result
+      const resultMatch = fullContent.match(/Tool result for ([^:]+): (\{.*?\})/);
+      if (resultMatch) {
+        const toolName = resultMatch[1];
+        const result = resultMatch[2];
+
+        // Update the system message to only include content before tool call
+        const beforeToolCall = fullContent.slice(0, toolCallStart).trim();
+        if (beforeToolCall) {
+          this.messages[systemMessageIndex].content = beforeToolCall;
+        } else {
+          // Remove the system message if it only contained the tool call
+          this.messages.splice(systemMessageIndex, 1);
+          systemMessageIndex--;
+        }
+
+        // Add tool call message
+        this.messages.splice(systemMessageIndex + 1, 0, {
+          role: 'tool-call',
+          content: `🔧 Calling tool: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`
+        });
+
+        // Add tool result message
+        this.messages.splice(systemMessageIndex + 2, 0, {
+          role: 'tool-result',
+          content: `✅ ${toolName} result: ${result}`
+        });
+
+        // Add remaining content after tool result
+        const afterResult = fullContent.split(resultMatch[0])[1]?.trim();
+        if (afterResult) {
+          this.messages.splice(systemMessageIndex + 3, 0, {
+            role: 'system',
+            content: afterResult
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse tool call:', e);
+    }
   }
 
   async handleContinue(messageId) {
@@ -349,32 +441,51 @@ export class ChatApp extends LitElement {
 
             for (const line of message.split('\n')) {
               if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  if (data.token) {
-                    // Find the message and append the token
-                    const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                    if (msgIndex !== -1) {
-                      this.messages[msgIndex].content += data.token;
-                      this.requestUpdate();
-                      // Scroll to bottom
-                      setTimeout(() => {
-                        const container = this.shadowRoot.querySelector('.chat-container');
-                        container.scrollTop = container.scrollHeight;
-                      }, 0);
-                    }
-                  } else if (data.finishReason) {
-                    // Generation completed
-                    console.log('Continue generation finished:', data.finishReason);
-                    break;
-                  } else if (data.error) {
-                    console.warn('Continue generation error:', data.error);
-                    return;
-                  }
-                } catch (e) {
-                  // Skip malformed JSON
-                  continue;
-                }
+                 try {
+                   const data = JSON.parse(line.slice(6));
+                   if (data.token) {
+                     // Find the message and append the token
+                     const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                     if (msgIndex !== -1) {
+                       this.messages[msgIndex].content += data.token;
+                       this.requestUpdate();
+                       // Scroll to bottom
+                       setTimeout(() => {
+                         const container = this.shadowRoot.querySelector('.chat-container');
+                         container.scrollTop = container.scrollHeight;
+                        }, 0);
+                      }
+                    } else if (data.tool_call) {
+                      // Handle tool call message
+                      console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
+                      const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                      if (msgIndex !== -1) {
+                        this.messages[msgIndex].content += `<div class="tool-item">🔧 Calling tool: ${data.tool_call.name}(${JSON.stringify(data.tool_call.arguments)})</div>`;
+                        this.requestUpdate();
+                      }
+                    } else if (data.tool_result) {
+                      // Handle tool result message
+                      console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                      const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                      if (msgIndex !== -1) {
+                        const resultContent = data.tool_result.error
+                          ? `❌ ${data.tool_result.name} error: ${data.tool_result.error}`
+                          : `✅ ${data.tool_result.name} result: ${JSON.stringify(data.tool_result.result)}`;
+                        this.messages[msgIndex].content += `<div class="tool-item">${resultContent}</div>`;
+                        this.requestUpdate();
+                      }
+                    } else if (data.finishReason) {
+                     // Generation completed
+                     console.log('Continue generation finished:', data.finishReason);
+                     break;
+                   } else if (data.error) {
+                     console.warn('Continue generation error:', data.error);
+                     return;
+                   }
+                 } catch (e) {
+                   // Skip malformed JSON
+                   continue;
+                 }
               }
             }
           }
@@ -409,9 +520,10 @@ export class ChatApp extends LitElement {
         ${this.messages.map((msg, index) => {
           const isLastSystemMessage = msg.role === 'system' && index === this.messages.length - 1;
           const showContinueButton = msg.role === 'system' && index === this.messages.length - 1 && !this.loading;
+          const isDeletable = msg.role === 'system' || msg.role === 'user';
           return html`
             <div class="message-container">
-              <div class="message ${msg.role}">${this.stripLeadingNewlines(msg.content)}<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
+              <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(msg.content))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${() => this.deleteMessage(msg.id)}>×</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
             </div>
           `;
