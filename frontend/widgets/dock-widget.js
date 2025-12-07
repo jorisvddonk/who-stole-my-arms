@@ -123,6 +123,16 @@ export class DockWidget extends LitElement {
     sessionManager.removeSessionChangeListener(this.sessionChangeHandler);
   }
 
+  updated(changedProperties) {
+    if (changedProperties.has('loading') && !this.loading) {
+      // Loading just finished, refocus the input
+      setTimeout(() => {
+        const input = this.shadowRoot.querySelector('#prompt');
+        if (input && !input.disabled) input.focus();
+      }, 10);
+    }
+  }
+
   async loadConfig() {
     try {
       const res = await fetch(`/sessions/${this.sessionId}/dock/config`);
@@ -289,7 +299,21 @@ export class DockWidget extends LitElement {
 
   handleKeyDown(e) {
     if (e.key === 'Enter') {
-      this.handleSubmit();
+      e.preventDefault();
+      if (e.shiftKey) {
+        // Shift+Enter: wrap in quotes and send
+        const input = this.shadowRoot.querySelector('#prompt');
+        input.value = `"${input.value}"`;
+        this.handleSubmit();
+      } else {
+        // Enter: send normally
+        this.handleSubmit();
+      }
+      // Refocus after sending
+      setTimeout(() => {
+        const input = this.shadowRoot.querySelector('#prompt');
+        if (input) input.focus();
+      }, 10);
     }
   }
 
@@ -297,7 +321,7 @@ export class DockWidget extends LitElement {
     return html`
       <div class="chat-bar">
         <toolbox-menu .floating=${false}></toolbox-menu>
-        <input id="prompt" type="text" placeholder="Type your message..." @keydown=${this.handleKeyDown} ?disabled=${this.loading}>
+        <input id="prompt" type="text" placeholder="Type your message..." @keydown=${this.handleKeyDown}>
         <button @click=${this.handleSubmit} ?disabled=${false} class=${this.loading ? 'abort' : ''}>
           ${this.loading ? 'Abort' : 'Send'}
         </button>
