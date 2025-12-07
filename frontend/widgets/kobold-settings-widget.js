@@ -37,6 +37,17 @@ export class KoboldSettingsWidget extends LitElement {
       width: 100px;
     }
 
+    textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text-color);
+      resize: vertical;
+      min-height: 80px;
+    }
+
     .button-group {
       display: flex;
       gap: 10px;
@@ -101,12 +112,35 @@ export class KoboldSettingsWidget extends LitElement {
     super();
     this.settings = {
       baseUrl: 'http://localhost:5001',
+      n: 1,
+      maxContextLength: 10240,
       maxLength: 100,
-      temperature: 0.7,
-      topK: 40,
-      topP: 0.9,
-      repetitionPenalty: 1.0,
-      minP: 0.05
+      repetitionPenalty: 1.05,
+      temperature: 0.75,
+      topP: 0.92,
+      topK: 100,
+      topA: 0,
+      typical: 1,
+      tfs: 1,
+      repPenRange: 360,
+      repPenSlope: 0.7,
+      samplerOrder: [6, 0, 1, 3, 4, 2, 5],
+      memory: '',
+      trimStop: true,
+      minP: 0,
+      dynatempRange: 0,
+      dynatempExponent: 1,
+      smoothingFactor: 0,
+      nsigma: 0,
+      bannedTokens: [],
+      renderSpecial: false,
+      logprobs: false,
+      replaceInstructPlaceholders: true,
+      presencePenalty: 0,
+      logitBias: {},
+      stopSequence: ['{{[INPUT]}}', '{{[OUTPUT]}}'],
+      useDefaultBadwordsids: false,
+      bypassEos: false
     };
     this.status = '';
     this.statusType = '';
@@ -153,10 +187,30 @@ export class KoboldSettingsWidget extends LitElement {
   }
 
   handleInputChange(e) {
-    const { name, value, type } = e.target;
+    const { name, value, type, checked } = e.target;
+    let processedValue = value;
+
+    if (type === 'number') {
+      processedValue = parseFloat(value);
+    } else if (type === 'checkbox') {
+      processedValue = checked;
+    } else if (name === 'samplerOrder' || name === 'bannedTokens' || name === 'stopSequence') {
+      try {
+        processedValue = JSON.parse(value);
+      } catch {
+        processedValue = value;
+      }
+    } else if (name === 'logitBias') {
+      try {
+        processedValue = JSON.parse(value);
+      } catch {
+        processedValue = {};
+      }
+    }
+
     this.settings = {
       ...this.settings,
-      [name]: type === 'number' ? parseFloat(value) : value
+      [name]: processedValue
     };
   }
 
@@ -261,6 +315,284 @@ export class KoboldSettingsWidget extends LitElement {
             min="0"
             max="1"
             step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="n">N:</label>
+          <input
+            type="number"
+            id="n"
+            name="n"
+            .value=${this.settings.n}
+            @input=${this.handleInputChange}
+            min="1"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="maxContextLength">Max Context Length:</label>
+          <input
+            type="number"
+            id="maxContextLength"
+            name="maxContextLength"
+            .value=${this.settings.maxContextLength}
+            @input=${this.handleInputChange}
+            min="1"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="topA">Top A:</label>
+          <input
+            type="number"
+            id="topA"
+            name="topA"
+            .value=${this.settings.topA}
+            @input=${this.handleInputChange}
+            min="0"
+            max="1"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="typical">Typical:</label>
+          <input
+            type="number"
+            id="typical"
+            name="typical"
+            .value=${this.settings.typical}
+            @input=${this.handleInputChange}
+            min="0"
+            max="1"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="tfs">TFS:</label>
+          <input
+            type="number"
+            id="tfs"
+            name="tfs"
+            .value=${this.settings.tfs}
+            @input=${this.handleInputChange}
+            min="0"
+            max="1"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="repPenRange">Rep Pen Range:</label>
+          <input
+            type="number"
+            id="repPenRange"
+            name="repPenRange"
+            .value=${this.settings.repPenRange}
+            @input=${this.handleInputChange}
+            min="0"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="repPenSlope">Rep Pen Slope:</label>
+          <input
+            type="number"
+            id="repPenSlope"
+            name="repPenSlope"
+            .value=${this.settings.repPenSlope}
+            @input=${this.handleInputChange}
+            min="0"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="samplerOrder">Sampler Order (JSON array):</label>
+          <input
+            type="text"
+            id="samplerOrder"
+            name="samplerOrder"
+            .value=${JSON.stringify(this.settings.samplerOrder)}
+            @input=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="memory">Memory:</label>
+          <input
+            type="text"
+            id="memory"
+            name="memory"
+            .value=${this.settings.memory}
+            @input=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="trimStop">Trim Stop:</label>
+          <input
+            type="checkbox"
+            id="trimStop"
+            name="trimStop"
+            .checked=${this.settings.trimStop}
+            @change=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="dynatempRange">DynaTemp Range:</label>
+          <input
+            type="number"
+            id="dynatempRange"
+            name="dynatempRange"
+            .value=${this.settings.dynatempRange}
+            @input=${this.handleInputChange}
+            min="0"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="dynatempExponent">DynaTemp Exponent:</label>
+          <input
+            type="number"
+            id="dynatempExponent"
+            name="dynatempExponent"
+            .value=${this.settings.dynatempExponent}
+            @input=${this.handleInputChange}
+            min="0"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="smoothingFactor">Smoothing Factor:</label>
+          <input
+            type="number"
+            id="smoothingFactor"
+            name="smoothingFactor"
+            .value=${this.settings.smoothingFactor}
+            @input=${this.handleInputChange}
+            min="0"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="nsigma">N Sigma:</label>
+          <input
+            type="number"
+            id="nsigma"
+            name="nsigma"
+            .value=${this.settings.nsigma}
+            @input=${this.handleInputChange}
+            min="0"
+            step="0.01"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="bannedTokens">Banned Tokens (JSON array):</label>
+          <input
+            type="text"
+            id="bannedTokens"
+            name="bannedTokens"
+            .value=${JSON.stringify(this.settings.bannedTokens)}
+            @input=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="renderSpecial">Render Special:</label>
+          <input
+            type="checkbox"
+            id="renderSpecial"
+            name="renderSpecial"
+            .checked=${this.settings.renderSpecial}
+            @change=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="logprobs">Logprobs:</label>
+          <input
+            type="checkbox"
+            id="logprobs"
+            name="logprobs"
+            .checked=${this.settings.logprobs}
+            @change=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="replaceInstructPlaceholders">Replace Instruct Placeholders:</label>
+          <input
+            type="checkbox"
+            id="replaceInstructPlaceholders"
+            name="replaceInstructPlaceholders"
+            .checked=${this.settings.replaceInstructPlaceholders}
+            @change=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="presencePenalty">Presence Penalty:</label>
+          <input
+            type="number"
+            id="presencePenalty"
+            name="presencePenalty"
+            .value=${this.settings.presencePenalty}
+            @input=${this.handleInputChange}
+            min="0"
+            max="2"
+            step="0.1"
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="logitBias">Logit Bias (JSON object):</label>
+          <input
+            type="text"
+            id="logitBias"
+            name="logitBias"
+            .value=${JSON.stringify(this.settings.logitBias)}
+            @input=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="stopSequence">Stop Sequence (JSON array):</label>
+          <input
+            type="text"
+            id="stopSequence"
+            name="stopSequence"
+            .value=${JSON.stringify(this.settings.stopSequence)}
+            @input=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="useDefaultBadwordsids">Use Default Badwordsids:</label>
+          <input
+            type="checkbox"
+            id="useDefaultBadwordsids"
+            name="useDefaultBadwordsids"
+            .checked=${this.settings.useDefaultBadwordsids}
+            @change=${this.handleInputChange}
+          >
+        </div>
+
+        <div class="setting-group">
+          <label for="bypassEos">Bypass EOS:</label>
+          <input
+            type="checkbox"
+            id="bypassEos"
+            name="bypassEos"
+            .checked=${this.settings.bypassEos}
+            @change=${this.handleInputChange}
           >
         </div>
 
