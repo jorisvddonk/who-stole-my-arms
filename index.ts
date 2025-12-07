@@ -14,6 +14,7 @@ import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
+import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
@@ -44,6 +45,7 @@ const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_
 } : undefined);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const formatterSettingsTool = new FormatterSettingsTool(toolboxCollector);
+const autoScrollSettingsTool = new AutoScrollSettingsTool();
 const osMetricsDockWidget = new OsMetricsDockWidget();
 const characterBioDockWidget = new CharacterBioDockWidget();
 const dockManager = new DockManager(toolboxCollector);
@@ -89,6 +91,7 @@ const routeGroups = [
   koboldSettingsTool,
   openRouterSettingsTool,
   formatterSettingsTool,
+  autoScrollSettingsTool,
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,

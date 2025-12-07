@@ -230,12 +230,19 @@ export class ChatApp extends LitElement {
     this.messages = [...this.messages, { role: 'user', content: prompt }];
     this.loading = true;
 
-    // Add a new system message that we'll update with content
-    const systemMessageIndex = this.messages.length;
-    this.messages = [...this.messages, { role: 'system', content: '' }];
-    this.requestUpdate();
+     // Add a new system message that we'll update with content
+     const systemMessageIndex = this.messages.length;
+     this.messages = [...this.messages, { role: 'system', content: '' }];
+                           this.requestUpdate();
+                           // Scroll to bottom
+                           if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                             setTimeout(() => {
+                               const container = this.shadowRoot.querySelector('.chat-container');
+                               container.scrollTop = container.scrollHeight;
+                             }, 0);
+                           }
 
-    try {
+     try {
       const endpoint = this.supportsStreaming ? `/sessions/${this.currentSession}/generateStream` : `/sessions/${this.currentSession}/generate`;
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -273,11 +280,18 @@ export class ChatApp extends LitElement {
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
-                    if (data.token) {
-                      fullContent += data.token;
-                      this.messages[systemMessageIndex].content += data.token;
-                      this.requestUpdate();
-                    } else if (data.reasoning) {
+                     if (data.token) {
+                       fullContent += data.token;
+                       this.messages[systemMessageIndex].content += data.token;
+           this.requestUpdate();
+           // Scroll to bottom
+           if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+             setTimeout(() => {
+               const container = this.shadowRoot.querySelector('.chat-container');
+               container.scrollTop = container.scrollHeight;
+             }, 0);
+           }
+                     } else if (data.reasoning) {
                       // Append reasoning to content with marker, concatenating consecutive reasoning
                       if (this.messages[systemMessageIndex].content.endsWith('</reasoning>')) {
                         // Insert before the closing tag to concatenate
@@ -292,17 +306,31 @@ export class ChatApp extends LitElement {
                       const container = this.shadowRoot.querySelector('.chat-container');
                        container.scrollTop = container.scrollHeight;
                      }, 0);
-                     } else if (data.tool_call) {
-                       // Handle tool call message
-                       console.log('🎯 Frontend received tool_call:', data.tool_call);
-                       // this.messages[systemMessageIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
-                       this.requestUpdate();
-                      } else if (data.tool_result) {
-                        // Handle tool result message
-                        console.log('🎯 Frontend received tool_result:', data.tool_result);
-                        // this.messages[systemMessageIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                      } else if (data.tool_call) {
+                        // Handle tool call message
+                        console.log('🎯 Frontend received tool_call:', data.tool_call);
+                        // this.messages[systemMessageIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
                         this.requestUpdate();
-                    } else if (data.finishReason) {
+                        // Scroll to bottom
+                        if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                          setTimeout(() => {
+                            const container = this.shadowRoot.querySelector('.chat-container');
+                            container.scrollTop = container.scrollHeight;
+                          }, 0);
+                        }
+                       } else if (data.tool_result) {
+                         // Handle tool result message
+                         console.log('🎯 Frontend received tool_result:', data.tool_result);
+                         // this.messages[systemMessageIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                         this.requestUpdate();
+                         // Scroll to bottom
+                         if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                           setTimeout(() => {
+                             const container = this.shadowRoot.querySelector('.chat-container');
+                             container.scrollTop = container.scrollHeight;
+                           }, 0);
+                         }
+                     } else if (data.finishReason) {
                       console.log('Generation finished:', data.finishReason);
                       break;
                    } else if (data.messageId) {
@@ -326,12 +354,14 @@ export class ChatApp extends LitElement {
           // Handle non-streaming response
           const data = await res.json();
           this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
-          this.requestUpdate();
-         // Scroll to bottom
-         setTimeout(() => {
-           const container = this.shadowRoot.querySelector('.chat-container');
-           container.scrollTop = container.scrollHeight;
-         }, 0);
+           this.requestUpdate();
+          // Scroll to bottom
+          if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+            setTimeout(() => {
+              const container = this.shadowRoot.querySelector('.chat-container');
+              container.scrollTop = container.scrollHeight;
+            }, 0);
+          }
        }
     } catch (error) {
       this.messages[systemMessageIndex] = { role: 'system', content: `Error: ${error.message}` };
@@ -494,42 +524,46 @@ export class ChatApp extends LitElement {
                      const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
                      if (msgIndex !== -1) {
                        this.messages[msgIndex].content += data.token;
-                       this.requestUpdate();
-                       // Scroll to bottom
-                       setTimeout(() => {
-                         const container = this.shadowRoot.querySelector('.chat-container');
-                         container.scrollTop = container.scrollHeight;
-                        }, 0);
+     this.requestUpdate();
+     // Scroll to bottom
+     if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+       setTimeout(() => {
+         const container = this.shadowRoot.querySelector('.chat-container');
+         container.scrollTop = container.scrollHeight;
+       }, 0);
+     }
                       }
-                     } else if (data.tool_call) {
-                       // Handle tool call message
-                       console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
-                       const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                       if (msgIndex !== -1) {
-                         this.messages[msgIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
-                         this.requestUpdate();
-                       }
-                      } else if (data.tool_result) {
-                        // Handle tool result message
-                        console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                       } else if (data.tool_call) {
+                        // Handle tool call message
+                        console.log('🎯 Frontend received tool_call during continue:', data.tool_call);
                         const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
                         if (msgIndex !== -1) {
-                          this.messages[msgIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
-                          this.requestUpdate();
+                          this.messages[msgIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
+                        this.requestUpdate();
+                        // Scroll to bottom
+                        if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                          setTimeout(() => {
+                            const container = this.shadowRoot.querySelector('.chat-container');
+                            container.scrollTop = container.scrollHeight;
+                           }, 0);
                         }
-                      } else if (data.reasoning) {
-                        // Handle reasoning during continue
-                        const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
-                        if (msgIndex !== -1) {
-                          if (this.messages[msgIndex].content.endsWith('</reasoning>')) {
-                            // Insert before the closing tag to concatenate
-                            this.messages[msgIndex].content = this.messages[msgIndex].content.slice(0, -12) + data.reasoning + '</reasoning>';
-                          } else {
-                            this.messages[msgIndex].content += `<reasoning>${data.reasoning}</reasoning>`;
-                          }
-                          this.requestUpdate();
                         }
-                     } else if (data.finishReason) {
+                       } else if (data.tool_result) {
+                         // Handle tool result message
+                         console.log('🎯 Frontend received tool_result during continue:', data.tool_result);
+                         const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
+                         if (msgIndex !== -1) {
+                           this.messages[msgIndex].content += `<|tool_result|>${JSON.stringify(data.tool_result)}<|tool_result_end|>`;
+                           this.requestUpdate();
+                           // Scroll to bottom
+                           if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                             setTimeout(() => {
+                               const container = this.shadowRoot.querySelector('.chat-container');
+                               container.scrollTop = container.scrollHeight;
+                             }, 0);
+                           }
+                         }
+                       } else if (data.finishReason) {
                      // Generation completed
                      console.log('Continue generation finished:', data.finishReason);
                      break;
@@ -552,12 +586,14 @@ export class ChatApp extends LitElement {
         const msgIndex = this.messages.findIndex(msg => msg.id === messageId);
         if (msgIndex !== -1) {
           this.messages[msgIndex].content += data.text;
-          this.requestUpdate();
-          // Scroll to bottom
-          setTimeout(() => {
-            const container = this.shadowRoot.querySelector('.chat-container');
-            container.scrollTop = container.scrollHeight;
-          }, 0);
+                          this.requestUpdate();
+                          // Scroll to bottom
+                          if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
+                            setTimeout(() => {
+                              const container = this.shadowRoot.querySelector('.chat-container');
+                              container.scrollTop = container.scrollHeight;
+                            }, 0);
+                          }
         }
       }
     } catch (error) {

@@ -11,6 +11,7 @@ export class PopupDialog extends LitElement {
       background: var(--dialog-bg);
       color: var(--text-color);
       font-family: 'Times New Roman', serif;
+      z-index: 10000;
     }
     dialog::backdrop {
       background: var(--backdrop-color);
