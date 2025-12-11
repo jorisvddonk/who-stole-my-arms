@@ -190,13 +190,13 @@ const routeGroups = [
                 }
                 const fullPrompt = prefix || userPrompt;
 
-                 const text = await api.generate(fullPrompt, sessionId);
+                  const text = await api.generate(fullPrompt, sessionId);
 
-                 // Add user message to history
-                await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+                  // Add user message to history
+                 await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
 
-                  // Add generated message to history
-                 const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text);
+                   // Add generated message to history (trim trailing whitespace)
+                  const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text.trimEnd());
 
                logGenerate(userPrompt, text.length);
                // Parse the generated text with MarkdownParser
@@ -235,13 +235,13 @@ const routeGroups = [
                }
                const fullPrompt = prefix || userPrompt;
 
-               // For streaming, we'll use Server-Sent Events
-               currentAbortController = new AbortController();
-               const stream = new ReadableStream({
-                 async start(controller) {
-                   try {
-                      let totalLength = 0;
-                      let fullResponse = '';
+                // For streaming, we'll use Server-Sent Events
+                currentAbortController = new AbortController();
+                const stream = new ReadableStream({
+                  async start(controller) {
+                    let fullResponse = '';
+                    try {
+                       let totalLength = 0;
                         for await (const chunk of api.generateStream(fullPrompt, sessionId, currentAbortController!.signal)) {
                         if (chunk.token) {
                           totalLength += chunk.token.length;
@@ -260,10 +260,10 @@ const routeGroups = [
                           } else if (chunk.finishReason) {
                           const data = JSON.stringify({ finishReason: chunk.finishReason });
                           controller.enqueue(`data: ${data}\n\n`);
-                          // Add user message to history
-                          await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
-                           // Add generated message to history
-                           const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), chunk.finishReason);
+                           // Add user message to history
+                           await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+                            // Add generated message to history (trim trailing whitespace)
+                            const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), chunk.finishReason);
                            const idData = JSON.stringify({ messageId });
                            controller.enqueue(`data: ${idData}\n\n`);
                            logGenerate(userPrompt, totalLength);
@@ -274,10 +274,10 @@ const routeGroups = [
                      }
                    } catch (error) {
                       logError(error.message);
-                      // If there was partial response, store it as aborted
-                      if (fullResponse) {
-                        await chatHistory.addMessage(chatStorage, 'user', userPrompt);
-                        const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse, new Date(), 'abort');
+                       // If there was partial response, store it as aborted
+                       if (fullResponse) {
+                         await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+                         const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), 'abort');
                         const idData = JSON.stringify({ messageId });
                         controller.enqueue(`data: ${idData}\n\n`);
                       }
@@ -341,10 +341,10 @@ const routeGroups = [
               const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
                const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
 
-               const text = await api.generate(fullPrompt, sessionId);
+                const text = await api.generate(fullPrompt, sessionId);
 
-                // Append to existing message
-               await chatHistory.appendToMessage(chatStorage, messageId, text);
+                 // Append to existing message (trim trailing whitespace)
+                await chatHistory.appendToMessage(chatStorage, messageId, text.trimEnd());
 
                logGenerate(`Continue on message ${messageId}`, text.length);
                // Parse the appended text with MarkdownParser
@@ -395,12 +395,12 @@ const routeGroups = [
               const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
               const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
 
-              // For streaming, we'll use Server-Sent Events
-              const stream = new ReadableStream({
-                async start(controller) {
-                  try {
-                    let totalLength = 0;
-                    let additionalResponse = '';
+               // For streaming, we'll use Server-Sent Events
+               const stream = new ReadableStream({
+                 async start(controller) {
+                   let additionalResponse = '';
+                   try {
+                     let totalLength = 0;
                       for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
                         if (chunk.token) {
                           totalLength += chunk.token.length;
@@ -416,23 +416,23 @@ const routeGroups = [
                         } else if (chunk.reasoning) {
                           const data = JSON.stringify({ reasoning: chunk.reasoning });
                           controller.enqueue(`data: ${data}\n\n`);
-                        } else if (chunk.finishReason) {
-                         const data = JSON.stringify({ finishReason: chunk.finishReason });
-                         controller.enqueue(`data: ${data}\n\n`);
-                          // Append to existing message
-                          await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, chunk.finishReason);
+                         } else if (chunk.finishReason) {
+                          const data = JSON.stringify({ finishReason: chunk.finishReason });
+                          controller.enqueue(`data: ${data}\n\n`);
+                           // Append to existing message (trim trailing whitespace)
+                           await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse.trimEnd(), chunk.finishReason);
                           logGenerate(`Continue on message ${messageId}`, totalLength);
                           // Parse the appended text with MarkdownParser
                           markdownParser.parse(additionalResponse);
                           break;
                        }
                      }
-                  } catch (error) {
-                    logError(error.message);
-                    // If there was partial response, append it
-                    if (additionalResponse) {
-                      await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse, 'abort');
-                    }
+                   } catch (error) {
+                     logError(error.message);
+                     // If there was partial response, append it
+                     if (additionalResponse) {
+                       await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse.trimEnd(), 'abort');
+                     }
                     controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
                   } finally {
                     controller.close();

@@ -131,7 +131,11 @@ export class ChatterboxVoiceEngine implements MarkdownEventHandler {
       const audioBlob = await response.blob();
       const audioBuffer = await audioBlob.arrayBuffer();
       const audioArray = new Uint8Array(audioBuffer);
-      const base64Audio = btoa(String.fromCharCode(...audioArray));
+      let binaryString = '';
+      for (let i = 0; i < audioArray.length; i++) {
+        binaryString += String.fromCharCode(audioArray[i]);
+      }
+      const base64Audio = btoa(binaryString);
       const audioDataUrl = `data:audio/wav;base64,${base64Audio}`;
 
       // Forward event to front-end
