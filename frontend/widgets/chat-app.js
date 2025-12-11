@@ -449,7 +449,7 @@ export class ChatApp extends LitElement {
       .replace(/"([^"]*)"/g, '<span class="quote">"$1"</span>')
       .replace(/\*\*([^*]*)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]*)\*/g, '<span class="emphasis">$1</span>')
-      .replace(/_([^_]*)_/g, '<span class="emphasis">$1</span>')
+      .replace(/(?<!\w)_([^_]+)_(?!\w)/g, '<span class="emphasis">$1</span>')
       .replace(/`([^`]*)`/g, '<code>$1</code>');
   }
 

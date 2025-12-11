@@ -126,7 +126,8 @@ export class MarkdownParser extends EventEmitter {
       { regex: /"([^"]*)"/g, type: 'quote' },
       { regex: /\*\*([^*]*)\*\*/g, type: 'bold' },
       { regex: /\*([^*]*)\*/g, type: 'emphasis' },
-      { regex: /_([^_]*)_/g, type: 'emphasis' },
+
+       { regex: /(?<!\w)_([^_]+)_(?!\w)/g, type: 'emphasis' },
       { regex: /`([^`]*)`/g, type: 'code' }
     ];
     while (pos < text.length) {
