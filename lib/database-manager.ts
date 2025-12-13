@@ -7,6 +7,11 @@ import { randomUUID } from 'crypto';
 export class DBStorage implements Storage {
   constructor(private db: Database, private fqdn: string, private sessionId?: string) {}
 
+  async init(): Promise<void> {
+    // Ensure table exists
+    await this.execute(`CREATE TABLE IF NOT EXISTS ${this.getTableName()} (id TEXT PRIMARY KEY, key TEXT, value TEXT)`);
+  }
+
   getTableName(): string {
     if (this.sessionId) {
       return `session_${this.sessionId}_${this.fqdn.replace(/\./g, '_')}`;
@@ -46,7 +51,7 @@ export class DBStorage implements Storage {
     const keys = Object.keys(data);
     const values = Object.values(data);
     const placeholders = keys.map(() => '?').join(', ');
-    const sql = `INSERT INTO ${this.getTableName()} (${keys.join(', ')}) VALUES (${placeholders})`;
+    const sql = `INSERT OR REPLACE INTO ${this.getTableName()} (${keys.join(', ')}) VALUES (${placeholders})`;
     this.execute(sql, values);
     return insertId;
   }

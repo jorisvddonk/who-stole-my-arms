@@ -9,6 +9,7 @@ interface OpenRouterSettings {
   frequencyPenalty: number;
   presencePenalty: number;
   enableReasoning: boolean;
+  stop: string[];
 }
 
 export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl {
@@ -30,6 +31,7 @@ export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke,
       frequencyPenalty: 0.0,
       presencePenalty: 0.0,
       enableReasoning: true,
+      stop: ['<|tool_call_end|>'],
       ...settings
     };
     console.log('[OpenRouter] Initialized with settings:', {...this.settings, ...{apiKey: "<hidden>"}});
@@ -96,6 +98,7 @@ export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke,
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      stop: this.settings.stop,
       stream: false
     };
 
@@ -131,6 +134,7 @@ export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke,
       top_p: this.settings.topP,
       frequency_penalty: this.settings.frequencyPenalty,
       presence_penalty: this.settings.presencePenalty,
+      stop: this.settings.stop,
       stream: true
     };
 

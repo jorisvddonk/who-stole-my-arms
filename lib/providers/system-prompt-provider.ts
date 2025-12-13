@@ -1,5 +1,7 @@
 import { PromptProvider, NamedGroup, PromptItem } from '../prompt-manager.js';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join, extname } from 'node:path';
+import { Logger } from '../logging/debug-logger.js';
 
 export class SystemPromptProvider implements PromptProvider {
   private customPrompts: Record<string, NamedGroup> = {};
@@ -10,8 +12,36 @@ export class SystemPromptProvider implements PromptProvider {
         const data = readFileSync('system-prompts.json', 'utf-8');
         this.customPrompts = JSON.parse(data);
       } catch (error) {
-        console.warn("Invalid json for system-prompts.json, ignoring");
+        Logger.debugLog("Invalid json for system-prompts.json, ignoring");
         // Invalid JSON, ignore
+      }
+    }
+
+    // Load additional prompts from environment variable paths
+    const searchPaths = process.env.WSMA_SYSTEM_PROMPT_SEARCH_PATH;
+    if (searchPaths) {
+      const paths = searchPaths.split(';').map(p => p.trim()).filter(p => p);
+      for (const promptsPath of paths) {
+        try {
+          const files = readdirSync(promptsPath);
+          for (const file of files) {
+            if (extname(file) === '.json') {
+              const filePath = join(promptsPath, file);
+              Logger.debugLog(`Attempting to load prompts from: ${filePath}`);
+              try {
+                const data = readFileSync(filePath, 'utf-8');
+                const additionalPrompts = JSON.parse(data);
+                const count = Object.keys(additionalPrompts).length;
+                this.customPrompts = { ...this.customPrompts, ...additionalPrompts };
+                Logger.debugLog(`Successfully loaded ${count} prompt groups from ${filePath}`);
+              } catch (error) {
+                Logger.debugLog(`Invalid JSON in ${filePath}, ignoring`);
+              }
+            }
+          }
+        } catch (error) {
+          Logger.debugLog(`Failed to read prompts path ${promptsPath}: ${error}`);
+        }
       }
     }
   }

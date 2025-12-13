@@ -16,6 +16,11 @@ A programmable, wacky, LLM-driven roleplaying game application inspired by D&D a
 - [Bun](https://bun.sh/) installed
 - Koboldcpp running locally on port 5001 (default)
 
+## Environment Variables
+
+- `WSMA_AGENT_SEARCH_PATH`: Semicolon-separated list of directories to search for additional agent files (e.g., `/path/to/agents;/another/path`). Each directory should contain TypeScript (.ts) or JavaScript (.js) files that export a default class extending `LLMAgent`. These agents will be dynamically loaded and made available in the application.
+- `WSMA_SYSTEM_PROMPT_SEARCH_PATH`: Semicolon-separated list of directories to search for additional system prompt files. Each directory should contain JSON (.json) files defining prompt groups. The JSON structure should be an object where keys are group names and values are prompt group objects with `type: 'group'`, `name`, `description`, and `items` array containing prompt definitions.
+
 ## Installation
 
 Clone or download this project.
@@ -85,6 +90,62 @@ Open `http://localhost:3000` in your browser to access the game interface.
 
 #### System Metrics
 - `GET /metrics`: Get OS metrics (CPU, memory, etc.)
+
+## CLI Tool
+
+The `cli.ts` script provides a command-line interface for direct interaction with LLM agents, useful for testing, scripting, or headless usage.
+
+### Features
+
+- **Agent Selection**: Choose from available agents (ConversationalAgent, CombatAgent, etc.)
+- **Prompt Input**: Provide prompts via command-line argument, stdin piping, or interactive input
+- **Debug REPL**: Interactive debugging mode with task inspection and history
+- **Streaming Output**: Real-time LLM response streaming with event logging
+
+### Usage
+
+Run the CLI tool:
+
+```bash
+bun run cli.ts [options]
+```
+
+### Options
+
+- `--agent <name>`: Specify the agent to use (e.g., `--agent ConversationalAgent`)
+- `--prompt <text>`: Set the user prompt text directly
+- `--repl`: Start the debug REPL for interactive debugging
+- `--debug`: Enable debug logging
+- `--list-agents`: List available agents and exit
+
+### Examples
+
+**Interactive agent selection and prompt:**
+```bash
+bun run cli.ts
+```
+
+**Specify agent and prompt:**
+```bash
+bun run cli.ts --agent MathAgent --prompt "What is 2+2?"
+```
+
+**Pipe input from stdin:**
+```bash
+echo "Tell me a joke" | bun run cli.ts --agent ConversationalAgent
+```
+
+**Start debug REPL:**
+```bash
+bun run cli.ts --repl
+```
+
+**Debug mode with agent:**
+```bash
+bun run cli.ts --agent CombatAgent --debug --prompt "I attack the goblin"
+```
+
+The CLI tool connects to the same Koboldcpp instance as the web app and uses the same agent system for consistent behavior.
 
 ## Architecture
 

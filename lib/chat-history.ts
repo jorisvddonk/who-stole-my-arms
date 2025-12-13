@@ -16,7 +16,7 @@ export interface ChatMessage {
 }
 
 export class ChatHistory implements HasStorage, PromptProvider {
-  constructor(private dbManager: DatabaseManager) {}
+  constructor(private dbManager: DatabaseManager, private arenaManager?: any) {}
 
   getFQDN(): string {
     return 'tools.chat.history';
@@ -114,7 +114,7 @@ export class ChatHistory implements HasStorage, PromptProvider {
         items
       };
     } catch (error) {
-      logError(`Failed to get chat history prompt group: ${error.message}`);
+      logError(`Failed to get chat history prompt group: ${(error as Error).message}`);
       return null;
     }
   }
@@ -167,7 +167,7 @@ export class ChatHistory implements HasStorage, PromptProvider {
         finishReason
       }, id);
     } catch (error) {
-      logError(`Failed to add message: ${error.message}`);
+      logError(`Failed to add message: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -183,7 +183,7 @@ export class ChatHistory implements HasStorage, PromptProvider {
         finishReason: row.finishReason || null
       })).sort((a, b) => a.finishedAt.getTime() - b.finishedAt.getTime());
     } catch (error) {
-      logError(`Failed to get messages: ${error.message}`);
+      logError(`Failed to get messages: ${(error as Error).message}`);
       return [];
     }
   }
@@ -193,17 +193,23 @@ export class ChatHistory implements HasStorage, PromptProvider {
       await storage.execute(`DELETE FROM ${storage.getTableName()} WHERE id = ?`, [messageId]);
       return true;
     } catch (error) {
-      logError(`Failed to delete message: ${error.message}`);
+      logError(`Failed to delete message: ${(error as Error).message}`);
       return false;
     }
   }
 
   async deleteMessagesFrom(storage: Storage, messageId: string): Promise<boolean> {
     try {
-      await storage.execute(`DELETE FROM ${storage.getTableName()} WHERE id >= ?`, [messageId]);
+      const allMessages = await this.getMessages(storage);
+      const index = allMessages.findIndex(msg => msg.id === messageId);
+      if (index === -1) return false;
+      const idsToDelete = allMessages.slice(index).map(msg => msg.id);
+      if (idsToDelete.length === 0) return true;
+      const placeholders = idsToDelete.map(() => '?').join(', ');
+      await storage.execute(`DELETE FROM ${storage.getTableName()} WHERE id IN (${placeholders})`, idsToDelete);
       return true;
     } catch (error) {
-      logError(`Failed to delete messages after: ${error.message}`);
+      logError(`Failed to delete messages after: ${(error as Error).message}`);
       return false;
     }
   }
@@ -219,7 +225,21 @@ export class ChatHistory implements HasStorage, PromptProvider {
       await storage.execute(`UPDATE ${storage.getTableName()} SET content = ?, finishReason = ? WHERE id = ?`, [updatedContent, updatedFinishReason, messageId]);
       return true;
     } catch (error) {
-      logError(`Failed to append to message: ${error.message}`);
+      logError(`Failed to append to message: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  async editMessage(storage: Storage, messageId: string, newContent: string): Promise<boolean> {
+    try {
+      const existingMessage = await storage.findById(messageId);
+      if (!existingMessage) {
+        return false;
+      }
+      await storage.execute(`UPDATE ${storage.getTableName()} SET content = ? WHERE id = ?`, [newContent, messageId]);
+      return true;
+    } catch (error) {
+      logError(`Failed to edit message: ${(error as Error).message}`);
       return false;
     }
   }
@@ -244,50 +264,119 @@ export class ChatHistory implements HasStorage, PromptProvider {
             await this.addMessage(storage, actor, content, date, finishReason);
             return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
           } catch (error) {
-            logError(error.message);
-            return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            logError((error as Error).message);
+            return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
           }
         }
       }),
-       "/sessions/:sessionid/chat/messages/:messageid": createMethodRouter({
-         DELETE: async (req) => {
-           try {
-             const storage = (req as any).context.get('storage');
-             const messageId = req.params.messageid;
-             const success = await this.deleteMessage(storage, messageId);
-             if (success) {
-               return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-             } else {
-               return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+        "/sessions/:sessionid/chat/messages/:messageid": createMethodRouter({
+           PUT: async (req) => {
+             try {
+               const storage = (req as any).context.get('storage');
+               const messageId = (req as any).params.messageid;
+               const body = await req.json();
+               const { content } = body;
+               if (content === undefined) {
+                 return new Response(JSON.stringify({ error: 'content required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+               }
+               const success = await this.editMessage(storage, messageId, content);
+               if (success) {
+                 return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+               } else {
+                 return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+               }
+             } catch (error) {
+               logError((error as Error).message);
+               return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
              }
-           } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-           }
-         }
-       }),
-       "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
-         DELETE: async (req) => {
-           try {
-             const storage = (req as any).context.get('storage');
-             const messageId = req.params.messageid;
-             const success = await this.deleteMessagesFrom(storage, messageId);
-             if (success) {
-               return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-             } else {
-               return new Response(JSON.stringify({ error: 'Failed to delete messages' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           },
+           DELETE: async (req) => {
+             try {
+               const storage = (req as any).context.get('storage');
+                const messageId = (req as any).params.messageid;
+               const sessionId = (req as any).params.sessionid;
+               // Get the message to know actor
+               const messages = await this.getMessages(storage);
+               const message = messages.find(m => m.id === messageId);
+               if (!message) {
+                 return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+               }
+               const success = await this.deleteMessage(storage, messageId);
+               if (success) {
+                    if (this.arenaManager) {
+                    const arena = await this.arenaManager.getArena(sessionId, null);
+                   if (message.actor === 'user') {
+                     // Find task with input.messageId == messageId
+                     for (const taskId in arena.taskStore) {
+                       const task = arena.taskStore[taskId];
+                       if (task.input?.messageId === messageId) {
+                         arena.removeTask(taskId);
+                         break;
+                       }
+                     }
+                   } else if (message.actor === 'game-master') {
+                     // Remove chunks with messageId
+                     arena.removeChunksByMessageId(messageId);
+                   }
+                   await this.arenaManager.saveArenaState(sessionId, arena);
+                 }
+                 return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+               } else {
+                 return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+               }
+             } catch (error) {
+               logError((error as Error).message);
+               return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
              }
-           } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
            }
-         }
-       }),
+         }),
+        "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
+          DELETE: async (req) => {
+            try {
+              const storage = (req as any).context.get('storage');
+               const messageId = (req as any).params.messageid;
+               const sessionId = (req as any).params.sessionid;
+              // Get messages to know which to remove
+              const messages = await this.getMessages(storage);
+              const index = messages.findIndex(m => m.id === messageId);
+              if (index === -1) {
+                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+              }
+              const messagesToDelete = messages.slice(index);
+              const success = await this.deleteMessagesFrom(storage, messageId);
+              if (success) {
+                if (this.arenaManager) {
+                  const arena = await this.arenaManager.getArena(sessionId, null);
+                  for (const msg of messagesToDelete) {
+                    if (msg.actor === 'user') {
+                      for (const taskId in arena.taskStore) {
+                        const task = arena.taskStore[taskId];
+                        if (task.input?.messageId === msg.id) {
+                          arena.removeTask(taskId);
+                          break;
+                        }
+                      }
+                    } else if (msg.actor === 'game-master') {
+                      arena.removeChunksByMessageId(msg.id);
+                    }
+                  }
+                  await this.arenaManager.saveArenaState(sessionId, arena);
+                }
+                return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+              } else {
+                return new Response(JSON.stringify({ error: 'Failed to delete messages' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              }
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        }),
        "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
          POST: async (req) => {
            try {
              const storage = (req as any).context.get('storage');
-             const messageId = req.params.messageid;
+              const messageId = (req as any).params.messageid;
              const body = await req.json();
              const { additionalContent, finishReason } = body;
              if (additionalContent === undefined) {
@@ -300,8 +389,8 @@ export class ChatHistory implements HasStorage, PromptProvider {
                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
              }
            } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+             logError((error as Error).message);
+             return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
            }
          }
        })

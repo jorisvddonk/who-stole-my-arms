@@ -151,7 +151,15 @@ export class KoboldSettingsWidget extends LitElement {
     try {
       const res = await fetch('/kobold/settings');
       if (res.ok) {
-        this.settings = await res.json();
+        const loadedSettings = await res.json();
+        // Ensure JSON fields are properly parsed
+        this.settings = {
+          ...loadedSettings,
+          samplerOrder: Array.isArray(loadedSettings.samplerOrder) ? loadedSettings.samplerOrder : [6, 0, 1, 3, 4, 2, 5],
+          bannedTokens: Array.isArray(loadedSettings.bannedTokens) ? loadedSettings.bannedTokens : [],
+          logitBias: typeof loadedSettings.logitBias === 'object' && loadedSettings.logitBias !== null ? loadedSettings.logitBias : {},
+          stopSequence: Array.isArray(loadedSettings.stopSequence) ? loadedSettings.stopSequence : ['{{[INPUT]}}', '{{[OUTPUT]}}']
+        };
       }
     } catch (error) {
       this.showStatus('Failed to load settings: ' + error.message, 'error');
@@ -198,7 +206,8 @@ export class KoboldSettingsWidget extends LitElement {
       try {
         processedValue = JSON.parse(value);
       } catch {
-        processedValue = value;
+        // Invalid JSON, keep current value
+        return;
       }
     } else if (name === 'logitBias') {
       try {

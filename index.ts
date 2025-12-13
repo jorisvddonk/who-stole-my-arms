@@ -1,5 +1,12 @@
 // Configuration: Set to true to use OpenRouter, false to use KoboldCPP
 const USE_OPENROUTER = false;
+const ROOT_AGENT_NAME = 'RPGGameMasterAgent';
+
+// Enable debugging if --debug flag is set
+if (process.argv.includes('--debug')) {
+    const { Logger } = await import('./lib/logging/debug-logger.js');
+    Logger.setDebugMode(true);
+}
 
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
@@ -15,26 +22,27 @@ import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
+import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
 import { PromptManager } from "./lib/prompt-manager.js";
 import { SystemPromptProvider } from "./lib/providers/system-prompt-provider.js";
-import { ToolPromptProvider } from "./lib/providers/tool-prompt-provider.js";
 
 let currentAbortController: AbortController | null = null;
 
 import { ChatHistory } from "./lib/chat-history.js";
 import { DockManager } from "./lib/dock-manager.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
-import { LLMToolManager } from "./lib/llm-tool-manager.js";
-import { DieTool } from "./lib/tools/die-tool.js";
-import { ToolCallingLLM } from "./lib/tool-calling-llm.js";
 import { FormatterRegistry } from "./lib/formatters.js";
 import { MarkdownParser } from "./lib/markdown-parser.js";
 import { DebugLogger } from "./lib/debug-logger.js";
 import { ChatterboxVoiceEngine } from "./lib/chatterbox-voice-engine.js";
 import { voiceEmitter } from "./lib/voice-emitter.js";
+import { ArenaManager } from "./lib/arena-manager.js";
+import { AgentManager } from "./lib/agents/AgentManager.js";
+import { Arena } from "./lib/core/Arena.js";
+import { ChunkType } from "./lib/core/LLMAgent.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -54,8 +62,34 @@ const osMetricsDockWidget = new OsMetricsDockWidget();
 const characterBioDockWidget = new CharacterBioDockWidget();
 const dockManager = new DockManager(toolboxCollector);
 
+// Register global components
+await dbManager.registerGlobalComponent(koboldSettingsTool);
+await dbManager.registerGlobalComponent(openRouterSettingsTool);
+
+// Create API after settings are loaded
+let baseApi;
+try {
+  baseApi = USE_OPENROUTER
+    ? new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings())
+    : new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+} catch (error) {
+  console.error('Failed to initialize LLM API:', error);
+  baseApi = null;
+}
+
+// Wrap API with agentic tool calling (NOTE: removed this so just aliasing now)
+api = baseApi;
+
+// Initialize AgentManager
+const agentManager = AgentManager.getInstance();
+await agentManager.init(api);
+
+const defaultAgentTool = new DefaultAgentTool(toolboxCollector, agentManager);
+
+const arenaManager = ArenaManager.getInstance(dbManager, agentManager);
+
 // Initialize ChatHistory
-const chatHistory = new ChatHistory(dbManager);
+const chatHistory = new ChatHistory(dbManager, arenaManager);
 
 // Initialize PromptManager and providers
 const promptManager = new PromptManager(toolboxCollector);
@@ -63,31 +97,6 @@ const systemPromptProvider = new SystemPromptProvider();
 promptManager.registerProvider('system', systemPromptProvider);
 promptManager.registerProvider('character-bio', characterBioDockWidget);
 promptManager.registerProvider('chat', chatHistory);
-
-// Register global components
-await dbManager.registerGlobalComponent(koboldSettingsTool);
-await dbManager.registerGlobalComponent(openRouterSettingsTool);
-
-// Session components are now stateless and initialize storage per request
-
-// Session components are now stateless and initialize storage per request
-
-// Create API after settings are loaded
-const baseApi = USE_OPENROUTER
-  ? new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings())
-  : new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
-
-// Initialize LLM tool system
-const toolManager = new LLMToolManager();
-const dieTool = new DieTool();
-toolManager.registerTool(dieTool);
-
-// Initialize tool prompt provider
-const toolPromptProvider = new ToolPromptProvider(toolManager);
-promptManager.registerProvider('tools', toolPromptProvider);
-
-// Wrap API with tool calling
-api = new ToolCallingLLM(baseApi, toolManager);
 
 // Initialize MarkdownParser with debug logging
 const markdownParser = new MarkdownParser();
@@ -105,6 +114,7 @@ const routeGroups = [
   openRouterSettingsTool,
   formatterSettingsTool,
   autoScrollSettingsTool,
+  defaultAgentTool,
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,
@@ -151,6 +161,159 @@ const routeGroups = [
         console.log('Widgets:', widgets);
         return new Response(JSON.stringify({ widgets }), { headers: { 'Content-Type': 'application/json' } });
       },
+      "/sessions/:sessionId/tools": createMethodRouter({
+        GET: async (req) => {
+          const sessionId = (req as any).params.sessionId;
+          const toolInfo = sessionToolManager.getToolInfo(sessionId);
+          return new Response(JSON.stringify(toolInfo), { headers: { 'Content-Type': 'application/json' } });
+        }
+      }),
+      "/sessions/:sessionId/tools/add": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const sessionId = (req as any).params.sessionId;
+            const body = await req.json();
+            const { toolName } = body;
+            
+            if (!toolName) {
+              return new Response(JSON.stringify({ error: 'toolName required' }), { 
+                status: 400, 
+                headers: { 'Content-Type': 'application/json' } 
+              });
+            }
+            
+            // In a real implementation, we would dynamically load and register tools
+            // For now, we'll simulate adding a session-specific tool
+            const db = await dbManager.getSessionDB(sessionId);
+            const storage = new Storage(db, 'session_tools', sessionId);
+            
+            // This is a placeholder - in a full implementation, we would
+            // dynamically import and instantiate the tool class
+            console.log(`[TOOL_MANAGEMENT] Adding tool ${toolName} to session ${sessionId}`);
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: `Tool ${toolName} added to session`,
+              sessionId,
+              toolName
+            }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            return new Response(JSON.stringify({ error: (error as Error).message }), { 
+              status: 500, 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+          }
+        }
+      }),
+      "/sessions/:sessionId/tools/remove": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const sessionId = (req as any).params.sessionId;
+            const body = await req.json();
+            const { toolName } = body;
+            
+            if (!toolName) {
+              return new Response(JSON.stringify({ error: 'toolName required' }), { 
+                status: 400, 
+                headers: { 'Content-Type': 'application/json' } 
+              });
+            }
+            
+            sessionToolManager.removeSessionTool(sessionId, toolName);
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: `Tool ${toolName} removed from session`,
+              sessionId,
+              toolName
+            }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            return new Response(JSON.stringify({ error: (error as Error).message }), { 
+              status: 500, 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+          }
+        }
+      }),
+      "/sessions/:sessionId/tools/clear": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const sessionId = (req as any).params.sessionId;
+            sessionToolManager.clearSessionTools(sessionId);
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: `All session-specific tools cleared`,
+              sessionId
+            }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            return new Response(JSON.stringify({ error: (error as Error).message }), { 
+              status: 500, 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+          }
+        }
+      }),
+      "/sessions/:sessionId/battle/start": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const sessionId = (req as any).params.sessionId;
+            const body = await req.json();
+            const { tools = ['battle_attack', 'battle_defend'] } = body;
+            
+            // Add battle-specific tools to the session
+            const db = await dbManager.getSessionDB(sessionId);
+            const storage = new Storage(db, 'battle_tools', sessionId);
+            
+            for (const toolName of tools) {
+              // In a real implementation, we would dynamically load the tool
+              // For this demo, we'll just log and simulate
+              console.log(`[BATTLE_SYSTEM] Adding battle tool ${toolName} to session ${sessionId}`);
+              
+              // Here you would actually register the tool with the session tool manager
+              // For example: sessionToolManager.registerSessionTool(sessionId, battleToolInstance, storage);
+            }
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: `Battle started with tools: ${tools.join(', ')}`,
+              sessionId,
+              battleTools: tools
+            }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            return new Response(JSON.stringify({ error: (error as Error).message }), { 
+              status: 500, 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+          }
+        }
+      }),
+      "/sessions/:sessionId/battle/end": createMethodRouter({
+        POST: async (req) => {
+          try {
+            const sessionId = (req as any).params.sessionId;
+            const body = await req.json();
+            const { clearTools = true } = body;
+            
+            if (clearTools) {
+              // Remove battle-specific tools
+              sessionToolManager.removeSessionTool(sessionId, 'battle_attack');
+              sessionToolManager.removeSessionTool(sessionId, 'battle_defend');
+            }
+            
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: `Battle ended. Tools ${clearTools ? 'removed' : 'retained'}`,
+              sessionId
+            }), { headers: { 'Content-Type': 'application/json' } });
+          } catch (error) {
+            return new Response(JSON.stringify({ error: (error as Error).message }), { 
+              status: 500, 
+              headers: { 'Content-Type': 'application/json' } 
+            });
+          }
+        }
+      }),
       "/widgets/*": async (req) => {
         const url = new URL(req.url);
         try {
@@ -166,141 +329,238 @@ const routeGroups = [
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
-              await promptManager.init(promptStorage);
               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
               await chatHistory.init(chatStorage);
-              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
-              await characterBioDockWidget.init(bioStorage);
-              const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
-              await formatterSettingsTool.init(formatterStorage);
+              const defaultAgentStorage = new Storage(db, defaultAgentTool.getFQDN(), sessionId);
+              await defaultAgentTool.init(defaultAgentStorage);
+              const records = await defaultAgentStorage.findAll();
+              const record = records.find((r: any) => r.key === 'defaultAgent');
+              const defaultAgent = record ? record.value : ROOT_AGENT_NAME;
 
-               const body = await req.json();
-               const { prompt: userPrompt, userMessageId } = body;
-               if (!userPrompt) {
-                 return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-               }
+              const body = await req.json();
+              const { prompt: userPrompt, userMessageId } = body;
+              if (!userPrompt) {
+                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              }
 
-                // Get the chatMessage template prefix
-                const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
-                let prefix = '';
-                console.log(`template groups: `, templateGroups)
-                if (templateGroups) {
-                  prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
+              if (!api) {
+                return new Response(JSON.stringify({ error: 'LLM API not initialized' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              }
+
+              const arena = await arenaManager.getArena(sessionId, api);
+
+              // Handle user input like in experiment
+              arena.errorCount = 0;
+              
+
+              if (!arena.currentContinuationTask) {
+                // Create new root task
+                const rootTask = {
+                  id: Arena.generateId(),
+                  agent_name: defaultAgent,
+                  input: { text: userPrompt, messageId: userMessageId },
+                  parent_task_id: null,
+                  scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
+                  retryCount: 0
+                };
+                arena.taskStore[rootTask.id] = rootTask;
+                arena.currentContinuationTask = rootTask;
+                arena.taskQueue.push(rootTask);
+              } else {
+                // Append to existing scratchpad and re-queue
+                const newInputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                arena.taskQueue.push(arena.currentContinuationTask);
+              }
+
+              await arena.run_event_loop(false);
+
+              // Extract final response
+              let text = '';
+              if (arena.currentContinuationTask) {
+                const scratchpad = arena.currentContinuationTask.scratchpad;
+                for (let i = scratchpad.length - 1; i >= 0; i--) {
+                  const chunk = scratchpad[i];
+                  if (chunk.type === ChunkType.LlmOutput) {
+                    text = chunk.content;
+                    break;
+                  }
                 }
-                const fullPrompt = prefix || userPrompt;
+              }
 
-                  const text = await api.generate(fullPrompt, sessionId);
+              // Add user message to history
+              await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
 
-                  // Add user message to history
-                 await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+              // Add generated message to history (trim trailing whitespace)
+              const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text.trimEnd());
 
-                   // Add generated message to history (trim trailing whitespace)
-                  const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text.trimEnd());
+              // Set messageId on LlmOutput chunks
+              if (arena.currentContinuationTask) {
+                const scratchpad = arena.currentContinuationTask.scratchpad;
+                for (let i = 0; i < scratchpad.length; i++) {
+                  const chunk = scratchpad[i];
+                  if (chunk.type === ChunkType.LlmOutput) {
+                    chunk.messageId = messageId;
+                  }
+                }
+              }
 
-               logGenerate(userPrompt, text.length);
-               // Parse the generated text with MarkdownParser
-               markdownParser.parse(text);
-               return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
-           } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-           }
-         }
-       }),
+              // Save arena state
+              await arenaManager.saveArenaState(sessionId, arena);
+
+              logGenerate(userPrompt, text.length);
+              // Parse the generated text with MarkdownParser
+              markdownParser.parse(text);
+              return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        }),
         "/sessions/:sessionId/generateStream": createMethodRouter({
           POST: async (req) => {
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const promptStorage = new Storage(db, promptManager.getFQDN(), sessionId);
-              await promptManager.init(promptStorage);
               const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
               await chatHistory.init(chatStorage);
-              const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
-              await characterBioDockWidget.init(bioStorage);
+              const defaultAgentStorage = new Storage(db, defaultAgentTool.getFQDN(), sessionId);
+              await defaultAgentTool.init(defaultAgentStorage);
+              const records = await defaultAgentStorage.findAll();
+              const record = records.find((r: any) => r.key === 'defaultAgent');
+              const defaultAgent = record ? record.value : ROOT_AGENT_NAME;
 
-               const body = await req.json();
-               const { prompt: userPrompt, userMessageId } = body;
-               if (!userPrompt) {
-                 return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-               }
+              const body = await req.json();
+              const { prompt: userPrompt, userMessageId } = body;
+              if (!userPrompt) {
+                return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              }
 
-               // Get the chatMessage template prefix
-               const templateGroups = await promptManager.loadTemplate(promptStorage, 'chatMessage');
-               let prefix = '';
-               console.log(`template groups: `, templateGroups)
-               if (templateGroups) {
-                 prefix = await promptManager.getPrompt(templateGroups, { sessionId, currentPrompt: userPrompt });
-               }
-               const fullPrompt = prefix || userPrompt;
+              if (!api) {
+                return new Response(JSON.stringify({ error: 'LLM API not initialized' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              }
 
-                // For streaming, we'll use Server-Sent Events
-                currentAbortController = new AbortController();
-                const stream = new ReadableStream({
-                  async start(controller) {
-                    let fullResponse = '';
-                    try {
-                       let totalLength = 0;
-                        for await (const chunk of api.generateStream(fullPrompt, sessionId, currentAbortController!.signal)) {
-                        if (chunk.token) {
-                          totalLength += chunk.token.length;
-                          fullResponse += chunk.token;
-                          const data = JSON.stringify({ token: chunk.token });
-                          controller.enqueue(`data: ${data}\n\n`);
-                         } else if (chunk.tool_call) {
-                           const data = JSON.stringify({ tool_call: chunk.tool_call });
-                           controller.enqueue(`data: ${data}\n\n`);
-                         } else if (chunk.tool_result) {
-                           const data = JSON.stringify({ tool_result: chunk.tool_result });
-                           controller.enqueue(`data: ${data}\n\n`);
-                         } else if (chunk.reasoning) {
-                           const data = JSON.stringify({ reasoning: chunk.reasoning });
-                           controller.enqueue(`data: ${data}\n\n`);
-                          } else if (chunk.finishReason) {
-                          const data = JSON.stringify({ finishReason: chunk.finishReason });
-                          controller.enqueue(`data: ${data}\n\n`);
-                           // Add user message to history
-                           await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
-                            // Add generated message to history (trim trailing whitespace)
-                            const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), chunk.finishReason);
-                           const idData = JSON.stringify({ messageId });
-                           controller.enqueue(`data: ${idData}\n\n`);
-                           logGenerate(userPrompt, totalLength);
-                           // Parse the generated text with MarkdownParser
-                           markdownParser.parse(fullResponse);
-                           break;
-                        }
-                     }
-                   } catch (error) {
-                      logError(error.message);
-                       // If there was partial response, store it as aborted
-                       if (fullResponse) {
-                         await chatHistory.addMessage(chatStorage, 'user', userPrompt);
-                         const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), 'abort');
-                        const idData = JSON.stringify({ messageId });
-                        controller.enqueue(`data: ${idData}\n\n`);
+              const arena = await arenaManager.getArena(sessionId, api);
+
+              // For streaming, we'll use Server-Sent Events
+              const stream = new ReadableStream({
+                async start(controller) {
+                  let fullResponse = '';
+                  let isClosed = false;
+                  const enqueueData = (data: string) => {
+                    if (!isClosed) {
+                      try {
+                        controller.enqueue(`data: ${data}\n\n`);
+                      } catch (e) {
+                        // Controller closed
+                        isClosed = true;
                       }
-                      controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-                     }
-                  finally {
-                   controller.close();
-                 }
-               }
-             });
+                    }
+                  };
+                  try {
+                    // Handle user input
+                    arena.errorCount = 0;
 
-             return new Response(stream, {
-               headers: {
-                 'Content-Type': 'text/event-stream',
-                 'Cache-Control': 'no-cache',
-                 'Connection': 'keep-alive',
-               }
-             });
-           } catch (error) {
-             logError(error.message);
-             return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-           }
-         }
+                    if (!arena.currentContinuationTask) {
+                      const rootTask = {
+                        id: Arena.generateId(),
+                        agent_name: defaultAgent,
+                        input: { text: userPrompt, messageId: userMessageId },
+                        parent_task_id: null,
+                        scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
+                        retryCount: 0
+                      };
+                      arena.taskStore[rootTask.id] = rootTask;
+                      arena.currentContinuationTask = rootTask;
+                      arena.taskQueue.push(rootTask);
+                    } else {
+                      const newInputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                      arena.taskQueue.push(arena.currentContinuationTask);
+                    }
+
+                    // Listen to events
+                    const onToken = (token: string) => {
+                      fullResponse += token;
+                      const data = JSON.stringify({ token });
+                      enqueueData(data);
+                    };
+                    const onToolCall = (details: any) => {
+                      const data = JSON.stringify({ tool_call: details.call });
+                      enqueueData(data);
+                    };
+                    const onAgentCall = (details: any) => {
+                      const data = JSON.stringify({ agent_call: details.call });
+                      enqueueData(data);
+                    };
+                    const onParseError = (details: any) => {
+                      const data = JSON.stringify({ error: details.error, type: details.type });
+                      enqueueData(data);
+                    };
+                    const onChunk = (details: any) => {
+                      const data = { chunk: details.chunk };
+                      enqueueData(JSON.stringify(data));
+                    };
+
+                    arena.eventEmitter.on('token', onToken);
+                    arena.eventEmitter.on('toolCall', onToolCall);
+                    arena.eventEmitter.on('agentCall', onAgentCall);
+                    arena.eventEmitter.on('parseError', onParseError);
+                    arena.eventEmitter.on('chunk', onChunk);
+
+                    await arena.run_event_loop(false);
+
+                    // Clean up listeners
+                    arena.eventEmitter.off('token', onToken);
+                    arena.eventEmitter.off('toolCall', onToolCall);
+                    arena.eventEmitter.off('agentCall', onAgentCall);
+                    arena.eventEmitter.off('parseError', onParseError);
+                    arena.eventEmitter.off('chunk', onChunk);
+
+                    // Send finish
+                    const finishData = JSON.stringify({ finishReason: 'stop' });
+                    enqueueData(finishData);
+
+                    // Add to history
+                    await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
+                    const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd());
+
+                    // Save state
+                    await arenaManager.saveArenaState(sessionId, arena);
+
+                    const idData = JSON.stringify({ messageId });
+                    enqueueData(idData);
+                    logGenerate(userPrompt, fullResponse.length);
+                    markdownParser.parse(fullResponse);
+                  } catch (error) {
+                    logError((error as Error).message);
+                    if (fullResponse) {
+                      await chatHistory.addMessage(chatStorage, 'user', userPrompt);
+                      const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), 'abort');
+                      const idData = JSON.stringify({ messageId });
+                      enqueueData(idData);
+                    }
+                    enqueueData(JSON.stringify({ error: (error as Error).message }));
+                  } finally {
+                    isClosed = true;
+                    controller.close();
+                  }
+                }
+              });
+
+              return new Response(stream, {
+                headers: {
+                  'Content-Type': 'text/event-stream',
+                  'Cache-Control': 'no-cache',
+                  'Connection': 'keep-alive',
+                }
+              });
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
         }),
         "/sessions/:sessionId/continue": createMethodRouter({
           POST: async (req) => {
@@ -341,7 +601,7 @@ const routeGroups = [
               const contextPrompt = contextMessages.map(m => `${m.actor === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
                const fullPrompt = prefix ? prefix + '\n\n' + contextPrompt : contextPrompt;
 
-                const text = await api.generate(fullPrompt, sessionId);
+                const text = await api.generate(fullPrompt, sessionId, promptStorage);
 
                  // Append to existing message (trim trailing whitespace)
                 await chatHistory.appendToMessage(chatStorage, messageId, text.trimEnd());
@@ -401,7 +661,7 @@ const routeGroups = [
                    let additionalResponse = '';
                    try {
                      let totalLength = 0;
-                      for await (const chunk of api.generateStream(fullPrompt, sessionId)) {
+                      for await (const chunk of api.generateStream(fullPrompt, sessionId, undefined, promptStorage)) {
                         if (chunk.token) {
                           totalLength += chunk.token.length;
                           additionalResponse += chunk.token;
