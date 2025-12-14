@@ -12,8 +12,8 @@ export class InteractionHistoryWidget extends LitElement {
       color: var(--text-color);
       font-family: monospace;
       font-size: 12px;
-      min-height: 90vh;
-      overflow-y: auto;
+      height: 90vh;
+      overflow: hidden;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
@@ -59,6 +59,23 @@ export class InteractionHistoryWidget extends LitElement {
     }
     .task-item.expanded:hover {
       background: var(--dialog-bg-shift-3);
+    }
+    .column {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .column::-webkit-scrollbar {
+      width: 8px;
+    }
+    .column::-webkit-scrollbar-track {
+      background: var(--dialog-bg);
+    }
+    .column::-webkit-scrollbar-thumb {
+      background: var(--accent-bg);
+      border-radius: 4px;
+    }
+    .column::-webkit-scrollbar-thumb:hover {
+      background: var(--darker-accent);
     }
     .task-details {
       margin-top: 10px;
@@ -233,7 +250,7 @@ export class InteractionHistoryWidget extends LitElement {
 
     return html`
       <div class="content">
-        <div>
+        <div class="column">
           <button class="refresh-btn" @click=${this.fetchHistory}>Refresh</button>
           <button class="clear-btn" @click=${this.clearHistory}>Clear</button>
           <h3>Invocation Tree</h3>
@@ -243,7 +260,7 @@ export class InteractionHistoryWidget extends LitElement {
           }
         </div>
 
-        <div>
+        <div class="column">
           <h3>Task List (${Object.keys(this.data.taskStore).length})</h3>
           ${Object.keys(this.data.taskStore).length > 0
             ? this.renderTaskList(this.data.taskStore)
