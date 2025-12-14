@@ -23,6 +23,7 @@ import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js"
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
 import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
+import { InteractionHistoryTool } from "./lib/tools/interaction-history-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
@@ -88,6 +89,8 @@ const defaultAgentTool = new DefaultAgentTool(toolboxCollector, agentManager);
 
 const arenaManager = ArenaManager.getInstance(dbManager, agentManager);
 
+const interactionHistoryTool = new InteractionHistoryTool(toolboxCollector, arenaManager, api);
+
 // Initialize ChatHistory
 const chatHistory = new ChatHistory(dbManager, arenaManager);
 
@@ -115,6 +118,7 @@ const routeGroups = [
   formatterSettingsTool,
   autoScrollSettingsTool,
   defaultAgentTool,
+  interactionHistoryTool,
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,

@@ -132,6 +132,7 @@ export class PopupDialog extends LitElement {
     maxWidth: { type: String },
     maxHeight: { type: String },
     minWidth: { type: String },
+    minHeight: { type: String },
     title: { type: String }
   };
 
@@ -142,13 +143,15 @@ export class PopupDialog extends LitElement {
     this.maxWidth = '500px';
     this.maxHeight = '80vh';
     this.minWidth = '';
+    this.minHeight = '';
     this.title = '';
   }
 
   render() {
     const minWidthStyle = this.minWidth ? `min-width: ${this.minWidth};` : '';
+    const minHeightStyle = this.minHeight ? `min-height: ${this.minHeight};` : '';
     return html`
-      <dialog style="max-width: ${this.maxWidth}; max-height: ${this.maxHeight}; ${minWidthStyle}">
+      <dialog style="max-width: ${this.maxWidth}; max-height: ${this.maxHeight}; ${minWidthStyle} ${minHeightStyle}">
         <button class="close-btn" @click=${() => this.open = false}>×</button>
         ${this.title ? html`<h3 class="dialog-title">${this.title}</h3>` : ''}
         <div class="content">${this.contentTemplate ? this.contentTemplate() : this.content}</div>
