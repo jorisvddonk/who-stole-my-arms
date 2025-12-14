@@ -21,9 +21,6 @@ export class PopupDialog extends LitElement {
       color: var(--text-color);
       font-family: 'Times New Roman', serif;
     }
-    .content {
-      white-space: pre-wrap;
-    }
     .content select {
       width: 120px;
     }
