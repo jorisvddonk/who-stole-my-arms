@@ -42,8 +42,20 @@ export abstract class Tool {
         this.fqdn = `tools.${this.constructor.name}`;
     }
 
+    /**
+     * Executes the tool with the given parameters.
+     * @param parameters The input parameters for the tool.
+     * @param context Optional context containing arena and task references.
+     * @returns Promise resolving to the tool's result.
+     */
     abstract run(parameters: any, context?: { arena: any, task: Task }): Promise<any>;
 
+    /**
+     * Writes data to the task's scratchpad as a data chunk.
+     * @param task The task to which the data chunk will be added.
+     * @param data The data to store.
+     * @param fqdn Optional FQDN to use instead of the tool's default.
+     */
     public writeTaskDataChunk(task: Task, data: any, fqdn?: string): void {
         const effectiveFqdn = fqdn || this.fqdn;
         if (!effectiveFqdn) {
@@ -58,6 +70,12 @@ export abstract class Tool {
         task.scratchpad.push(chunk);
     }
 
+    /**
+     * Writes data to the arena's session-global data chunks.
+     * @param data The data to store.
+     * @param context Context containing the arena reference.
+     * @param fqdn Optional FQDN to use instead of the tool's default.
+     */
     public writeSessionDataChunk(data: any, context: { arena: any }, fqdn?: string): void {
         const effectiveFqdn = fqdn || this.fqdn;
         if (!effectiveFqdn) {
@@ -72,6 +90,12 @@ export abstract class Tool {
         context.arena.dataChunks.push(chunk);
     }
 
+    /**
+     * Retrieves data chunks from the task's scratchpad.
+     * @param task The task from which to retrieve data chunks.
+     * @param fqdn Optional FQDN to filter by instead of the tool's default.
+     * @returns Array of data objects stored by the specified FQDN in the task.
+     */
     public getTaskDataChunks(task: Task, fqdn?: string): any[] {
         const effectiveFqdn = fqdn || this.fqdn;
         if (!effectiveFqdn) {
@@ -90,6 +114,12 @@ export abstract class Tool {
             .filter((d: any) => d !== null);
     }
 
+    /**
+     * Retrieves data chunks from the arena's session-global storage.
+     * @param context Context containing the arena reference.
+     * @param fqdn Optional FQDN to filter by instead of the tool's default.
+     * @returns Array of data objects stored by the specified FQDN in the session.
+     */
     public getSessionDataChunks(context: { arena: any }, fqdn?: string): any[] {
         const effectiveFqdn = fqdn || this.fqdn;
         if (!effectiveFqdn) {
@@ -108,6 +138,13 @@ export abstract class Tool {
             .filter((d: any) => d !== null);
     }
 
+    /**
+     * Retrieves all data chunks from session-global and task-scoped storage.
+     * @param task The task to include task-scoped data from.
+     * @param context Context containing the arena reference.
+     * @param fqdn Optional FQDN to filter by instead of the tool's default.
+     * @returns Array of all data objects stored by the specified FQDN.
+     */
     public getAllDataChunks(task: Task, context: { arena: any }, fqdn?: string): any[] {
         const sessionData = this.getSessionDataChunks(context, fqdn);
         const taskData = this.getTaskDataChunks(task, fqdn);
@@ -267,6 +304,10 @@ export abstract class LLMAgent {
         this.addChunk(task, chunk);
     }
 
+    /**
+     * Writes data to the arena's session-global data chunks.
+     * @param data The data to store.
+     */
     public writeSessionDataChunk(data: any): void {
         if (!this.fqdn) {
             throw new Error('Agent FQDN not set');
@@ -284,6 +325,11 @@ export abstract class LLMAgent {
         arena.dataChunks.push(chunk);
     }
 
+    /**
+     * Retrieves data chunks from the task's scratchpad.
+     * @param task The task from which to retrieve data chunks.
+     * @returns Array of data objects stored by this agent in the task.
+     */
     public getTaskDataChunks(task: Task): any[] {
         if (!this.fqdn) {
             throw new Error('Agent FQDN not set');
@@ -301,6 +347,10 @@ export abstract class LLMAgent {
             .filter((d: any) => d !== null);
     }
 
+    /**
+     * Retrieves data chunks from the arena's session-global storage.
+     * @returns Array of data objects stored by this agent in the session.
+     */
     public getSessionDataChunks(): any[] {
         if (!this.fqdn) {
             throw new Error('Agent FQDN not set');
@@ -322,6 +372,11 @@ export abstract class LLMAgent {
             .filter((d: any) => d !== null);
     }
 
+    /**
+     * Retrieves all data chunks from session-global and task-scoped storage.
+     * @param task Optional task to include task-scoped data.
+     * @returns Array of all data objects stored by this agent.
+     */
     public getAllDataChunks(task?: Task): any[] {
         const sessionData = this.getSessionDataChunks();
         const taskData = task ? this.getTaskDataChunks(task) : [];
