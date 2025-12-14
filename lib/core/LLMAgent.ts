@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { StreamingLLMInvoke } from '../../interfaces/LLMInvoke';
+import { Logger, AGENT_COLOR, RESET } from '../logging/debug-logger';
 
 export enum ChunkType {
     Input = 'input',
     LlmOutput = 'llmOutput',
     ToolOutput = 'toolOutput',
     AgentOutput = 'agentOutput',
-    Error = 'error'
+    Error = 'error',
+    Data = 'data'
 }
 
 export interface Chunk {
@@ -75,10 +77,12 @@ export abstract class LLMAgent {
     public tools: Record<string, Tool> = {};
     public registeredAgents: Record<string, LLMAgent> = {};
     protected streamingLLM: StreamingLLMInvoke;
+    public fqdn: string;
 
     constructor(streamingLLM: StreamingLLMInvoke, arena: any) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
+        this.fqdn = `agents.${this.constructor.name}`;
         if (arena) {
             arena.wireAgentEventEmitter(this);
         }
@@ -169,6 +173,80 @@ export abstract class LLMAgent {
 
     protected postProcessResponse(response: string): string {
         return response;
+    }
+
+    public writeTaskDataChunk(task: Task, data: any): void {
+        if (!this.fqdn) {
+            throw new Error('Agent FQDN not set');
+        }
+        Logger.globalLog(`${AGENT_COLOR}${this.constructor.name}${RESET} writing task data chunk: ${JSON.stringify(data)}`);
+        const chunk: Chunk = {
+            type: ChunkType.Data,
+            content: JSON.stringify({ fqdn: this.fqdn, data }),
+            processed: true
+        };
+        this.addChunk(task, chunk);
+    }
+
+    public writeSessionDataChunk(data: any): void {
+        if (!this.fqdn) {
+            throw new Error('Agent FQDN not set');
+        }
+        const arena = (this as any).arena;
+        if (!arena) {
+            throw new Error('Agent not associated with an arena');
+        }
+        Logger.globalLog(`${AGENT_COLOR}${this.constructor.name}${RESET} writing session data chunk: ${JSON.stringify(data)}`);
+        const chunk: Chunk = {
+            type: ChunkType.Data,
+            content: JSON.stringify({ fqdn: this.fqdn, data }),
+            processed: true
+        };
+        arena.dataChunks.push(chunk);
+    }
+
+    public getTaskDataChunks(task: Task): any[] {
+        if (!this.fqdn) {
+            throw new Error('Agent FQDN not set');
+        }
+        return task.scratchpad
+            .filter((c: Chunk) => c.type === ChunkType.Data)
+            .map((c: Chunk) => {
+                try {
+                    const parsed = JSON.parse(c.content);
+                    return parsed.fqdn === this.fqdn ? parsed.data : null;
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter((d: any) => d !== null);
+    }
+
+    public getSessionDataChunks(): any[] {
+        if (!this.fqdn) {
+            throw new Error('Agent FQDN not set');
+        }
+        const arena = (this as any).arena;
+        if (!arena) {
+            throw new Error('Agent not associated with an arena');
+        }
+        return arena.dataChunks
+            .filter((c: Chunk) => c.type === ChunkType.Data)
+            .map((c: Chunk) => {
+                try {
+                    const parsed = JSON.parse(c.content);
+                    return parsed.fqdn === this.fqdn ? parsed.data : null;
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter((d: any) => d !== null);
+    }
+
+    public getAllDataChunks(task?: Task): any[] {
+        const sessionData = this.getSessionDataChunks();
+        const taskData = task ? this.getTaskDataChunks(task) : [];
+        return [...sessionData, ...taskData];
     }
 
     abstract buildPrompt(task: Task): string;

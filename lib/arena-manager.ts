@@ -49,6 +49,7 @@ export class ArenaManager {
         arena.invocationLog = state.invocationLog || [];
         arena.currentContinuationTask = state.currentContinuationTask || null;
         arena.errorCount = state.errorCount || 0;
+        arena.dataChunks = state.dataChunks || [];
 
         // Reconstruct task objects if needed
         for (const taskId in arena.taskStore) {
@@ -77,6 +78,7 @@ export class ArenaManager {
         invocationLog: arena.invocationLog,
         currentContinuationTask: arena.currentContinuationTask,
         errorCount: arena.errorCount,
+        dataChunks: arena.dataChunks,
       };
 
       // Save each key separately

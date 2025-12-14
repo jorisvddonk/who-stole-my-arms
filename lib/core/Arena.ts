@@ -24,6 +24,8 @@ export class Arena {
 
     errorCount: number = 0;
 
+    dataChunks: Chunk[] = [];
+
     constructor(streamingLLM: any, agentManager: AgentManager) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
