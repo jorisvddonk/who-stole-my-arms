@@ -128,7 +128,10 @@ export abstract class LLMAgent {
     }
 
     protected getScratchpadContent(task: Task): string {
-        return task.scratchpad.map(c => c.content).join('\n');
+        return task.scratchpad
+            .filter(c => c.type === ChunkType.Input || c.type === ChunkType.LlmOutput)
+            .map(c => c.content)
+            .join('\n');
     }
 
     protected getFilteredContents(task: Task, type: ChunkType): string {
