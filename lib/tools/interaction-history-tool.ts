@@ -34,6 +34,19 @@ export class InteractionHistoryTool implements ToolboxTool {
             headers: { 'Content-Type': 'application/json' }
           });
         }
+      },
+      "/sessions/:sessionId/interaction-history/clear": async (req: any) => {
+        try {
+          const sessionId = req.params.sessionId;
+          await this.arenaManager.clearArenaState(sessionId);
+          this.arenaManager.clearArena(sessionId);
+          return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: (error as Error).message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
       }
     };
   }

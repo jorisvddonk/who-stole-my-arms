@@ -76,8 +76,9 @@ export class InteractionHistoryWidget extends LitElement {
       color: var(--error-color, #f44336);
       font-weight: bold;
     }
-    .refresh-btn {
+    .refresh-btn, .clear-btn {
       margin-bottom: 10px;
+      margin-right: 10px;
       padding: 5px 10px;
       background: var(--primary-color, #007bff);
       color: white;
@@ -86,8 +87,14 @@ export class InteractionHistoryWidget extends LitElement {
       cursor: pointer;
       grid-column: 1;
     }
-    .refresh-btn:hover {
+    .refresh-btn:hover, .clear-btn:hover {
       background: var(--primary-hover, #0056b3);
+    }
+    .clear-btn {
+      background: var(--error-color, #f44336);
+    }
+    .clear-btn:hover {
+      background: var(--darker-error-color, #d32f2f);
     }
     .loading {
       text-align: center;
@@ -155,6 +162,19 @@ export class InteractionHistoryWidget extends LitElement {
     }
   }
 
+  async clearHistory() {
+    try {
+      const sessionId = sessionManager.getCurrentSession();
+      const res = await fetch(`/sessions/${sessionId}/interaction-history/clear`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      await this.fetchHistory(); // Refresh after clearing
+    } catch (error) {
+      this.error = error.message;
+    }
+  }
+
   renderTree(tree, depth = 0) {
     return html`
       <ul class="tree">
@@ -215,6 +235,7 @@ export class InteractionHistoryWidget extends LitElement {
       <div class="content">
         <div>
           <button class="refresh-btn" @click=${this.fetchHistory}>Refresh</button>
+          <button class="clear-btn" @click=${this.clearHistory}>Clear</button>
           <h3>Invocation Tree</h3>
           ${this.data.invocationTree && this.data.invocationTree.length > 0
             ? this.renderTree(this.data.invocationTree)
