@@ -144,7 +144,7 @@ export class InteractionHistoryWidget extends LitElement {
     return html`
       <ul class="tree">
         ${tree.map(item => html`
-          <li class="tree-item" @mouseenter=${() => this.hoveredTaskId = item.id} @mouseleave=${() => this.hoveredTaskId = ''} @click=${() => this.toggleExpanded(item.id)}>
+          <li class="tree-item" @mouseenter=${() => this.hoveredTaskId = item.id} @mouseleave=${() => this.hoveredTaskId = ''} @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(item.id); }}>
             <span class="${item.type}">${item.type === 'agent' ? 'Agent' : 'Tool'}: <span style="color: ${item.type === 'agent' ? this.getAgentColor(item.name) : '#FF9800'}">${item.name}</span></span>
             ${item.params ? html` <span>(params: ${JSON.stringify(item.params).slice(0, 50)}${JSON.stringify(item.params).length > 50 ? '...' : ''})</span>` : ''}
             <span>(id: ${item.id})</span>
@@ -159,7 +159,7 @@ export class InteractionHistoryWidget extends LitElement {
     return html`
       <ul class="task-list">
         ${Object.values(tasks).map(task => html`
-          <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''}" @click=${() => this.toggleExpanded(task.id)}>
+          <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''}" @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(task.id); }}>
             <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
             <br>Input: ${JSON.stringify(task.input).slice(0, 100)}${JSON.stringify(task.input).length > 100 ? '...' : ''}
             <br>Scratchpad: ${task.scratchpad.length} chunks
