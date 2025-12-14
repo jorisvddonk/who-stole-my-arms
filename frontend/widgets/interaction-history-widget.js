@@ -31,7 +31,13 @@ export class InteractionHistoryWidget extends LitElement {
       margin-left: 20px;
     }
     .tree-item {
-      margin: 5px 0;
+      margin: 2px 0;
+      padding: 2px 4px;
+      background: var(--dialog-bg-shift-1);
+      border-radius: 3px;
+    }
+    .tree-item:hover {
+      background: var(--dialog-bg-shift-2);
     }
 
     .task-list {
