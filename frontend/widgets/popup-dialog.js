@@ -165,6 +165,12 @@ export class PopupDialog extends LitElement {
     if (changedProperties.has('open')) {
       if (this.open) {
         dialog.showModal();
+        // Prevent closing when clicking backdrop if text is selected
+        dialog.addEventListener('click', (e) => {
+          if (e.target === dialog && !window.getSelection().toString()) {
+            this.open = false;
+          }
+        });
       } else {
         dialog.close();
         // Clear content when closing to ensure fresh content on reopen
