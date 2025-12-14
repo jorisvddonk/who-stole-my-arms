@@ -106,16 +106,16 @@ export class PopupDialog extends LitElement {
     }
     .close-btn {
       position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 30px;
-      height: 30px;
+      top: 2px;
+      right: 2px;
+      width: 24px;
+      height: 24px;
       background: var(--dark-accent);
       color: var(--light-text);
       border: none;
       border-radius: 50%;
       cursor: pointer;
-      font-size: 18px;
+      font-size: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
