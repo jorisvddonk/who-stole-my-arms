@@ -41,18 +41,27 @@ export class InteractionHistoryWidget extends LitElement {
     .task-item {
       margin: 5px 0;
       padding: 5px;
-      background: var(--bg-secondary);
+      background: var(--dialog-bg-shift-1);
       border-radius: 3px;
       cursor: pointer;
     }
+    .task-item.expanded {
+      background: var(--dialog-bg-shift-2);
+    }
     .task-item:hover, .task-item.highlighted {
-      background: var(--highlight-bg, #555);
+      background: var(--dialog-bg-shift-2);
+    }
+    .task-item.expanded:hover {
+      background: var(--dialog-bg-shift-3);
     }
     .task-details {
       margin-top: 10px;
       padding: 10px;
-      background: var(--details-bg);
+      background: var(--dialog-bg-shift-3);
       border-radius: 3px;
+    }
+    .task-item:hover .task-details {
+      background: var(--dialog-bg-shift-4);
     }
     .queue-item {
       margin: 2px 0;
@@ -159,7 +168,7 @@ export class InteractionHistoryWidget extends LitElement {
     return html`
       <ul class="task-list">
         ${Object.values(tasks).map(task => html`
-          <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''}" @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(task.id); }}>
+          <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''} ${this.expandedTaskId === task.id ? 'expanded' : ''}" @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(task.id); }}>
             <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
             <br>Input: ${JSON.stringify(task.input).slice(0, 100)}${JSON.stringify(task.input).length > 100 ? '...' : ''}
             <br>Scratchpad: ${task.scratchpad.length} chunks
