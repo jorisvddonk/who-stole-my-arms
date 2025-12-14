@@ -33,12 +33,7 @@ export class InteractionHistoryWidget extends LitElement {
     .tree-item {
       margin: 5px 0;
     }
-    .agent {
-      color: var(--success-color, #4CAF50);
-    }
-    .tool {
-      color: var(--warning-color, #FF9800);
-    }
+
     .task-list {
       list-style: none;
       padding: 0;
@@ -46,7 +41,7 @@ export class InteractionHistoryWidget extends LitElement {
     .task-item {
       margin: 5px 0;
       padding: 5px;
-      background: var(--bg-secondary, #333);
+      background: var(--bg-secondary);
       border-radius: 3px;
       cursor: pointer;
     }
@@ -56,7 +51,7 @@ export class InteractionHistoryWidget extends LitElement {
     .task-details {
       margin-top: 10px;
       padding: 10px;
-      background: var(--details-bg, #222);
+      background: var(--details-bg);
       border-radius: 3px;
     }
     .queue-item {
@@ -106,6 +101,27 @@ export class InteractionHistoryWidget extends LitElement {
     this.fetchHistory();
   }
 
+  getAgentColor(agentName) {
+    // Simple hash-based color assignment
+    const colors = ['#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#FF5722', '#795548', '#607D8B'];
+    let hash = 0;
+    for (let i = 0; i < agentName.length; i++) {
+      hash = agentName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  getChunkTypeColor(type) {
+    switch (type) {
+      case 'input': return '#4CAF50'; // green
+      case 'llmOutput': return '#2196F3'; // blue
+      case 'toolOutput': return '#FF9800'; // orange
+      case 'agentOutput': return '#00BCD4'; // cyan
+      case 'error': return '#F44336'; // red
+      default: console.log('Unknown chunk type:', type); return '#9E9E9E'; // gray
+    }
+  }
+
   async fetchHistory() {
     this.loading = true;
     this.error = '';
@@ -129,7 +145,7 @@ export class InteractionHistoryWidget extends LitElement {
       <ul class="tree">
         ${tree.map(item => html`
           <li class="tree-item" @mouseenter=${() => this.hoveredTaskId = item.id} @mouseleave=${() => this.hoveredTaskId = ''} @click=${() => this.toggleExpanded(item.id)}>
-            <span class="${item.type}">${item.type === 'agent' ? 'Agent' : 'Tool'}: ${item.name}</span>
+            <span class="${item.type}">${item.type === 'agent' ? 'Agent' : 'Tool'}: <span style="color: ${item.type === 'agent' ? this.getAgentColor(item.name) : '#FF9800'}">${item.name}</span></span>
             ${item.params ? html` <span>(params: ${JSON.stringify(item.params).slice(0, 50)}${JSON.stringify(item.params).length > 50 ? '...' : ''})</span>` : ''}
             <span>(id: ${item.id})</span>
             ${item.children && item.children.length > 0 ? this.renderTree(item.children, depth + 1) : ''}
@@ -144,7 +160,7 @@ export class InteractionHistoryWidget extends LitElement {
       <ul class="task-list">
         ${Object.values(tasks).map(task => html`
           <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''}" @click=${() => this.toggleExpanded(task.id)}>
-            <strong>${task.id}</strong> - Agent: ${task.agent_name}, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
+            <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
             <br>Input: ${JSON.stringify(task.input).slice(0, 100)}${JSON.stringify(task.input).length > 100 ? '...' : ''}
             <br>Scratchpad: ${task.scratchpad.length} chunks
             ${this.expandedTaskId === task.id ? this.renderTaskDetails(task) : ''}
@@ -167,7 +183,7 @@ export class InteractionHistoryWidget extends LitElement {
         <ul>
           ${task.scratchpad.map((chunk, index) => html`
             <li>
-              <strong>${index}:</strong> ${chunk.type} (${chunk.processed ? '✓' : '✗'}) - ${chunk.content}
+              <strong>${index}:</strong> <span style="color: ${this.getChunkTypeColor(chunk.type)}">${chunk.type}</span> (${chunk.processed ? '✓' : '✗'}) - ${chunk.content}
             </li>
           `)}
         </ul>
