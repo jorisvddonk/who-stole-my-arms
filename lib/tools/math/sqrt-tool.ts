@@ -1,4 +1,4 @@
-import { Tool } from '../../core/LLMAgent.js';
+import { Tool, Task } from '../../core/LLMAgent';
 
 export class SqrtTool extends Tool {
   name = 'sqrt';
@@ -20,8 +20,8 @@ export class SqrtTool extends Tool {
 Description: Calculate the square root of a number.
 Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
-  async run(args: Record<string, any>): Promise<{ result: number }> {
-    const { value } = args;
+  async run(parameters: any, context?: { arena: any, task: Task }): Promise<{ result: number }> {
+    const { value } = parameters;
     if (typeof value !== 'number' || value < 0) {
       throw new Error('Value must be a non-negative number');
     }

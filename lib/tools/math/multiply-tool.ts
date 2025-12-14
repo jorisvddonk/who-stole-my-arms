@@ -1,4 +1,4 @@
-import { Tool } from '../../core/LLMAgent.js';
+import { Tool, Task } from '../../core/LLMAgent';
 
 export class MultiplyTool extends Tool {
   name = 'multiply';
@@ -23,8 +23,8 @@ export class MultiplyTool extends Tool {
 Description: Multiply two numbers together.
 Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
-  async run(args: Record<string, any>): Promise<{ result: number }> {
-    const { a, b } = args;
+  async run(parameters: any, context?: { arena: any, task: Task }): Promise<{ result: number }> {
+    const { a, b } = parameters;
     if (typeof a !== 'number' || typeof b !== 'number') {
       throw new Error('Both arguments must be numbers');
     }

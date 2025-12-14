@@ -311,7 +311,7 @@ export class Arena {
                     let toolResult: any;
                      if (tool) {
                          try {
-                             toolResult = await tool.run(call.parameters);
+                              toolResult = await tool.run(call.parameters, { arena: this, task });
                              Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
                              const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
                              const toolChunk = { type: ChunkType.ToolOutput, content: toolResultStr, processed: true };

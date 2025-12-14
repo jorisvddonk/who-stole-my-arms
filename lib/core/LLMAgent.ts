@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { StreamingLLMInvoke } from '../../interfaces/LLMInvoke';
-import { Logger, AGENT_COLOR, RESET } from '../logging/debug-logger';
+import { Logger, AGENT_COLOR, TOOL_COLOR, RESET } from '../logging/debug-logger';
 
 export enum ChunkType {
     Input = 'input',
@@ -36,7 +36,83 @@ export abstract class Tool {
         required?: string[];
     };
     abstract readonly prompt?: string;
-    abstract run(parameters: any): Promise<any>;
+    public fqdn: string;
+
+    constructor() {
+        this.fqdn = `tools.${this.constructor.name}`;
+    }
+
+    abstract run(parameters: any, context?: { arena: any, task: Task }): Promise<any>;
+
+    public writeTaskDataChunk(task: Task, data: any, fqdn?: string): void {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Tool FQDN not set');
+        }
+        Logger.globalLog(`${TOOL_COLOR}${this.constructor.name}${RESET} writing task data chunk: ${JSON.stringify(data)}`);
+        const chunk: Chunk = {
+            type: ChunkType.Data,
+            content: JSON.stringify({ fqdn: effectiveFqdn, data }),
+            processed: true
+        };
+        task.scratchpad.push(chunk);
+    }
+
+    public writeSessionDataChunk(data: any, context: { arena: any }, fqdn?: string): void {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Tool FQDN not set');
+        }
+        Logger.globalLog(`${TOOL_COLOR}${this.constructor.name}${RESET} writing session data chunk: ${JSON.stringify(data)}`);
+        const chunk: Chunk = {
+            type: ChunkType.Data,
+            content: JSON.stringify({ fqdn: effectiveFqdn, data }),
+            processed: true
+        };
+        context.arena.dataChunks.push(chunk);
+    }
+
+    public getTaskDataChunks(task: Task, fqdn?: string): any[] {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Tool FQDN not set');
+        }
+        return task.scratchpad
+            .filter((c: Chunk) => c.type === ChunkType.Data)
+            .map((c: Chunk) => {
+                try {
+                    const parsed = JSON.parse(c.content);
+                    return parsed.fqdn === effectiveFqdn ? parsed.data : null;
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter((d: any) => d !== null);
+    }
+
+    public getSessionDataChunks(context: { arena: any }, fqdn?: string): any[] {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Tool FQDN not set');
+        }
+        return context.arena.dataChunks
+            .filter((c: Chunk) => c.type === ChunkType.Data)
+            .map((c: Chunk) => {
+                try {
+                    const parsed = JSON.parse(c.content);
+                    return parsed.fqdn === effectiveFqdn ? parsed.data : null;
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter((d: any) => d !== null);
+    }
+
+    public getAllDataChunks(task: Task, context: { arena: any }, fqdn?: string): any[] {
+        const sessionData = this.getSessionDataChunks(context, fqdn);
+        const taskData = this.getTaskDataChunks(task, fqdn);
+        return [...sessionData, ...taskData];
+    }
 }
 
 function parseToolResults(scratchpad: string): Array<any> {

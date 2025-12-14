@@ -1,4 +1,4 @@
-import { Tool } from '../../core/LLMAgent';
+import { Tool, Task } from '../../core/LLMAgent';
 
 export class RollDiceTool extends Tool {
     readonly name = "RollDice";
@@ -19,7 +19,7 @@ export class RollDiceTool extends Tool {
 Description: Roll a die with the specified number of sides.
 Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
-    async run(parameters: any): Promise<any> {
+    async run(parameters: any, context?: { arena: any, task: Task }): Promise<any> {
         const roll = Math.floor(Math.random() * parameters.sides) + 1;
         return { roll };
     }
