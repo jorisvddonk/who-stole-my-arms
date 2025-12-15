@@ -8,37 +8,6 @@ import { ChunkType, TaskType, Chunk, Task } from '../../interfaces/AgentTypes';
 export { Tool, ChunkType, TaskType };
 
 
-function parseToolResults(scratchpad: string): Array<any> {
-    const startCount = (scratchpad.match(/<\|tool_result\|>/g) || []).length;
-    const endCount = (scratchpad.match(/<\|tool_result_end\|>/g) || []).length;
-    if (startCount !== endCount) {
-        throw new Error("tool result incomplete");
-    }
-    const toolResultRegex = /<\|tool_result\|>(.*?)<\|tool_result_end\|>/gs;
-    const results = [];
-    let match;
-    while ((match = toolResultRegex.exec(scratchpad)) !== null) {
-        const resultData = JSON.parse(match[1]);
-        results.push(resultData);
-    }
-    return results;
-}
-
-function parseAgentResults(scratchpad: string): Array<any> {
-    const startCount = (scratchpad.match(/<\|agent_result\|>/g) || []).length;
-    const endCount = (scratchpad.match(/<\|agent_result_end\|>/g) || []).length;
-    if (startCount !== endCount) {
-        throw new Error("agent result incomplete");
-    }
-    const agentResultRegex = /<\|agent_result\|>(.*?)<\|agent_result_end\|>/gs;
-    const results = [];
-    let match;
-    while ((match = agentResultRegex.exec(scratchpad)) !== null) {
-        const resultData = JSON.parse(match[1]);
-        results.push(resultData);
-    }
-    return results;
-}
 
 export abstract class LLMAgent {
     eventEmitter: EventEmitter;
@@ -103,6 +72,38 @@ export abstract class LLMAgent {
         }
     }
 
+    static parseToolResults(scratchpad: string): Array<any> {
+        const startCount = (scratchpad.match(/<\|tool_result\|>/g) || []).length;
+        const endCount = (scratchpad.match(/<\|tool_result_end\|>/g) || []).length;
+        if (startCount !== endCount) {
+            throw new Error("tool result incomplete");
+        }
+        const toolResultRegex = /<\|tool_result\|>(.*?)<\|tool_result_end\|>/gs;
+        const results = [];
+        let match;
+        while ((match = toolResultRegex.exec(scratchpad)) !== null) {
+            const resultData = JSON.parse(match[1]);
+            results.push(resultData);
+        }
+        return results;
+    }
+
+    static parseAgentResults(scratchpad: string): Array<any> {
+        const startCount = (scratchpad.match(/<\|agent_result\|>/g) || []).length;
+        const endCount = (scratchpad.match(/<\|agent_result_end\|>/g) || []).length;
+        if (startCount !== endCount) {
+            throw new Error("agent result incomplete");
+        }
+        const agentResultRegex = /<\|agent_result\|>(.*?)<\|agent_result_end\|>/gs;
+        const results = [];
+        let match;
+        while ((match = agentResultRegex.exec(scratchpad)) !== null) {
+            const resultData = JSON.parse(match[1]);
+            results.push(resultData);
+        }
+        return results;
+    }
+
     protected getScratchpadContent(task: Task): string {
         return task.scratchpad
             .filter(c => c.type === ChunkType.Input || c.type === ChunkType.LlmOutput)
@@ -128,7 +129,7 @@ export abstract class LLMAgent {
 
     protected parseAgentResultsSafe(task: Task, contents: string, addErrorChunk: boolean = false): any[] {
         try {
-            return parseAgentResults(contents);
+            return LLMAgent.parseAgentResults(contents);
         } catch (e) {
             this.eventEmitter.emit('parseError', { type: 'agentResults', error: e, content: contents });
             if (addErrorChunk) {
@@ -143,7 +144,7 @@ export abstract class LLMAgent {
 
     protected parseToolResultsSafe(task: Task, contents: string, addErrorChunk: boolean = false): any[] {
         try {
-            return parseToolResults(contents);
+            return LLMAgent.parseToolResults(contents);
         } catch (e) {
             this.eventEmitter.emit('parseError', { type: 'toolResults', error: e, content: contents });
             if (addErrorChunk) {
