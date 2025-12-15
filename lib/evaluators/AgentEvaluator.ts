@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { Chunk, ChunkType, LLMAgent, Task, TaskType } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { Chunk, ChunkType, Task, TaskType } from '../../interfaces/AgentTypes';
 import { StreamingLLMInvoke } from '../../interfaces/LLMInvoke';
 import { Evaluator } from '../core/Evaluator';
 

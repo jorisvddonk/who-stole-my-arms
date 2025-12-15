@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { LLMAgent, ChunkType, Chunk, Task, Tool, TaskType } from './LLMAgent';
+import { LLMAgent, Tool } from './LLMAgent';
+import { ChunkType, Chunk, Task, TaskType } from '../../interfaces/AgentTypes';
 import { AgentManager } from '../agents/AgentManager';
 import { EvaluatorManager } from '../evaluators/EvaluatorManager';
 import { Evaluator } from './Evaluator';

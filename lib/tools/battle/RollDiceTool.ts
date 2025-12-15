@@ -1,4 +1,5 @@
-import { Tool, Task } from '../../core/LLMAgent';
+import { Tool } from '../../core/LLMAgent';
+import { Task } from '../../../interfaces/AgentTypes';
 
 export class RollDiceTool extends Tool {
     readonly name = "RollDice";

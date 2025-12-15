@@ -1,4 +1,5 @@
-import { LLMAgent, ChunkType, Task } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { ChunkType, Task } from '../../interfaces/AgentTypes';
 import { RollDiceTool } from '../tools/battle/RollDiceTool';
 
 export class CombatAgent extends LLMAgent {

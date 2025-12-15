@@ -1,4 +1,5 @@
-import { LLMAgent, ChunkType, Task } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { ChunkType, Task } from '../../interfaces/AgentTypes';
 
 export class SentimentAgent extends LLMAgent {
     // supportsContinuation = false (default)

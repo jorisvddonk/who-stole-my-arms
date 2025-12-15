@@ -1,4 +1,5 @@
-import { LLMAgent, Task } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { Task } from '../../interfaces/AgentTypes';
 
 export class ConversationalAgent extends LLMAgent {
     public supportsContinuation: boolean = true;

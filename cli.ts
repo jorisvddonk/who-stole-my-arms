@@ -1,5 +1,6 @@
 import { KoboldAPI } from './lib/llm-api/KoboldAPI.js';
-import { LLMAgent, ChunkType, Chunk, Task, Tool } from './lib/core/LLMAgent';
+import { LLMAgent, Tool } from './lib/core/LLMAgent';
+import { ChunkType, Chunk, Task } from './interfaces/AgentTypes';
 import { Arena } from './lib/core/Arena';
 import { AgentManager } from './lib/agents/AgentManager.js';
 import { EvaluatorManager } from './lib/evaluators/EvaluatorManager.js';

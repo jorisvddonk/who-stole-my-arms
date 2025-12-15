@@ -44,7 +44,7 @@ import { ArenaManager } from "./lib/arena-manager.js";
 import { AgentManager } from "./lib/agents/AgentManager.js";
 import { EvaluatorManager } from "./lib/evaluators/EvaluatorManager.js";
 import { Arena } from "./lib/core/Arena.js";
-import { ChunkType } from "./lib/core/LLMAgent.js";
+import { ChunkType } from "./interfaces/AgentTypes.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();

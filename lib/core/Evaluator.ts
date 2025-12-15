@@ -1,4 +1,4 @@
-import { Chunk, ChunkType } from './LLMAgent';
+import { Chunk, ChunkType } from '../../interfaces/AgentTypes';
 
 export abstract class Evaluator {
     abstract readonly fqdn: string;

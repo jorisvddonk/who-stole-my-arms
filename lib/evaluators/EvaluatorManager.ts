@@ -1,4 +1,4 @@
-import { ChunkType } from '../core/LLMAgent';
+import { ChunkType } from '../../interfaces/AgentTypes';
 import { Evaluator } from '../core/Evaluator';
 import { SimpleEvaluator } from './SimpleEvaluator';
 import { AgentEvaluator } from './AgentEvaluator';

@@ -1,5 +1,5 @@
 import { Logger, TOOL_COLOR, RESET } from '../logging/debug-logger';
-import { ChunkType, Chunk, Task } from './LLMAgent';
+import { ChunkType, Chunk, Task } from '../../interfaces/AgentTypes';
 
 export abstract class Tool {
     abstract readonly name: string;

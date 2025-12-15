@@ -1,4 +1,5 @@
-import { LLMAgent, ChunkType, Task } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { ChunkType, Task } from '../../interfaces/AgentTypes';
 import { ExampleTool } from '../tools/example-tool';
 
 export class ExampleAgent extends LLMAgent {

@@ -1,4 +1,5 @@
-import { LLMAgent, Task } from '../core/LLMAgent';
+import { LLMAgent } from '../core/LLMAgent';
+import { Task } from '../../interfaces/AgentTypes';
 
 export class MathAgent extends LLMAgent {
     buildPrompt(task: Task): string {
