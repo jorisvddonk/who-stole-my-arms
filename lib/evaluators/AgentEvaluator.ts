@@ -4,13 +4,29 @@ import { Chunk, ChunkType, Task, TaskType } from '../../interfaces/AgentTypes';
 import { StreamingLLMInvoke } from '../../interfaces/LLMInvoke';
 import { Evaluator } from '../core/Evaluator';
 
+/**
+ * Evaluator that uses a full LLM agent to analyze chunks.
+ * Creates tasks for the specified agent class to evaluate chunks asynchronously.
+ */
 export class AgentEvaluator extends Evaluator {
+    /** Fully qualified domain name for this evaluator */
     readonly fqdn: string;
+    /** Array of chunk types that this evaluator can process */
     readonly supportedChunkTypes: ChunkType[];
+    /** The agent class constructor to use for evaluation */
     private agentClass: new (streamingLLM: StreamingLLMInvoke, arena: any) => LLMAgent;
+    /** The streaming LLM interface */
     private streamingLLM: StreamingLLMInvoke;
+    /** Event emitter for handling evaluator events */
     eventEmitter: EventEmitter = new EventEmitter();
 
+    /**
+     * Creates a new AgentEvaluator instance.
+     * @param agentClass The agent class constructor to use for evaluation.
+     * @param streamingLLM The streaming LLM interface to pass to the agent.
+     * @param supportedChunkTypes Array of chunk types this evaluator can process.
+     * @param fqdn Optional FQDN override for this evaluator.
+     */
     constructor(
         agentClass: new (streamingLLM: StreamingLLMInvoke, arena: any) => LLMAgent,
         streamingLLM: StreamingLLMInvoke,
@@ -30,6 +46,12 @@ export class AgentEvaluator extends Evaluator {
         }
     }
 
+    /**
+     * Evaluates a chunk by creating an agent task and waiting for completion.
+     * @param chunk The chunk to evaluate.
+     * @param arena The arena context for task management.
+     * @returns Promise resolving to annotation data.
+     */
     async evaluate(chunk: Chunk, arena: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
         return new Promise((resolve) => {
             // Create task with chunk as input

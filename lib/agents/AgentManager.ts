@@ -12,13 +12,22 @@ import { ExampleAgent } from './ExampleAgent';
 import { SentimentAgent } from './SentimentAgent';
 import { Logger } from '../logging/debug-logger';
 
+/**
+ * Singleton manager for loading and managing LLM agents.
+ * Handles both hardcoded agents and dynamic loading from external paths.
+ */
 export class AgentManager {
   private static instance: AgentManager;
   private agents: Record<string, LLMAgent> = {};
   private initialized = false;
 
+  /** Private constructor for singleton pattern */
   private constructor() {}
 
+  /**
+   * Gets the singleton instance of AgentManager.
+   * @returns The AgentManager instance.
+   */
   static getInstance(): AgentManager {
     if (!AgentManager.instance) {
       AgentManager.instance = new AgentManager();
@@ -26,6 +35,10 @@ export class AgentManager {
     return AgentManager.instance;
   }
 
+  /**
+   * Initializes the agent manager by loading all available agents.
+   * @param streamingLLM The streaming LLM interface to pass to agents.
+   */
   async init(streamingLLM: any): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
@@ -51,6 +64,10 @@ export class AgentManager {
     Logger.debugLog(`AgentManager loaded agents: ${Object.keys(this.agents).join(', ')}`);
   }
 
+  /**
+   * Loads dynamic agents from paths specified in the WSMA_AGENT_SEARCH_PATH environment variable.
+   * @param streamingLLM The streaming LLM interface to pass to loaded agents.
+   */
   private async loadDynamicAgents(streamingLLM: any): Promise<void> {
     const searchPaths = process.env.WSMA_AGENT_SEARCH_PATH;
     Logger.debugLog(`WSMA_AGENT_SEARCH_PATH: ${searchPaths}`);
@@ -99,14 +116,27 @@ export class AgentManager {
     }
   }
 
+  /**
+   * Gets a copy of all loaded agents.
+   * @returns Record mapping agent names to agent instances.
+   */
   getAgents(): Record<string, LLMAgent> {
     return { ...this.agents };
   }
 
+  /**
+   * Gets the names of all loaded agents.
+   * @returns Array of agent names.
+   */
   getAgentNames(): string[] {
     return Object.keys(this.agents);
   }
 
+  /**
+   * Gets a specific agent by name.
+   * @param name The name of the agent to retrieve.
+   * @returns The agent instance, or undefined if not found.
+   */
   getAgent(name: string): LLMAgent | undefined {
     return this.agents[name];
   }
