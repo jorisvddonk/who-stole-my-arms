@@ -33,11 +33,20 @@ interface KoboldSettings {
   bypassEos: boolean;
 }
 
+/**
+ * KoboldAI API client that implements multiple LLM interfaces.
+ * Provides access to KoboldAI-compatible LLM servers with streaming and non-streaming support.
+ */
 export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl {
   private baseUrl: string;
   private genkey: string;
   private settings: KoboldSettings;
 
+  /**
+   * Creates a new KoboldAPI instance.
+   * @param baseUrl The base URL of the KoboldAI server
+   * @param settings Optional settings to override defaults
+   */
   constructor(baseUrl: string = 'http://localhost:5001', settings?: Partial<KoboldSettings>) {
     this.baseUrl = baseUrl;
     this.genkey = `KCPP${Math.random().toString(36).substring(2, 6).toUpperCase()}`;

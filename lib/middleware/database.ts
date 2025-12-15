@@ -3,7 +3,13 @@ import { HasStorage } from "../interfaces/Storage.js";
 
 
 
-// Middleware function to inject storage into request context
+/**
+ * Creates middleware that injects database storage into request context.
+ * Automatically determines whether to use session-specific or global storage based on URL path.
+ * @param dbManager The database manager instance
+ * @param component The component that requires storage
+ * @returns A middleware function that wraps handlers
+ */
 export function withStorage(dbManager: DatabaseManager, component: HasStorage) {
   return function(handler: any): any {
     if (typeof handler === 'function') {

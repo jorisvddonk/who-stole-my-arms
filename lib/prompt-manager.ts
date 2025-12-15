@@ -5,6 +5,7 @@ import { Storage, HasStorage } from '../interfaces/Storage.js';
 import { logError } from './logging/logger.js';
 import { createMethodRouter } from './util/route-utils.js';
 
+/** Individual prompt item with metadata */
 export interface PromptItem {
   type: 'prompt';
   name: string;
@@ -12,6 +13,7 @@ export interface PromptItem {
   tags: string[];
 }
 
+/** Named group containing multiple prompt items */
 export interface NamedGroup {
   type: 'group';
   name: string;
@@ -19,6 +21,7 @@ export interface NamedGroup {
   description?: string;
 }
 
+/** Reference to a named prompt group */
 export interface NamedGroupReference {
   type: 'groupRef';
   name: string;
@@ -26,25 +29,33 @@ export interface NamedGroupReference {
 
 export type Item = PromptItem | NamedGroup | NamedGroupReference;
 
+/** Interface for providing prompt groups */
 export interface PromptProvider {
   getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null>;
   getAvailablePromptGroups(): { name: string; description: string }[];
 }
 
+/** Template for combining multiple prompt groups */
 export interface PromptTemplate {
   name: string;
   groups: string[];
   createdAt: Date;
 }
 
+/**
+ * Manages prompt templates and provides a toolbox interface for prompt management.
+ * Allows users to create, save, and apply custom prompt combinations.
+ */
 export class PromptManager implements ToolboxTool, HasStorage {
   private providers: Map<string, PromptProvider> = new Map();
   private currentContext: any = {};
 
+  /** Gets the fully qualified domain name for storage isolation */
   getFQDN(): string {
     return 'tools.prompt.manager';
   }
 
+  /** Initializes the prompt manager with storage */
   async init(storage: Storage): Promise<void> {
     const sessionId = storage.getSessionId();
     console.log(`\x1b[32mInitializing prompt template database${sessionId ? ` for session \x1b[34m${sessionId}\x1b[32m` : ''}...\x1b[0m`);

@@ -1,9 +1,18 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { Task } from '../../interfaces/AgentTypes';
 
+/**
+ * Simple conversational agent that provides basic assistance.
+ * Supports continuation for multi-turn conversations.
+ */
 export class SimpleAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
+    /**
+     * Builds a prompt for the simple agent that includes conversation history and current input.
+     * @param task The task containing input and scratchpad data
+     * @returns The constructed prompt string
+     */
     buildPrompt(task: Task): string {
         const scratchpadContent = this.getScratchpadContent(task);
         const currentInput = this.getInputText(task);

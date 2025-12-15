@@ -12,12 +12,22 @@ interface OpenRouterSettings {
   stop: string[];
 }
 
+/**
+ * OpenRouter API client that implements multiple LLM interfaces.
+ * Provides access to various AI models through the OpenRouter service with streaming support.
+ */
 export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLMInfo, TokenUtils, GenerationControl {
   private apiKey: string;
   private model: string;
   private settings: OpenRouterSettings;
   private baseUrl = 'https://openrouter.ai/api/v1';
 
+  /**
+   * Creates a new OpenRouterAPI instance.
+   * @param apiKey The OpenRouter API key
+   * @param model The model identifier to use
+   * @param settings Optional settings to override defaults
+   */
   constructor(apiKey: string, model: string = 'tngtech/tng-r1t-chimera:free', settings?: Partial<OpenRouterSettings>) {
     console.log('[OpenRouter] Constructor called with model:', model);
     this.apiKey = apiKey;
@@ -37,6 +47,10 @@ export class OpenRouterAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke,
     console.log('[OpenRouter] Initialized with settings:', {...this.settings, ...{apiKey: "<hidden>"}});
   }
 
+  /**
+   * Updates the API settings and refreshes internal state.
+   * @param newSettings Partial settings to update
+   */
   updateSettings(newSettings: Partial<OpenRouterSettings>) {
     this.settings = { ...this.settings, ...newSettings };
     this.apiKey = this.settings.apiKey;

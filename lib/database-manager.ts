@@ -4,7 +4,17 @@ import { mkdir, readdir, unlink } from "fs/promises";
 import { HasStorage, Storage } from "../interfaces/Storage.js";
 import { randomUUID } from 'crypto';
 
+/**
+ * Database-backed storage implementation for components.
+ * Provides session-scoped and global data persistence using SQLite.
+ */
 export class DBStorage implements Storage {
+  /**
+   * Creates a new DBStorage instance.
+   * @param db The database connection
+   * @param fqdn The fully qualified domain name for table isolation
+   * @param sessionId Optional session ID for session-scoped storage
+   */
   constructor(private db: Database, private fqdn: string, private sessionId?: string) {}
 
   async init(): Promise<void> {

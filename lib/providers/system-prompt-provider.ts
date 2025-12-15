@@ -3,9 +3,17 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { Logger } from '../logging/debug-logger.js';
 
+/**
+ * Provider for system prompts that loads from JSON files and environment paths.
+ * Supports both built-in prompt groups and custom user-defined prompts.
+ */
 export class SystemPromptProvider implements PromptProvider {
   private customPrompts: Record<string, NamedGroup> = {};
 
+  /**
+   * Creates a new SystemPromptProvider and loads available prompts.
+   * Loads prompts from system-prompts.json and paths specified in WSMA_SYSTEM_PROMPT_SEARCH_PATH.
+   */
   constructor() {
     if (existsSync('system-prompts.json')) {
       try {
@@ -45,6 +53,12 @@ export class SystemPromptProvider implements PromptProvider {
       }
     }
   }
+  /**
+   * Retrieves a named prompt group by name.
+   * @param groupName The name of the prompt group to retrieve
+   * @param context Optional context (not used by this provider)
+   * @returns The prompt group or null if not found
+   */
   async getNamedPromptGroup(groupName: string, context?: any): Promise<NamedGroup | null> {
     if (this.customPrompts[groupName]) {
       return this.customPrompts[groupName];
@@ -90,6 +104,10 @@ export class SystemPromptProvider implements PromptProvider {
     }
   }
 
+  /**
+   * Gets a list of all available prompt groups with their descriptions.
+   * @returns Array of objects with name and description for each prompt group
+   */
   getAvailablePromptGroups(): { name: string; description: string }[] {
     const groups = [
       { name: 'basic', description: 'Simple system prompt' },

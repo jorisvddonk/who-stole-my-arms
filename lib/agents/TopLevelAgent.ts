@@ -1,7 +1,16 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { ChunkType, Task } from '../../interfaces/AgentTypes';
 
+/**
+ * Top-level coordinator agent that manages the overall conversation flow.
+ * Can delegate to specialized agents and provides final responses to users.
+ */
 export class TopLevelAgent extends LLMAgent {
+    /**
+     * Builds a prompt for the top-level agent that coordinates task execution and agent delegation.
+     * @param task The task containing user input and conversation history
+     * @returns The constructed prompt string
+     */
     buildPrompt(task: Task): string {
         const scratchpadContent = this.getScratchpadContent(task);
         const agentContents = this.getFilteredContents(task, ChunkType.AgentOutput);
