@@ -11,11 +11,17 @@ export enum ChunkType {
     Data = 'data'
 }
 
+export enum TaskType {
+    Regular = 'regular',
+    Evaluator = 'evaluator'
+}
+
 export interface Chunk {
     type: ChunkType;
     content: string;
     processed: boolean;
     messageId?: string;
+    annotations?: Record<string, any>;
 }
 
 export interface Task {
@@ -26,6 +32,8 @@ export interface Task {
     scratchpad: Chunk[];
     retryCount: number;
     executionCount?: number;
+    taskType?: TaskType;
+    onComplete?: (result: string | {content: string, annotation?: any, annotations?: Record<string, any>}) => void;
 }
 
 export abstract class Tool {
@@ -49,7 +57,7 @@ export abstract class Tool {
      * @param context Optional context containing arena and task references.
      * @returns Promise resolving to the tool's result.
      */
-    abstract run(parameters: any, context?: { arena: any, task: Task }): Promise<any>;
+    abstract run(parameters: any, context?: { arena: any, task: Task }): Promise<any | { result: any, annotation?: any, annotations?: Record<string, any> }>;
 
     /**
      * Writes data to the task's scratchpad as a data chunk.
@@ -151,6 +159,51 @@ export abstract class Tool {
         const taskData = this.getTaskDataChunks(task, fqdn);
         return [...sessionData, ...taskData];
     }
+
+    /**
+     * Annotates a chunk with data under the specified FQDN.
+     * @param chunk The chunk to annotate.
+     * @param annotation The annotation data.
+     * @param fqdn Optional FQDN to use instead of the tool's default.
+     */
+    public writeChunkAnnotation(chunk: Chunk, annotation: any, fqdn?: string): void {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Tool FQDN not set');
+        }
+        Logger.globalLog(`${TOOL_COLOR}${this.constructor.name}${RESET} annotating chunk: ${JSON.stringify(annotation)} with fqdn ${effectiveFqdn}`);
+        if (!chunk.annotations) {
+            chunk.annotations = {};
+        }
+        chunk.annotations[effectiveFqdn] = annotation;
+    }
+
+    /**
+     * Retrieves annotations from a chunk.
+     * @param chunk The chunk to retrieve annotations from.
+     * @param fqdn Optional FQDN to filter by instead of the tool's default. If not provided, returns the full annotations map.
+     * @returns The annotation value if fqdn is specified, or the full annotations map.
+     */
+    public getChunkAnnotation(chunk: Chunk, fqdn?: string): any | Record<string, any> {
+        if (fqdn) {
+            const effectiveFqdn = fqdn || this.fqdn;
+            if (!effectiveFqdn) {
+                throw new Error('Tool FQDN not set');
+            }
+            return chunk.annotations?.[effectiveFqdn];
+        } else {
+            return chunk.annotations || {};
+        }
+    }
+
+    /**
+     * Retrieves all annotations from a chunk.
+     * @param chunk The chunk to retrieve annotations from.
+     * @returns The full annotations map.
+     */
+    public getAllChunkAnnotations(chunk: Chunk): Record<string, any> {
+        return chunk.annotations || {};
+    }
 }
 
 function parseToolResults(scratchpad: string): Array<any> {
@@ -192,6 +245,7 @@ export abstract class LLMAgent {
     public registeredAgents: Record<string, LLMAgent> = {};
     protected streamingLLM: StreamingLLMInvoke;
     public fqdn: string;
+    public currentTask: Task | null = null;
 
     constructor(streamingLLM: StreamingLLMInvoke, arena: any) {
         this.streamingLLM = streamingLLM;
@@ -214,26 +268,32 @@ export abstract class LLMAgent {
         this.streamingLLM = streamingLLM;
     }
 
-    async run(task: Task): Promise<string> {
-        try {
-            const prompt = this.buildPrompt(task);
-            let response = '';
-            if (this.streamingLLM && this.streamingLLM.generateStream) {
-                for await (const chunk of this.streamingLLM.generateStream(prompt)) {
-                    if (chunk.token) {
-                        response += chunk.token;
-                        this.eventEmitter.emit('token', chunk.token);
-                    }
-                    if (chunk.finishReason) {
-                        // done
-                        break;
-                    }
+    async generateStreamingResponse(prompt: string) {
+        let response = '';
+        if (this.streamingLLM && this.streamingLLM.generateStream) {
+            for await (const element of this.streamingLLM.generateStream(prompt)) {
+                if (element.token) {
+                    response += element.token;
+                    this.eventEmitter.emit('token', element.token);
                 }
-            } else if (this.streamingLLM && (this.streamingLLM as any).generate) {
-                response = await (this.streamingLLM as any).generate(prompt);
-            } else {
-                throw new Error(`No generate method available; streamingLLM is: ${this.streamingLLM}`);
+                if (element.finishReason) {
+                    // done
+                    break;
+                }
             }
+        } else if (this.streamingLLM && (this.streamingLLM as any).generate) {
+            response = await (this.streamingLLM as any).generate(prompt);
+        } else {
+            throw new Error(`No generate method available; streamingLLM is: ${this.streamingLLM}`);
+        }
+        return response;
+    }
+
+    async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
+        this.currentTask = task;
+        try {
+            const prompt = this.buildPrompt(task);            
+            let response = await this.generateStreamingResponse(prompt);
             return this.postProcessResponse(response);
         } catch (error) {
             this.eventEmitter.emit('error', error);
@@ -288,7 +348,7 @@ export abstract class LLMAgent {
         this.eventEmitter.emit(`chunk:${chunk.type}`, chunk);
     }
 
-    protected postProcessResponse(response: string): string {
+    protected postProcessResponse(response: string | { content: string, annotation?: any, annotations?: Record<string, any> }): string | { content: string, annotation?: any, annotations?: Record<string, any> } {
         return response;
     }
 
@@ -382,6 +442,51 @@ export abstract class LLMAgent {
         const sessionData = this.getSessionDataChunks();
         const taskData = task ? this.getTaskDataChunks(task) : [];
         return [...sessionData, ...taskData];
+    }
+
+    /**
+     * Annotates a chunk with data under the specified FQDN.
+     * @param chunk The chunk to annotate.
+     * @param annotation The annotation data.
+     * @param fqdn Optional FQDN to use instead of the agent's default.
+     */
+    public writeChunkAnnotation(chunk: Chunk, annotation: any, fqdn?: string): void {
+        const effectiveFqdn = fqdn || this.fqdn;
+        if (!effectiveFqdn) {
+            throw new Error('Agent FQDN not set');
+        }
+        Logger.globalLog(`${AGENT_COLOR}${this.constructor.name}${RESET} annotating chunk: ${JSON.stringify(annotation)} with fqdn ${effectiveFqdn}`);
+        if (!chunk.annotations) {
+            chunk.annotations = {};
+        }
+        chunk.annotations[effectiveFqdn] = annotation;
+    }
+
+    /**
+     * Retrieves annotations from a chunk.
+     * @param chunk The chunk to retrieve annotations from.
+     * @param fqdn Optional FQDN to filter by instead of the agent's default. If not provided, returns the full annotations map.
+     * @returns The annotation value if fqdn is specified, or the full annotations map.
+     */
+    public getChunkAnnotation(chunk: Chunk, fqdn?: string): any | Record<string, any> {
+        if (fqdn) {
+            const effectiveFqdn = fqdn || this.fqdn;
+            if (!effectiveFqdn) {
+                throw new Error('Agent FQDN not set');
+            }
+            return chunk.annotations?.[effectiveFqdn];
+        } else {
+            return chunk.annotations || {};
+        }
+    }
+
+    /**
+     * Retrieves all annotations from a chunk.
+     * @param chunk The chunk to retrieve annotations from.
+     * @returns The full annotations map.
+     */
+    public getAllChunkAnnotations(chunk: Chunk): Record<string, any> {
+        return chunk.annotations || {};
     }
 
     abstract buildPrompt(task: Task): string;

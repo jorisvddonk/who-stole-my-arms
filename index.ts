@@ -42,6 +42,7 @@ import { ChatterboxVoiceEngine } from "./lib/chatterbox-voice-engine.js";
 import { voiceEmitter } from "./lib/voice-emitter.js";
 import { ArenaManager } from "./lib/arena-manager.js";
 import { AgentManager } from "./lib/agents/AgentManager.js";
+import { EvaluatorManager } from "./lib/evaluators/EvaluatorManager.js";
 import { Arena } from "./lib/core/Arena.js";
 import { ChunkType } from "./lib/core/LLMAgent.js";
 
@@ -85,9 +86,17 @@ api = baseApi;
 const agentManager = AgentManager.getInstance();
 await agentManager.init(api);
 
+// Initialize EvaluatorManager
+const evaluatorManager = EvaluatorManager.getInstance();
+try {
+  await evaluatorManager.init(api);
+} catch (e) {
+  console.log('EvaluatorManager init failed:', e);
+}
+
 const defaultAgentTool = new DefaultAgentTool(toolboxCollector, agentManager);
 
-const arenaManager = ArenaManager.getInstance(dbManager, agentManager);
+const arenaManager = ArenaManager.getInstance(dbManager, agentManager, evaluatorManager);
 
 const interactionHistoryTool = new InteractionHistoryTool(toolboxCollector, arenaManager, api);
 
@@ -364,11 +373,15 @@ const routeGroups = [
                   agent_name: defaultAgent,
                   input: { text: userPrompt, messageId: userMessageId },
                   parent_task_id: null,
-                  scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
+                  scratchpad: [],
                   retryCount: 0,
                   executionCount: 0
                 };
                 arena.taskStore[rootTask.id] = rootTask;
+
+                // Add input chunk (triggers evaluators synchronously)
+                const inputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                arena.addInputChunk(rootTask, inputChunk);
                 arena.currentContinuationTask = rootTask;
                 arena.taskQueue.push(rootTask);
               } else {
@@ -468,16 +481,21 @@ const routeGroups = [
                     arena.errorCount = 0;
 
                     if (!arena.currentContinuationTask) {
+                      // Create new root task
                       const rootTask = {
                         id: Arena.generateId(),
                         agent_name: defaultAgent,
                         input: { text: userPrompt, messageId: userMessageId },
                         parent_task_id: null,
-                        scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
+                        scratchpad: [],
                         retryCount: 0,
                         executionCount: 0
                       };
                       arena.taskStore[rootTask.id] = rootTask;
+
+                      // Add input chunk (triggers evaluators synchronously)
+                      const inputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      arena.addInputChunk(rootTask, inputChunk);
                       arena.currentContinuationTask = rootTask;
                       arena.taskQueue.push(rootTask);
                     } else {

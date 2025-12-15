@@ -8,6 +8,8 @@ import { CombatAgent } from './CombatAgent';
 import { MathAgent } from './MathAgent';
 import { ErrorAgent } from './ErrorAgent';
 import { RPGGameMasterAgent } from './RPGGameMasterAgent';
+import { ExampleAgent } from './ExampleAgent';
+import { SentimentAgent } from './SentimentAgent';
 import { Logger } from '../logging/debug-logger';
 
 export class AgentManager {
@@ -39,6 +41,8 @@ export class AgentManager {
       'MathAgent': new MathAgent(streamingLLM, null),
       'ErrorAgent': new ErrorAgent(streamingLLM, null),
       'RPGGameMasterAgent': new RPGGameMasterAgent(streamingLLM, null),
+      'ExampleAgent': new ExampleAgent(streamingLLM, null),
+      'SentimentAgent': new SentimentAgent(streamingLLM, null),
     };
 
     // Load dynamic agents

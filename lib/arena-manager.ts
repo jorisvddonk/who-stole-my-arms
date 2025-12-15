@@ -1,5 +1,6 @@
 import { Arena } from './core/Arena';
 import { AgentManager } from './agents/AgentManager';
+import { EvaluatorManager } from './evaluators/EvaluatorManager';
 import { DatabaseManager, Storage } from './database-manager';
 import { Logger } from './logging/debug-logger';
 
@@ -8,15 +9,17 @@ export class ArenaManager {
   private arenas = new Map<string, Arena>();
   private dbManager: DatabaseManager;
   private agentManager: AgentManager;
+  private evaluatorManager: EvaluatorManager;
 
-  private constructor(dbManager: DatabaseManager, agentManager: AgentManager) {
+  private constructor(dbManager: DatabaseManager, agentManager: AgentManager, evaluatorManager: EvaluatorManager) {
     this.dbManager = dbManager;
     this.agentManager = agentManager;
+    this.evaluatorManager = evaluatorManager;
   }
 
-  static getInstance(dbManager: DatabaseManager, agentManager: AgentManager): ArenaManager {
+  static getInstance(dbManager: DatabaseManager, agentManager: AgentManager, evaluatorManager: EvaluatorManager): ArenaManager {
     if (!ArenaManager.instance) {
-      ArenaManager.instance = new ArenaManager(dbManager, agentManager);
+      ArenaManager.instance = new ArenaManager(dbManager, agentManager, evaluatorManager);
     }
     return ArenaManager.instance;
   }
@@ -30,7 +33,7 @@ export class ArenaManager {
       return existing;
     }
 
-    const arena = new Arena(streamingLLM, this.agentManager);
+    const arena = new Arena(streamingLLM, this.agentManager, this.evaluatorManager);
 
     // Hydrate state from DB
     try {

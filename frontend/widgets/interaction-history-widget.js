@@ -197,7 +197,7 @@ export class InteractionHistoryWidget extends LitElement {
       <ul class="tree">
         ${tree.map(item => html`
           <li class="tree-item" @mouseenter=${() => this.hoveredTaskId = item.id} @mouseleave=${() => this.hoveredTaskId = ''} @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(item.id); }}>
-            <span class="${item.type}">${item.type === 'agent' ? 'Agent' : 'Tool'}: <span style="color: ${item.type === 'agent' ? this.getAgentColor(item.name) : '#FF9800'}">${item.name}</span></span>
+            <span class="${item.type}">${item.type === 'agent' ? 'Agent' : 'Tool'}: <span style="color: ${item.type === 'agent' ? this.getAgentColor(item.name) : '#FF9800'}">${item.name}</span>${item.taskType ? ` [${item.taskType}]` : ''}</span>
             ${item.params ? html` <span>(params: ${JSON.stringify(item.params).slice(0, 50)}${JSON.stringify(item.params).length > 50 ? '...' : ''})</span>` : ''}
             <span>(id: ${item.id})</span>
             ${item.children && item.children.length > 0 ? this.renderTree(item.children, depth + 1) : ''}
@@ -212,7 +212,7 @@ export class InteractionHistoryWidget extends LitElement {
       <ul class="task-list">
         ${Object.values(tasks).map(task => html`
           <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''} ${this.expandedTaskId === task.id ? 'expanded' : ''}" @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(task.id); }}>
-            <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
+            <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>${task.taskType ? ` [${task.taskType}]` : ''}, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
             <br>Input: ${JSON.stringify(task.input).slice(0, 100)}${JSON.stringify(task.input).length > 100 ? '...' : ''}
             <br>Scratchpad: ${task.scratchpad.length} chunks
             ${this.expandedTaskId === task.id ? this.renderTaskDetails(task) : ''}
@@ -236,6 +236,7 @@ export class InteractionHistoryWidget extends LitElement {
           ${task.scratchpad.map((chunk, index) => html`
             <li>
               <strong>${index}:</strong> <span style="color: ${this.getChunkTypeColor(chunk.type)}">${chunk.type}</span> (${chunk.processed ? '✓' : '✗'}) - ${chunk.content}
+              ${chunk.annotations ? html`<br><strong>Annotations:</strong> <pre>${JSON.stringify(chunk.annotations, null, 2)}</pre>` : ''}
             </li>
           `)}
         </ul>

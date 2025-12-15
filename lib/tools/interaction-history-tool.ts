@@ -18,8 +18,8 @@ export class InteractionHistoryTool implements ToolboxTool {
           const sessionId = req.params.sessionId;
           const arena = await this.arenaManager.getArena(sessionId, this.api);
 
-          // Build invocation tree
-          const invocationTree = this.buildInvocationTree(arena.invocationLog);
+            // Build invocation tree
+            const invocationTree = this.buildInvocationTree(arena.invocationLog, arena.taskStore);
 
           return new Response(JSON.stringify({
             invocationLog: arena.invocationLog,
@@ -51,18 +51,20 @@ export class InteractionHistoryTool implements ToolboxTool {
     };
   }
 
-  private buildInvocationTree(invocationLog: Array<{id: string, type: 'agent' | 'tool', name: string, parent_id: string | null, params?: any, result?: any}>): any[] {
+  private buildInvocationTree(invocationLog: Array<{id: string, type: 'agent' | 'tool', name: string, parent_id: string | null, params?: any, result?: any}>, taskStore: Record<string, any>): any[] {
     const tree: any[] = [];
     const nodes = new Map<string, any>();
 
     // Create nodes
     for (const inv of invocationLog) {
+      const task = taskStore[inv.id];
       nodes.set(inv.id, {
         id: inv.id,
         type: inv.type,
         name: inv.name,
         params: inv.params,
         result: inv.result,
+        taskType: task?.taskType,
         children: []
       });
     }

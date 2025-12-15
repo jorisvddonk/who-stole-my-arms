@@ -2,6 +2,7 @@ import { KoboldAPI } from './lib/llm-api/KoboldAPI.js';
 import { LLMAgent, ChunkType, Chunk, Task, Tool } from './lib/core/LLMAgent';
 import { Arena } from './lib/core/Arena';
 import { AgentManager } from './lib/agents/AgentManager.js';
+import { EvaluatorManager } from './lib/evaluators/EvaluatorManager.js';
 import { Logger, DEBUG_COLOR, GLOBAL_COLOR, AGENT_COLOR, TOOL_COLOR, YELLOW, BRIGHT_YELLOW, RESET } from './lib/logging/debug-logger';
 import prompts from 'prompts';
 import { Command } from 'commander';
@@ -14,7 +15,10 @@ Logger.setDebugMode(process.argv.includes('--debug'));
 const agentManager = AgentManager.getInstance();
 await agentManager.init(koboldAPI);
 
-const arena = new Arena(koboldAPI, agentManager);
+const evaluatorManager = EvaluatorManager.getInstance();
+await evaluatorManager.init(koboldAPI);
+
+const arena = new Arena(koboldAPI, agentManager, evaluatorManager);
 
 arena.eventEmitter.on('parseError', (details: any) => {
     if (details.agentName) {
@@ -67,11 +71,15 @@ async function handle_user_input(text: string, arena: Arena, isInteractive: bool
             agent_name: ROOT_AGENT_NAME,
             input: text,
             parent_task_id: null,
-            scratchpad: [{ type: ChunkType.Input, content: text, processed: true }],
+            scratchpad: [],
             retryCount: 0
         };
         Logger.debugLog(`Created root task ${rootTask.id} (${AGENT_COLOR}${rootTask.agent_name}${RESET})`);
         arena.taskStore[rootTask.id] = rootTask;
+
+        // Add input chunk (triggers evaluators synchronously)
+        const inputChunk = { type: ChunkType.Input, content: text, processed: true };
+        arena.addInputChunk(rootTask, inputChunk);
         arena.currentContinuationTask = rootTask;
         arena.taskQueue.push(rootTask);
     } else {

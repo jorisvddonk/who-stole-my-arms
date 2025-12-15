@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events';
-import { LLMAgent, ChunkType, Chunk, Task, Tool } from './LLMAgent';
+import { LLMAgent, ChunkType, Chunk, Task, Tool, TaskType } from './LLMAgent';
 import { AgentManager } from '../agents/AgentManager';
+import { EvaluatorManager } from '../evaluators/EvaluatorManager';
+import { Evaluator } from './Evaluator';
+import { ErrorAgent } from '../agents/ErrorAgent';
 import { Logger, DEBUG_COLOR, GLOBAL_COLOR, AGENT_COLOR, TOOL_COLOR, YELLOW, BRIGHT_YELLOW, RESET } from '../logging/debug-logger';
 
 export class Arena {
@@ -14,6 +17,9 @@ export class Arena {
     // Registry of available agents that can be called. These are only available for agents that don't have registered agents themselves.
     agents: Record<string, LLMAgent>;
 
+    // Registry of evaluators for annotating chunks
+    evaluators: Record<string, Evaluator>;
+
     taskQueue: Task[] = [];
 
     taskStore: Record<string, Task> = {};
@@ -26,14 +32,25 @@ export class Arena {
 
     dataChunks: Chunk[] = [];
 
-    constructor(streamingLLM: any, agentManager: AgentManager) {
+    constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
         this.agents = agentManager.getAgents();
+        evaluatorManager.init(streamingLLM);
+        this.evaluators = evaluatorManager.getEvaluators();
+        Logger.globalLog(`Arena created with evaluators: ${Object.keys(this.evaluators).join(', ')}`);
         // Set arena on agents and wire events
         for (const agent of Object.values(this.agents)) {
             (agent as any).arena = this;
             this.wireAgentEventEmitter(agent);
+        }
+        // Wire evaluators to chunk events
+        this.wireEvaluators();
+        // Wire evaluator events
+        for (const evaluator of Object.values(this.evaluators)) {
+            if ((evaluator as any).eventEmitter) {
+                this.wireEvaluatorEventEmitter(evaluator as any);
+            }
         }
     }
 
@@ -50,6 +67,8 @@ export class Arena {
         // wire up logging
         agent.eventEmitter.on('chunk', (chunk: Chunk) => {
             Logger.globalLog(`Chunk from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${chunk.type} - ${chunk.content}`);
+            // Prevent infinite loops: don't emit chunks from evaluator tasks
+            if (agent.currentTask?.taskType === TaskType.Evaluator) return;
             this.eventEmitter.emit('chunk', {agentName: agent.constructor.name, chunk});
         });
         agent.eventEmitter.on('token', (token: string) => {
@@ -71,6 +90,81 @@ export class Arena {
             this.errorCount++;
             this.eventEmitter.emit('error', {agentName: agent.constructor.name, error});
         });
+    }
+
+    public wireEvaluatorEventEmitter(evaluator: any) {
+        // wire up logging
+        evaluator.eventEmitter.on('chunk', (chunk: Chunk) => {
+            Logger.globalLog(`Evaluator Chunk from ${AGENT_COLOR}${evaluator.constructor.name}${RESET}: ${chunk.type} - ${chunk.content}`);
+            this.eventEmitter.emit('evaluatorChunk', {evaluatorName: evaluator.constructor.name, chunk});
+        });
+        evaluator.eventEmitter.on('token', (token: string) => {
+            Logger.globalLog(`Evaluator Token from ${AGENT_COLOR}${evaluator.constructor.name}${RESET}: ${token}`);
+            this.eventEmitter.emit('evaluatorToken', token);
+        });
+        // wire up event forwarders
+        evaluator.eventEmitter.on('toolCall', (call: any) => {
+            this.eventEmitter.emit('evaluatorToolCall', {evaluatorName: evaluator.constructor.name, call});
+        });
+        evaluator.eventEmitter.on('agentCall', (call: any) => {
+            this.eventEmitter.emit('evaluatorAgentCall', {evaluatorName: evaluator.constructor.name, call});
+        });
+        evaluator.eventEmitter.on('parseError', (details: any) => {
+            this.eventEmitter.emit('evaluatorParseError', {evaluatorName: evaluator.constructor.name, error: details.error, type: details.type});
+        });
+        // wire up error, which forwards and keeps track of the error count
+        evaluator.eventEmitter.on('error', (error: any) => {
+            this.errorCount++;
+            this.eventEmitter.emit('evaluatorError', {evaluatorName: evaluator.constructor.name, error});
+        });
+    }
+
+    private wireEvaluators(): void {
+        this.eventEmitter.on('chunk', ({ chunk, agentName }: { agentName: string, chunk: Chunk }) => {
+            Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
+            this.runEvaluators(chunk);
+        });
+    }
+
+    public addInputChunk(task: Task, chunk: Chunk): void {
+        Logger.globalLog(`addInputChunk called for task ${task.id}, chunk type ${chunk.type}\n`);
+        task.scratchpad.push(chunk);
+        this.eventEmitter.emit('chunk', { agentName: null, chunk });
+    }
+
+    private async runEvaluators(chunk: Chunk): Promise<void> {
+        Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
+        const matchingEvaluators = Object.values(this.evaluators).filter(
+            evaluator => evaluator.supportedChunkTypes.includes(chunk.type)
+        );
+
+        Logger.globalLog(`Running ${matchingEvaluators.length} evaluators for chunk type ${chunk.type}: ${matchingEvaluators.map(e => e.fqdn).join(', ')}`);
+
+        if (matchingEvaluators.length === 0) return;
+
+        const evaluationPromises = matchingEvaluators.map(async (evaluator) => {
+            try {
+                const result = await evaluator.evaluate(chunk, this);
+                if (result.annotation !== undefined || result.annotations !== undefined) {
+                    Logger.globalLog(`Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
+                    if (!chunk.annotations) {
+                        chunk.annotations = {};
+                    }
+                    if (result.annotation !== undefined) {
+                        chunk.annotations[evaluator.fqdn] = result.annotation;
+                    }
+                    if (result.annotations !== undefined) {
+                        Object.assign(chunk.annotations, result.annotations);
+                    }
+                } else {
+                    Logger.debugLog(`Evaluator ${evaluator.fqdn} returned no annotations`);
+                }
+            } catch (error) {
+                Logger.debugLog(`Evaluator ${evaluator.fqdn} failed: ${error}`);
+            }
+        });
+
+        await Promise.all(evaluationPromises);
     }
 
     removeTask(taskId: string) {
@@ -188,7 +282,7 @@ export class Arena {
         return calls;
     }
 
-    async run_agent(task: Task): Promise<{ response: string; agent: LLMAgent }> {
+    async run_agent(task: Task): Promise<string | {content: string, annotation?: any, annotations?: Record<string, any>}> {
         if (!this.invocationLog.some(inv => inv.id === task.id)) {
             this.invocationLog.push({id: task.id, type: 'agent', name: task.agent_name, parent_id: task.parent_task_id, params: task.input});
         }
@@ -200,25 +294,29 @@ export class Arena {
         }
 
         try {
-            const response = await agent.run(task);
-
-            return { response, agent };
+            const result = await agent.run(task);
+            return result;
         } catch (e) {
             if (task.agent_name === 'ErrorAgent') {
                 Logger.debugLog(`ErrorAgent failed, using fallback`);
-                const fallback = "<|error|>An unexpected error occurred during processing.<|error_end|>";
-                return { response: fallback, agent };
+                const fallback = { content: "<|error|>An unexpected error occurred during processing.<|error_end|>" };
+                return fallback;
             }
             throw e;
         }
     }
 
-    return_result_to_parent(task: Task, output: string) {
+    return_result_to_parent(task: Task, result: string | {content: string, annotation?: any, annotations?: Record<string, any>}) {
+        const output = typeof result === 'string' ? result : result.content;
         Logger.debugLog(`Returning result from task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}): ${output}`);
         if (task.parent_task_id === null) {
-            console.log(`${YELLOW}FINAL OUTPUT:${RESET} ${BRIGHT_YELLOW}${output}${RESET}`);
+            Logger.globalLog(`${YELLOW}FINAL OUTPUT:${RESET} ${BRIGHT_YELLOW}${output}${RESET}`);
             if (process.argv.includes('--debug')) {
                 this.printInvocationTree();
+            }
+            // Call completion callback if present
+            if (task.onComplete) {
+                task.onComplete(result);
             }
             return;
         }
@@ -233,7 +331,8 @@ export class Arena {
     }
 
     printInvocationTree() {
-        console.log("\n\x1b[1;36m======================================== INVOCATION TREE SUMMARY ========================================\x1b[0m");
+        console.log('\n');
+        Logger.globalLog("\x1b[1;36m======================================== INVOCATION TREE SUMMARY ========================================\x1b[0m");
 
         const buildTree = (parentId: string | null, depth: number = 0): void => {
             const children = this.invocationLog.filter((inv: any) => inv.parent_id === parentId);
@@ -243,7 +342,8 @@ export class Arena {
                 const nameColor = child.type === 'agent' ? '\x1b[1;32m' : '\x1b[1;35m';
                 const paramsColor = child.type === 'agent' ? '\x1b[32m' : '\x1b[35m';
                 const retryInfo = child.type === 'agent' ? ` (retries: ${this.taskStore[child.id]?.retryCount || 0})` : '';
-                const namePart = `${indent}${typeLabel}: ${nameColor}${child.name}\x1b[0m${retryInfo}`;
+                const taskTypeInfo = this.taskStore[child.id]?.taskType ? ` [${this.taskStore[child.id].taskType}]` : '';
+                const namePart = `${indent}${typeLabel}: ${nameColor}${child.name}\x1b[0m${retryInfo}${taskTypeInfo}`;
                 let paramsText = child.params ? JSON.stringify(child.params) : '';
                 if (paramsText.length > 50) {
                     paramsText = paramsText.substring(0, 47) + '...';
@@ -251,15 +351,15 @@ export class Arena {
                 const paramsStr = child.params ? `${paramsColor}${paramsText}\x1b[0m` : '';
                 const namePadding = ' '.repeat(Math.max(0, 35 - namePart.replace(/\x1b\[[0-9;]*m/g, '').length));  // Adjusted for retry info
                 const paramsPadding = ' '.repeat(Math.max(0, 45 - paramsStr.replace(/\x1b\[[0-9;]*m/g, '').length));
-                console.log(`${namePart}${namePadding}${paramsStr}${paramsPadding}(\x1b[90m${child.id}\x1b[0m)`);
+                Logger.globalLog(`${namePart}${namePadding}${paramsStr}${paramsPadding}(\x1b[90m${child.id}\x1b[0m)`);
                 buildTree(child.id, depth + 1);
             }
         };
 
         buildTree(null, 0);
         const errorStyle = this.errorCount > 0 ? '\x1b[1;31m' : '\x1b[31m';
-        console.log(`${errorStyle}Errors: ${this.errorCount}\x1b[0m`);
-        console.log("\x1b[1;36m========================================================================================================\x1b[0m\n");
+        Logger.globalLog(`${errorStyle}Errors: ${this.errorCount}\x1b[0m`);
+        Logger.globalLog("\x1b[1;36m========================================================================================================\x1b[0m\n");
     }
 
     async run_event_loop(isInteractive: boolean = false) {
@@ -269,11 +369,28 @@ export class Arena {
             task.executionCount = (task.executionCount || 0) + 1;
             Logger.debugLog(`Processing task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) - execution ${task.executionCount}`);
             let hasNewErrors = false;
-            const { response, agent } = await this.run_agent(task);
+            const result = await this.run_agent(task);
+            let response: string;
+            let annotations: Record<string, any> = {};
+            const agent = this.agents[task.agent_name];
+            if (typeof result === 'string') {
+                response = result;
+            } else {
+                response = result.content;
+                if (result.annotation) {
+                    annotations = { [agent.fqdn]: result.annotation };
+                }
+                if (result.annotations) {
+                    annotations = { ...annotations, ...result.annotations };
+                }
+            }
             Logger.debugLog(`Agent response: ${response}`);
 
             // Add the response as a new chunk
-            const newChunk = { type: ChunkType.LlmOutput, content: response, processed: false };
+            const newChunk: Chunk = { type: ChunkType.LlmOutput, content: response, processed: false };
+            if (annotations) {
+                newChunk.annotations = annotations;
+            }
             agent.addChunk(task, newChunk);
 
                 // Check the last chunk for parsing
@@ -312,19 +429,39 @@ export class Arena {
                     let toolResult: any;
                      if (tool) {
                          try {
-                              toolResult = await tool.run(call.parameters, { arena: this, task });
+                              const toolReturn = await tool.run(call.parameters, { arena: this, task });
+                              let toolResult: any;
+                              let annotations: Record<string, any> | undefined;
+
+                              if (typeof toolReturn === 'object' && toolReturn !== null && 'result' in toolReturn) {
+                                  toolResult = toolReturn.result;
+                                  if (toolReturn.annotation && toolReturn.annotations) {
+                                      throw new Error('Cannot specify both annotation and annotations');
+                                  }
+                                  if (toolReturn.annotation) {
+                                      annotations = { [tool.fqdn]: toolReturn.annotation };
+                                  } else if (toolReturn.annotations) {
+                                      annotations = toolReturn.annotations;
+                                  }
+                              } else {
+                                  toolResult = toolReturn;
+                              }
+
                              Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
                              const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
-                             const toolChunk = { type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
+                             const toolChunk: Chunk = { type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
+                             if (annotations) {
+                                 toolChunk.annotations = annotations;
+                             }
                              agent.addChunk(task, toolChunk);
                              hasToolCalls = true;
                              Logger.debugLog(`Tool result: ${toolResultStr}`);
                          } catch (e) {
-                             const errorContent = `<|error|>Tool ${call.name} failed: ${e.message || e}<|error_end|>`;
+                              const errorContent = `<|error|>Tool ${call.name} failed: ${(e as any).message || e}<|error_end|>`;
                              const errorChunk = { type: ChunkType.Error, content: errorContent, processed: true };
                              agent.addChunk(task, errorChunk);
                              agent.eventEmitter.emit('parseError', { type: 'toolExecution', error: e, content: call.name });
-                             toolResult = { error: e.message || e };
+                              toolResult = { error: (e as any).message || e };
                              Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} failed: ${e}`);
                              hasNewErrors = true;
                          }
@@ -391,6 +528,7 @@ export class Arena {
                             this.currentContinuationTask = null;
                         }
                         Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id} (${reason})`);
+                        Logger.globalLog(`\x1b[31mERROR: Task ${task.id} failed - ${reason}\x1b[0m`);
                     }
                 } else if (hasToolCalls) {
                     // Re-queue task
@@ -404,7 +542,7 @@ export class Arena {
                     } else {
                         // No calls, final result
                         Logger.debugLog(`Task ${task.id} completed with final result: ${response}`);
-                        this.return_result_to_parent(task, response);
+                        this.return_result_to_parent(task, typeof result === 'string' ? result : result);
                     }
                 } else {
                     // Has agent calls, parent waits for child
