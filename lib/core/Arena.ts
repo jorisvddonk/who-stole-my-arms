@@ -266,7 +266,8 @@ export class Arena {
         Logger.debugLog(`Starting event loop with ${this.taskQueue.length} tasks in queue`);
         while (this.taskQueue.length > 0) {
             const task = this.taskQueue.shift()!;
-            Logger.debugLog(`Processing task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET})`);
+            task.executionCount = (task.executionCount || 0) + 1;
+            Logger.debugLog(`Processing task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) - execution ${task.executionCount}`);
             let hasNewErrors = false;
             const { response, agent } = await this.run_agent(task);
             Logger.debugLog(`Agent response: ${response}`);
@@ -349,7 +350,8 @@ export class Arena {
                             input: call.input,
                             parent_task_id: task.id,
                             scratchpad: [{ type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
-                            retryCount: 0
+                            retryCount: 0,
+                            executionCount: 0
                         };
                         this.taskStore[childTask.id] = childTask;
                         this.taskQueue.push(childTask);
@@ -367,23 +369,28 @@ export class Arena {
                 lastChunk.processed = true;
 
                 if (hasNewErrors) {
-                    if (task.retryCount < 3) {
+                    if (task.retryCount < 3 && task.executionCount < 10) {
                         task.retryCount++;
                         this.taskQueue.push(task);
-                        Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/3)`);
+                        Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/3, executions: ${task.executionCount})`);
                     } else {
-                        const errorDetails = task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n');
+                        const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
+                        const errorDetails = `${reason}\n${task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n')}`;
                         const errorTask: Task = {
                             id: Arena.generateId(),
                             agent_name: 'ErrorAgent',
                             input: errorDetails,
                             parent_task_id: task.id,
                             scratchpad: [{ type: ChunkType.Input, content: errorDetails, processed: true }],
-                            retryCount: 0
+                            retryCount: 0,
+                            executionCount: 0
                         };
                         this.taskStore[errorTask.id] = errorTask;
                         this.taskQueue.push(errorTask);
-                        Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id}`);
+                        if (this.currentContinuationTask?.id === task.id) {
+                            this.currentContinuationTask = null;
+                        }
+                        Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id} (${reason})`);
                     }
                 } else if (hasToolCalls) {
                     // Re-queue task

@@ -25,6 +25,7 @@ export interface Task {
     parent_task_id: string | null;
     scratchpad: Chunk[];
     retryCount: number;
+    executionCount?: number;
 }
 
 export abstract class Tool {

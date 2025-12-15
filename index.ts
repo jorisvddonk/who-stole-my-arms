@@ -365,7 +365,8 @@ const routeGroups = [
                   input: { text: userPrompt, messageId: userMessageId },
                   parent_task_id: null,
                   scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
-                  retryCount: 0
+                  retryCount: 0,
+                  executionCount: 0
                 };
                 arena.taskStore[rootTask.id] = rootTask;
                 arena.currentContinuationTask = rootTask;
@@ -473,7 +474,8 @@ const routeGroups = [
                         input: { text: userPrompt, messageId: userMessageId },
                         parent_task_id: null,
                         scratchpad: [{ type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId }],
-                        retryCount: 0
+                        retryCount: 0,
+                        executionCount: 0
                       };
                       arena.taskStore[rootTask.id] = rootTask;
                       arena.currentContinuationTask = rootTask;
