@@ -6,9 +6,11 @@ export class TopLevelAgent extends LLMAgent {
         const agentContents = this.getFilteredContents(task, ChunkType.AgentOutput);
         const agentResults = this.parseAgentResultsSafe(task, agentContents);
 
+        const text = this.getInputText(task);
+
         let prompt = `You are the TopLevelAgent, the main coordinator for handling user requests.
 
-Current task input: ${task.input}
+Current task input: ${text}
 
 Scratchpad history:
 ${scratchpadContent}

@@ -312,6 +312,18 @@ export abstract class LLMAgent {
         return task.scratchpad.filter(c => c.type === type).map(c => c.content).join('\n');
     }
 
+    protected getInputText(task: Task): string {
+        const inputs = task.scratchpad.filter(c => c.type === ChunkType.Input);
+        if (inputs.length > 0) {
+            // Use the content of the last input chunk
+            return inputs[inputs.length - 1].content;
+        } else {
+            // Fallback to task.input.text if available
+            const input = task.input;
+            return (typeof input === 'object' && input !== null && 'text' in input) ? input.text : JSON.stringify(input);
+        }
+    }
+
     protected parseAgentResultsSafe(task: Task, contents: string, addErrorChunk: boolean = false): any[] {
         try {
             return parseAgentResults(contents);

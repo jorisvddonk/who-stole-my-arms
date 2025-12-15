@@ -4,16 +4,7 @@ export class SentimentAgent extends LLMAgent {
     // supportsContinuation = false (default)
 
     buildPrompt(task: Task): string {
-        const inputs = task.scratchpad.filter(c => c.type === ChunkType.Input);
-        let text: string;
-        if (inputs.length > 0) {
-            // Use the content of the last input chunk
-            text = inputs[inputs.length - 1].content;
-        } else {
-            // Fallback to task.input.text if available
-            const input = task.input;
-            text = (typeof input === 'object' && input !== null && 'text' in input) ? input.text : JSON.stringify(input);
-        }
+        const text = this.getInputText(task);
 
         const prompt = `You are a sentiment analysis expert. Analyze the sentiment of the following text.
 

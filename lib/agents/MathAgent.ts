@@ -6,7 +6,7 @@ export class MathAgent extends LLMAgent {
 
         const prompt = `You are the MathAgent, specialized in mathematical calculations and comparisons.
 
-Current task input: ${JSON.stringify(task.input)}
+Current task input: ${this.getInputText(task)}
 
 Scratchpad history:
 ${scratchpadContent}

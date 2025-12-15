@@ -10,12 +10,11 @@ export class ExampleAgent extends LLMAgent {
     }
 
     buildPrompt(task: Task): string {
-        const input = task.input;
         const scratchpadContent = this.getScratchpadContent(task);
 
         let prompt = `You are the ExampleAgent, demonstrating tool usage and annotations.
 
-Current task input: ${JSON.stringify(input)}
+Current task input: ${this.getInputText(task)}
 
 Scratchpad history:
 ${scratchpadContent}

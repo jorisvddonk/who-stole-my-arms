@@ -16,7 +16,7 @@ export class CombatAgent extends LLMAgent {
 
         let prompt = `You are the CombatAgent, specialized in handling combat scenarios.
 
-Current task input: ${JSON.stringify(task.input)}
+Current task input: ${this.getInputText(task)}
 
 Scratchpad history:
 ${scratchpadContent}
