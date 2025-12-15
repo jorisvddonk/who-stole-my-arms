@@ -9,6 +9,10 @@ export { Tool, ChunkType, TaskType };
 
 
 
+/**
+ * Abstract base class for LLM agents that can process tasks using language models.
+ * Agents manage tools, handle streaming responses, and manage data chunks in tasks.
+ */
 export abstract class LLMAgent {
     eventEmitter: EventEmitter;
     public supportsContinuation: boolean = false;
@@ -18,6 +22,11 @@ export abstract class LLMAgent {
     public fqdn: string;
     public currentTask: Task | null = null;
 
+    /**
+     * Creates a new LLM agent instance.
+     * @param streamingLLM The streaming LLM interface to use for generating responses.
+     * @param arena The arena context for managing agent events and data.
+     */
     constructor(streamingLLM: StreamingLLMInvoke, arena: any) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
@@ -27,18 +36,35 @@ export abstract class LLMAgent {
         }
     }
 
+    /**
+     * Registers a tool with this agent for use during task execution.
+     * @param tool The tool instance to register.
+     */
     registerTool(tool: Tool) {
         this.tools[tool.name] = tool;
     }
 
+    /**
+     * Registers a sub-agent with this agent.
+     * @param agent The agent instance to register.
+     */
     registerAgent(agent: LLMAgent) {
         this.registeredAgents[agent.constructor.name] = agent;
     }
 
+    /**
+     * Sets the streaming LLM interface for this agent.
+     * @param streamingLLM The streaming LLM interface to use.
+     */
     setStreamingLLM(streamingLLM: StreamingLLMInvoke) {
         this.streamingLLM = streamingLLM;
     }
 
+    /**
+     * Generates a streaming response from the LLM using the provided prompt.
+     * @param prompt The prompt to send to the LLM.
+     * @returns The complete response string from the LLM.
+     */
     async generateStreamingResponse(prompt: string) {
         let response = '';
         if (this.streamingLLM && this.streamingLLM.generateStream) {
@@ -60,10 +86,15 @@ export abstract class LLMAgent {
         return response;
     }
 
+    /**
+     * Executes the agent on the given task.
+     * @param task The task to process.
+     * @returns The agent's response, which may be a string or an object with content and annotations.
+     */
     async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
         this.currentTask = task;
         try {
-            const prompt = this.buildPrompt(task);            
+            const prompt = this.buildPrompt(task);
             let response = await this.generateStreamingResponse(prompt);
             return this.postProcessResponse(response);
         } catch (error) {
@@ -72,6 +103,11 @@ export abstract class LLMAgent {
         }
     }
 
+    /**
+     * Parses tool results from the scratchpad content.
+     * @param scratchpad The scratchpad string containing tool results.
+     * @returns Array of parsed tool result objects.
+     */
     static parseToolResults(scratchpad: string): Array<any> {
         const startCount = (scratchpad.match(/<\|tool_result\|>/g) || []).length;
         const endCount = (scratchpad.match(/<\|tool_result_end\|>/g) || []).length;
@@ -88,6 +124,11 @@ export abstract class LLMAgent {
         return results;
     }
 
+    /**
+     * Parses agent results from the scratchpad content.
+     * @param scratchpad The scratchpad string containing agent results.
+     * @returns Array of parsed agent result objects.
+     */
     static parseAgentResults(scratchpad: string): Array<any> {
         const startCount = (scratchpad.match(/<\|agent_result\|>/g) || []).length;
         const endCount = (scratchpad.match(/<\|agent_result_end\|>/g) || []).length;
@@ -104,6 +145,11 @@ export abstract class LLMAgent {
         return results;
     }
 
+    /**
+     * Gets the content from input and LLM output chunks in the task's scratchpad.
+     * @param task The task to extract content from.
+     * @returns The concatenated content from relevant chunks.
+     */
     protected getScratchpadContent(task: Task): string {
         return task.scratchpad
             .filter(c => c.type === ChunkType.Input || c.type === ChunkType.LlmOutput)
@@ -111,10 +157,21 @@ export abstract class LLMAgent {
             .join('\n');
     }
 
+    /**
+     * Gets the content from chunks of a specific type in the task's scratchpad.
+     * @param task The task to extract content from.
+     * @param type The chunk type to filter by.
+     * @returns The concatenated content from chunks of the specified type.
+     */
     protected getFilteredContents(task: Task, type: ChunkType): string {
         return task.scratchpad.filter(c => c.type === type).map(c => c.content).join('\n');
     }
 
+    /**
+     * Extracts the input text from the task.
+     * @param task The task to extract input from.
+     * @returns The input text, either from the last input chunk or the task's input field.
+     */
     protected getInputText(task: Task): string {
         const inputs = task.scratchpad.filter(c => c.type === ChunkType.Input);
         if (inputs.length > 0) {
@@ -127,6 +184,13 @@ export abstract class LLMAgent {
         }
     }
 
+    /**
+     * Safely parses agent results from content, optionally adding error chunks on failure.
+     * @param task The task context.
+     * @param contents The content to parse.
+     * @param addErrorChunk Whether to add an error chunk to the task on parse failure.
+     * @returns Array of parsed agent results, or empty array if parsing failed and addErrorChunk is true.
+     */
     protected parseAgentResultsSafe(task: Task, contents: string, addErrorChunk: boolean = false): any[] {
         try {
             return LLMAgent.parseAgentResults(contents);
@@ -142,6 +206,13 @@ export abstract class LLMAgent {
         }
     }
 
+    /**
+     * Safely parses tool results from content, optionally adding error chunks on failure.
+     * @param task The task context.
+     * @param contents The content to parse.
+     * @param addErrorChunk Whether to add an error chunk to the task on parse failure.
+     * @returns Array of parsed tool results, or empty array if parsing failed and addErrorChunk is true.
+     */
     protected parseToolResultsSafe(task: Task, contents: string, addErrorChunk: boolean = false): any[] {
         try {
             return LLMAgent.parseToolResults(contents);
@@ -157,16 +228,31 @@ export abstract class LLMAgent {
         }
     }
 
+    /**
+     * Adds a chunk to the task's scratchpad and emits relevant events.
+     * @param task The task to add the chunk to.
+     * @param chunk The chunk to add.
+     */
     public addChunk(task: Task, chunk: Chunk): void {
         task.scratchpad.push(chunk);
         this.eventEmitter.emit('chunk', chunk);
         this.eventEmitter.emit(`chunk:${chunk.type}`, chunk);
     }
 
+    /**
+     * Post-processes the response from the LLM before returning it.
+     * @param response The raw response from the LLM.
+     * @returns The processed response.
+     */
     protected postProcessResponse(response: string | { content: string, annotation?: any, annotations?: Record<string, any> }): string | { content: string, annotation?: any, annotations?: Record<string, any> } {
         return response;
     }
 
+    /**
+     * Writes data to the task's scratchpad as a data chunk.
+     * @param task The task to which the data chunk will be added.
+     * @param data The data to store.
+     */
     public writeTaskDataChunk(task: Task, data: any): void {
         if (!this.fqdn) {
             throw new Error('Agent FQDN not set');
@@ -304,5 +390,10 @@ export abstract class LLMAgent {
         return chunk.annotations || {};
     }
 
+    /**
+     * Builds the prompt to send to the LLM for the given task.
+     * @param task The task to build a prompt for.
+     * @returns The constructed prompt string.
+     */
     abstract buildPrompt(task: Task): string;
 }

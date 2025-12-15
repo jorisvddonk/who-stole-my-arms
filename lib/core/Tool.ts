@@ -1,6 +1,10 @@
 import { Logger, TOOL_COLOR, RESET } from '../logging/debug-logger';
 import { ChunkType, Chunk, Task } from '../../interfaces/AgentTypes';
 
+/**
+ * Abstract base class for tools that can be used by LLM agents.
+ * Tools provide functionality to execute specific actions and manage data chunks.
+ */
 export abstract class Tool {
     abstract readonly name: string;
     abstract readonly description: string;

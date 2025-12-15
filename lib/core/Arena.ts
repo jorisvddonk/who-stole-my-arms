@@ -7,6 +7,10 @@ import { Evaluator } from './Evaluator';
 import { ErrorAgent } from '../agents/ErrorAgent';
 import { Logger, DEBUG_COLOR, GLOBAL_COLOR, AGENT_COLOR, TOOL_COLOR, YELLOW, BRIGHT_YELLOW, RESET } from '../logging/debug-logger';
 
+/**
+ * Central orchestration class that manages agents, tasks, and evaluators.
+ * Handles task execution, agent coordination, and automatic chunk evaluation.
+ */
 export class Arena {
     eventEmitter: EventEmitter;
 
@@ -33,6 +37,12 @@ export class Arena {
 
     dataChunks: Chunk[] = [];
 
+    /**
+     * Creates a new Arena instance.
+     * @param streamingLLM The streaming LLM interface for agent communication.
+     * @param agentManager Manager containing registered agents.
+     * @param evaluatorManager Manager containing registered evaluators.
+     */
     constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
@@ -57,6 +67,10 @@ export class Arena {
 
 
 
+    /**
+     * Updates the streaming LLM interface for all agents.
+     * @param newStreamingLLM The new streaming LLM interface to use.
+     */
     updateStreamingLLM(newStreamingLLM: any) {
         this.streamingLLM = newStreamingLLM;
         for (const agent of Object.values(this.agents)) {
@@ -64,6 +78,10 @@ export class Arena {
         }
     }
 
+    /**
+     * Wires up event listeners for an agent's event emitter to forward events to the arena.
+     * @param agent The agent whose events to wire up.
+     */
     public wireAgentEventEmitter(agent: LLMAgent) {
         // wire up logging
         agent.eventEmitter.on('chunk', (chunk: Chunk) => {
@@ -93,6 +111,10 @@ export class Arena {
         });
     }
 
+    /**
+     * Wires up event listeners for an evaluator's event emitter to forward events to the arena.
+     * @param evaluator The evaluator whose events to wire up.
+     */
     public wireEvaluatorEventEmitter(evaluator: any) {
         // wire up logging
         evaluator.eventEmitter.on('chunk', (chunk: Chunk) => {
@@ -120,6 +142,9 @@ export class Arena {
         });
     }
 
+    /**
+     * Sets up event listeners to trigger evaluator execution when chunks are emitted.
+     */
     private wireEvaluators(): void {
         this.eventEmitter.on('chunk', ({ chunk, agentName }: { agentName: string, chunk: Chunk }) => {
             Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
@@ -127,12 +152,21 @@ export class Arena {
         });
     }
 
+    /**
+     * Adds an input chunk to a task's scratchpad and emits it for evaluation.
+     * @param task The task to add the chunk to.
+     * @param chunk The input chunk to add.
+     */
     public addInputChunk(task: Task, chunk: Chunk): void {
         Logger.globalLog(`addInputChunk called for task ${task.id}, chunk type ${chunk.type}\n`);
         task.scratchpad.push(chunk);
         this.eventEmitter.emit('chunk', { agentName: null, chunk });
     }
 
+    /**
+     * Runs all evaluators that support the given chunk type.
+     * @param chunk The chunk to evaluate.
+     */
     private async runEvaluators(chunk: Chunk): Promise<void> {
         Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
         const matchingEvaluators = Object.values(this.evaluators).filter(
@@ -168,6 +202,10 @@ export class Arena {
         await Promise.all(evaluationPromises);
     }
 
+    /**
+     * Removes a task and all its child tasks from the arena.
+     * @param taskId The ID of the task to remove.
+     */
     removeTask(taskId: string) {
         const task = this.taskStore[taskId];
         if (!task) return;
@@ -196,6 +234,10 @@ export class Arena {
         }
     }
 
+    /**
+     * Removes all chunks with a specific message ID from all tasks.
+     * @param messageId The message ID to filter by.
+     */
     removeChunksByMessageId(messageId: string) {
         for (const taskId in this.taskStore) {
             const task = this.taskStore[taskId];
@@ -203,10 +245,19 @@ export class Arena {
         }
     }
 
+    /**
+     * Generates a unique ID for tasks.
+     * @returns A random string ID.
+     */
     static generateId(): string {
         return Math.random().toString(36).substring(2, 11);
     }
 
+    /**
+     * Parses tool calls from a response string.
+     * @param response The response string containing tool calls.
+     * @returns Array of parsed tool call objects.
+     */
     static parseToolCalls(response: string): Array<{ name: string; parameters: any }> {
         const startCount = (response.match(/<\|tool_call\|>/g) || []).length;
         const endCount = (response.match(/<\|tool_call_end\|>/g) || []).length;
@@ -223,6 +274,11 @@ export class Arena {
         return calls;
     }
 
+    /**
+     * Parses agent calls from a response string.
+     * @param response The response string containing agent calls.
+     * @returns Array of parsed agent call objects.
+     */
     static parseAgentCalls(response: string): Array<{ name: string; input: any }> {
         const startCount = (response.match(/<\|agent_call\|>/g) || []).length;
         const endCount = (response.match(/<\|agent_call_end\|>/g) || []).length;
@@ -283,6 +339,11 @@ export class Arena {
         return calls;
     }
 
+    /**
+     * Executes an agent for the given task.
+     * @param task The task to execute.
+     * @returns The agent's response.
+     */
     async run_agent(task: Task): Promise<string | {content: string, annotation?: any, annotations?: Record<string, any>}> {
         if (!this.invocationLog.some(inv => inv.id === task.id)) {
             this.invocationLog.push({id: task.id, type: 'agent', name: task.agent_name, parent_id: task.parent_task_id, params: task.input});
@@ -307,6 +368,11 @@ export class Arena {
         }
     }
 
+    /**
+     * Returns the result of a completed task to its parent task or as final output.
+     * @param task The completed task.
+     * @param result The result from the task execution.
+     */
     return_result_to_parent(task: Task, result: string | {content: string, annotation?: any, annotations?: Record<string, any>}) {
         const output = typeof result === 'string' ? result : result.content;
         Logger.debugLog(`Returning result from task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}): ${output}`);
@@ -331,6 +397,9 @@ export class Arena {
         Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
     }
 
+    /**
+     * Prints a formatted tree view of all task invocations and their relationships.
+     */
     printInvocationTree() {
         console.log('\n');
         Logger.globalLog("\x1b[1;36m======================================== INVOCATION TREE SUMMARY ========================================\x1b[0m");
@@ -363,6 +432,10 @@ export class Arena {
         Logger.globalLog("\x1b[1;36m========================================================================================================\x1b[0m\n");
     }
 
+    /**
+     * Runs the main event loop that processes tasks from the queue.
+     * @param isInteractive Whether the loop is running in interactive mode.
+     */
     async run_event_loop(isInteractive: boolean = false) {
         Logger.debugLog(`Starting event loop with ${this.taskQueue.length} tasks in queue`);
         while (this.taskQueue.length > 0) {
