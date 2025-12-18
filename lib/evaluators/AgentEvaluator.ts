@@ -54,6 +54,13 @@ export class AgentEvaluator extends Evaluator {
      * @returns Promise resolving to annotation data.
      */
     async evaluate(chunk: Chunk, arena: any, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
+        // Check if the agent is registered
+        if (!arena.agents[this.agentClass.name]) {
+            // Agent not registered, resolve with error
+            const error = { content: `<|error|>Agent ${this.agentClass.name} not registered for evaluation<|error_end|>` };
+            return { annotation: error };
+        }
+
         return new Promise((resolve) => {
             // Create task with chunk as input
             const task: Task = {
