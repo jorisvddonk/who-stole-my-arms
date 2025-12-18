@@ -187,6 +187,23 @@ export abstract class LLMAgent {
     }
 
     /**
+     * Extracts the last input text or tool output from the task.
+     * @param task The task to extract input from.
+     * @returns The input text or tool output, either from the last input/tooloutput chunk or the task's input field.
+     */
+    protected getInputTextOrToolOutput(task: Task): string {
+        const inputs = task.scratchpad.filter(c => (c.type === ChunkType.Input || c.type === ChunkType.ToolOutput));
+        if (inputs.length > 0) {
+            // Use the content of the last chunk
+            return inputs[inputs.length - 1].content;
+        } else {
+            // Fallback to task.input.text if available
+            const input = task.input;
+            return (typeof input === 'object' && input !== null && 'text' in input) ? input.text : JSON.stringify(input);
+        }
+    }
+
+    /**
      * Safely parses agent results from content, optionally adding error chunks on failure.
      * @param task The task context.
      * @param contents The content to parse.

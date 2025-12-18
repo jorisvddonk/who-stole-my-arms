@@ -38,39 +38,7 @@ export class EvaluatorManager {
 
         Logger.debugLog('Initializing EvaluatorManager');
 
-        // Load hardcoded evaluators
-        // Example: LengthEvaluator and TypeEvaluator run sequentially, others in parallel
-        const lengthEvaluator = new SimpleEvaluator(
-            (chunk) => ({
-                annotation: {
-                    chars: chunk.content.length,
-                    words: chunk.content.split(/\s+/).filter(w => w.length > 0).length
-                }
-            }),
-            [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
-            'evaluators.LengthEvaluator'
-        );
-        const typeEvaluator = new SimpleEvaluator(
-            (chunk) => ({
-                annotation: {
-                    type: chunk.type,
-                    timestamp: Date.now(),
-                    processed: chunk.processed
-                }
-            }),
-            [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
-            'evaluators.TypeEvaluator'
-        );
-        this.evaluators = [
-            lengthEvaluator,
-            [typeEvaluator, lengthEvaluator], // Sequential group example: TypeEvaluator then LengthEvaluator again
-            new AgentEvaluator(
-                SentimentAgent,
-                streamingLLM,
-                [ChunkType.Input],
-                'evaluators.SentimentEvaluator'
-            )
-        ];
+        this.evaluators = [];
 
         // TODO: Load dynamic evaluators if needed
 
