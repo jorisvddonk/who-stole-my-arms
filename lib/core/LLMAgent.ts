@@ -253,6 +253,20 @@ export abstract class LLMAgent {
      * @param chunk The chunk to add.
      */
     public addChunk(task: Task, chunk: Chunk): void {
+        if (chunk.type === ChunkType.LlmOutput && !chunk.messageId) {
+            // Find the last input chunk with messageId in scratchpad
+            for (let i = task.scratchpad.length - 1; i >= 0; i--) {
+                const c = task.scratchpad[i];
+                if (c.type === ChunkType.Input && c.messageId) {
+                    chunk.messageId = c.messageId;
+                    break;
+                }
+            }
+            // If no input in scratchpad, use task.input.messageId
+            if (!chunk.messageId && task.input && task.input.messageId) {
+                chunk.messageId = task.input.messageId;
+            }
+        }
         task.scratchpad.push(chunk);
         this.eventEmitter.emit('chunk', chunk);
         this.eventEmitter.emit(`chunk:${chunk.type}`, chunk);

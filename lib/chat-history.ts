@@ -6,7 +6,8 @@ import { createMethodRouter } from './util/route-utils.js';
 import { DatabaseManager } from "./database-manager.js";
 import { FormatterRegistry } from "./formatters.js";
 import { FormatterSettingsTool } from "./tools/formatter-settings-tool.js";
-import { Chunk } from "../interfaces/AgentTypes.js";
+import { Chunk, ChunkType } from "../interfaces/AgentTypes.js";
+import { Arena } from "./core/Arena.js";
 
 export interface ChatMessage {
   id: string;
@@ -16,7 +17,7 @@ export interface ChatMessage {
   finishReason: string | null;
 }
 
-export class ChatHistory implements HasStorage, PromptProvider {
+export class ChatHistory implements PromptProvider {
   constructor(private dbManager: DatabaseManager, private arenaManager?: any) {}
 
   getFQDN(): string {
@@ -77,9 +78,7 @@ export class ChatHistory implements HasStorage, PromptProvider {
       return null;
     }
     try {
-      const db = await this.dbManager.getSessionDB(context.sessionId);
-      const storage = new Storage(db, this.getFQDN(), context.sessionId);
-      const messages = await this.getMessages(storage);
+      const messages = await this.getMessages(this.arenaManager, context.sessionId);
 
       // Get formatter settings from session storage
       const selectedFormatterName = await FormatterSettingsTool.getSelectedFormatter(this.dbManager, context.sessionId);
@@ -120,69 +119,89 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
-  async init(storage: Storage): Promise<void> {
-    const sessionId = storage.getSessionId();
-    console.log(`\x1b[32mInitializing chat history database${sessionId ? ` for session \x1b[34m${sessionId}\x1b[32m` : ''}...\x1b[0m`);
-    // Check if table exists with old INTEGER id
-    let migrated = false;
-    try {
-      const pragma = await storage.query(`PRAGMA table_info(${storage.getTableName()})`);
-      const idColumn = pragma.find(col => col.name === 'id');
-      if (idColumn && idColumn.type === 'INTEGER') {
-        // Migrate old table
-        const oldTable = `old_${storage.getTableName()}`;
-        await storage.execute(`ALTER TABLE ${storage.getTableName()} RENAME TO ${oldTable}`);
-        await storage.execute(`CREATE TABLE ${storage.getTableName()} (id TEXT PRIMARY KEY, actor TEXT NOT NULL, content TEXT NOT NULL, finishedAt DATETIME NOT NULL, finishReason TEXT)`);
-        // Copy data with new UUIDs
-        const oldRows = await storage.query(`SELECT actor, content, finishedAt, finishReason FROM ${oldTable} ORDER BY finishedAt`);
-        for (const row of oldRows) {
-          await storage.insert({
-            actor: row.actor,
-            content: row.content,
-            finishedAt: row.finishedAt,
-            finishReason: row.finishReason
-          });
-        }
-        await storage.execute(`DROP TABLE ${oldTable}`);
-        migrated = true;
-        console.log(`\x1b[33mMigrated chat history table for session ${sessionId}\x1b[0m`);
-      }
-    } catch (e) {
-      // Table doesn't exist or migration failed, fine
-    }
-    if (!migrated) {
-      await storage.execute(`CREATE TABLE IF NOT EXISTS ${storage.getTableName()} (id TEXT PRIMARY KEY, actor TEXT NOT NULL, content TEXT NOT NULL, finishedAt DATETIME NOT NULL, finishReason TEXT)`);
-    }
-    const currentVersion = await storage.getComponentVersion();
-    if (currentVersion === null) {
-      await storage.setComponentVersion(1);
-    }
-  }
 
-  async addMessage(storage: Storage, actor: 'user' | 'game-master', content: string, finishedAt: Date = new Date(), finishReason: string | null = null, id?: string): Promise<string> {
+
+  async addMessage(arenaManager: any, sessionId: string, actor: 'user' | 'game-master', content: string, finishedAt: Date = new Date(), finishReason: string | null = null, id?: string): Promise<string> {
     try {
-      return await storage.insert({
-        actor,
-        content,
-        finishedAt: finishedAt.toISOString(),
-        finishReason
-      }, id);
+      const arena = await arenaManager.getArena(sessionId, null);
+      const messageId = id || Math.random().toString(36).substring(2, 11);
+      if (actor === 'user') {
+        // Create a task for user input
+        const task = {
+          id: Arena.generateId(),
+          agent_name: 'default', // dummy
+          input: { text: content, messageId },
+          parent_task_id: null,
+          scratchpad: [],
+          retryCount: 0,
+          executionCount: 0
+        };
+        arena.taskStore[task.id] = task;
+      } else if (actor === 'game-master') {
+        // Add a chunk
+        const chunk = {
+          type: ChunkType.LlmOutput,
+          content,
+          processed: true,
+          messageId
+        };
+        arena.dataChunks.push(chunk);
+      }
+      await arenaManager.saveArenaState(sessionId, arena);
+      return messageId;
     } catch (error) {
       logError(`Failed to add message: ${(error as Error).message}`);
       throw error;
     }
   }
 
-  async getMessages(storage: Storage): Promise<ChatMessage[]> {
+  async getMessages(arenaManager: any, sessionId: string): Promise<ChatMessage[]> {
     try {
-      const rows = await storage.findAll();
-      return rows.map(row => ({
-        id: row.id,
-        actor: row.actor as 'user' | 'game-master',
-        content: row.content,
-        finishedAt: new Date(row.finishedAt),
-        finishReason: row.finishReason || null
-      })).sort((a, b) => a.finishedAt.getTime() - b.finishedAt.getTime());
+      const arena = await arenaManager.getArena(sessionId, null);
+      const messages: ChatMessage[] = [];
+      const now = new Date();
+
+      // Collect messages from top-level tasks only (parent_task_id === null)
+      for (const taskId in arena.taskStore) {
+        const task = arena.taskStore[taskId];
+        if (task.parent_task_id !== null) continue;  // skip subagent tasks
+        const hasInputChunks = task.scratchpad.some(chunk => chunk.type === 'input');
+        // Add task.input only if no input chunks in scratchpad and it has messageId
+        if (!hasInputChunks && task.input && task.input.messageId) {
+          messages.push({
+            id: task.input.messageId,
+            actor: 'user',
+            content: typeof task.input === 'string' ? task.input : task.input.text || JSON.stringify(task.input),
+            finishedAt: now,
+            finishReason: null
+          });
+        }
+        // Add inputs and outputs from scratchpad
+        for (const chunk of task.scratchpad) {
+          if (chunk.messageId) {
+            if (chunk.type === 'input') {
+              messages.push({
+                id: chunk.messageId,
+                actor: 'user',
+                content: chunk.content,
+                finishedAt: now,
+                finishReason: null
+              });
+            } else if (chunk.type === 'llmOutput') {
+              messages.push({
+                id: chunk.messageId,
+                actor: 'game-master',
+                content: chunk.content,
+                finishedAt: now,
+                finishReason: null
+              });
+            }
+          }
+        }
+      }
+
+      // Messages are collected in chronological order, no need to sort
+      return messages;
     } catch (error) {
       logError(`Failed to get messages: ${(error as Error).message}`);
       return [];
@@ -199,15 +218,27 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
-  async deleteMessagesFrom(storage: Storage, messageId: string): Promise<boolean> {
+  async deleteMessagesFrom(arenaManager: any, sessionId: string, messageId: string): Promise<boolean> {
     try {
-      const allMessages = await this.getMessages(storage);
+      const arena = await arenaManager.getArena(sessionId, null);
+      const allMessages = await this.getMessages(arenaManager, sessionId);
       const index = allMessages.findIndex(msg => msg.id === messageId);
       if (index === -1) return false;
-      const idsToDelete = allMessages.slice(index).map(msg => msg.id);
-      if (idsToDelete.length === 0) return true;
-      const placeholders = idsToDelete.map(() => '?').join(', ');
-      await storage.execute(`DELETE FROM ${storage.getTableName()} WHERE id IN (${placeholders})`, idsToDelete);
+      const messagesToDelete = allMessages.slice(index);
+      for (const msg of messagesToDelete) {
+        if (msg.actor === 'user') {
+          for (const taskId in arena.taskStore) {
+            const task = arena.taskStore[taskId];
+            if (task.input?.messageId === msg.id) {
+              arena.removeTask(taskId);
+              break;
+            }
+          }
+        } else if (msg.actor === 'game-master') {
+          arena.removeChunksByMessageId(msg.id);
+        }
+      }
+      await arenaManager.saveArenaState(sessionId, arena);
       return true;
     } catch (error) {
       logError(`Failed to delete messages after: ${(error as Error).message}`);
@@ -215,30 +246,68 @@ export class ChatHistory implements HasStorage, PromptProvider {
     }
   }
 
-  async appendToMessage(storage: Storage, messageId: string, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
+  async appendToMessage(arenaManager: any, sessionId: string, messageId: string, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
     try {
-      const existingMessage = await storage.findById(messageId);
-      if (!existingMessage) {
-        return false;
+      const arena = await arenaManager.getArena(sessionId, null);
+      // Check user messages
+      for (const taskId in arena.taskStore) {
+        const task = arena.taskStore[taskId];
+        if (task.input && task.input.messageId === messageId) {
+          if (typeof task.input === 'string') {
+            task.input += additionalContent;
+          } else {
+            task.input.text += additionalContent;
+          }
+          await arenaManager.saveArenaState(sessionId, arena);
+          return true;
+        }
       }
-      const updatedContent = existingMessage.content + additionalContent;
-      const updatedFinishReason = finishReason || existingMessage.finishReason;
-      await storage.execute(`UPDATE ${storage.getTableName()} SET content = ?, finishReason = ? WHERE id = ?`, [updatedContent, updatedFinishReason, messageId]);
-      return true;
+      // Check game-master messages
+      for (const taskId in arena.taskStore) {
+        const task = arena.taskStore[taskId];
+        for (const chunk of task.scratchpad) {
+          if (chunk.messageId === messageId) {
+            chunk.content += additionalContent;
+            await arenaManager.saveArenaState(sessionId, arena);
+            return true;
+          }
+        }
+      }
+      return false;
     } catch (error) {
       logError(`Failed to append to message: ${(error as Error).message}`);
       return false;
     }
   }
 
-  async editMessage(storage: Storage, messageId: string, newContent: string): Promise<boolean> {
+  async editMessage(arenaManager: any, sessionId: string, messageId: string, newContent: string): Promise<boolean> {
     try {
-      const existingMessage = await storage.findById(messageId);
-      if (!existingMessage) {
-        return false;
+      const arena = await arenaManager.getArena(sessionId, null);
+      // Find if user message
+      for (const taskId in arena.taskStore) {
+        const task = arena.taskStore[taskId];
+        if (task.input && task.input.messageId === messageId) {
+          if (typeof task.input === 'string') {
+            task.input = newContent;
+          } else {
+            task.input.text = newContent;
+          }
+          await arenaManager.saveArenaState(sessionId, arena);
+          return true;
+        }
       }
-      await storage.execute(`UPDATE ${storage.getTableName()} SET content = ? WHERE id = ?`, [newContent, messageId]);
-      return true;
+      // Find if game-master message
+      for (const taskId in arena.taskStore) {
+        const task = arena.taskStore[taskId];
+        for (const chunk of task.scratchpad) {
+          if (chunk.messageId === messageId) {
+            chunk.content = newContent;
+            await arenaManager.saveArenaState(sessionId, arena);
+            return true;
+          }
+        }
+      }
+      return false;
     } catch (error) {
       logError(`Failed to edit message: ${(error as Error).message}`);
       return false;
@@ -247,80 +316,116 @@ export class ChatHistory implements HasStorage, PromptProvider {
 
   getRoutes(): Record<string, any> {
     return {
-      "/sessions/:sessionid/chat/messages": createMethodRouter({
+        "/sessions/:sessionid/chat/messages": createMethodRouter({
         GET: async (req) => {
-          const storage = (req as any).context.get('storage');
-          const messages = await this.getMessages(storage);
+          const sessionId = (req as any).params.sessionid;
+          const messages = await this.getMessages(this.arenaManager, sessionId);
           return new Response(JSON.stringify({ messages }), { headers: { 'Content-Type': 'application/json' } });
         },
         POST: async (req) => {
-          try {
-            const storage = (req as any).context.get('storage');
-            const body = await req.json();
-            const { actor, content, finishedAt, finishReason } = body;
-            if (!actor || !content || !['user', 'game-master'].includes(actor)) {
-              return new Response(JSON.stringify({ error: 'actor and content required, actor must be user or game-master' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-            }
-            const date = finishedAt ? new Date(finishedAt) : new Date();
-            await this.addMessage(storage, actor, content, date, finishReason);
-            return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-          } catch (error) {
-            logError((error as Error).message);
-            return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-          }
-        }
+           try {
+             const sessionId = (req as any).params.sessionid;
+             const body = await req.json();
+             const { actor, content, finishedAt, finishReason } = body;
+             if (!actor || !content || !['user', 'game-master'].includes(actor)) {
+               return new Response(JSON.stringify({ error: 'actor and content required, actor must be user or game-master' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+             }
+             await this.addMessage(this.arenaManager, sessionId, actor, content, finishedAt ? new Date(finishedAt) : new Date(), finishReason);
+             return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+           } catch (error) {
+             logError((error as Error).message);
+             return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+           }
+         }
       }),
         "/sessions/:sessionid/chat/messages/:messageid": createMethodRouter({
-           PUT: async (req) => {
+            PUT: async (req) => {
+              try {
+                const sessionId = (req as any).params.sessionid;
+                const messageId = (req as any).params.messageid;
+                const body = await req.json();
+                const { content } = body;
+                if (content === undefined) {
+                  return new Response(JSON.stringify({ error: 'content required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                }
+                const success = await this.editMessage(this.arenaManager, sessionId, messageId, content);
+                if (success) {
+                  return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+                } else {
+                  return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+                }
+              } catch (error) {
+                logError((error as Error).message);
+                return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              }
+            },
+            DELETE: async (req) => {
+              try {
+                const messageId = (req as any).params.messageid;
+                const sessionId = (req as any).params.sessionid;
+                if (this.arenaManager) {
+                  const arena = await this.arenaManager.getArena(sessionId, null);
+                  let found = false;
+                  // Check if user message
+                  for (const taskId in arena.taskStore) {
+                    const task = arena.taskStore[taskId];
+                    if (task.input?.messageId === messageId) {
+                      arena.removeTask(taskId);
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (!found) {
+                    // Check if game-master message
+                    for (const chunk of arena.dataChunks) {
+                      if (chunk.messageId === messageId) {
+                        arena.removeChunksByMessageId(messageId);
+                        found = true;
+                        break;
+                      }
+                    }
+                  }
+                  if (found) {
+                    await this.arenaManager.saveArenaState(sessionId, arena);
+                    return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+                  }
+                }
+                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+              } catch (error) {
+                logError((error as Error).message);
+                return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              }
+            }
+         }),
+         "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
+           DELETE: async (req) => {
              try {
-               const storage = (req as any).context.get('storage');
                const messageId = (req as any).params.messageid;
-               const body = await req.json();
-               const { content } = body;
-               if (content === undefined) {
-                 return new Response(JSON.stringify({ error: 'content required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-               }
-               const success = await this.editMessage(storage, messageId, content);
+               const sessionId = (req as any).params.sessionid;
+               const success = await this.deleteMessagesFrom(this.arenaManager, sessionId, messageId);
                if (success) {
                  return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                } else {
-                 return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+                 return new Response(JSON.stringify({ error: 'Failed to delete messages' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
                }
              } catch (error) {
                logError((error as Error).message);
                return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
              }
-           },
-           DELETE: async (req) => {
+           }
+         }),
+         "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
+           POST: async (req) => {
              try {
-               const storage = (req as any).context.get('storage');
-                const messageId = (req as any).params.messageid;
                const sessionId = (req as any).params.sessionid;
-               // Get the message to know actor
-               const messages = await this.getMessages(storage);
-               const message = messages.find(m => m.id === messageId);
-               if (!message) {
-                 return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+               const messageId = (req as any).params.messageid;
+               const body = await req.json();
+               const { additionalContent, finishReason } = body;
+               if (additionalContent === undefined) {
+                 return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                }
-               const success = await this.deleteMessage(storage, messageId);
+               const success = await this.appendToMessage(this.arenaManager, sessionId, messageId, additionalContent, finishReason);
                if (success) {
-                    if (this.arenaManager) {
-                    const arena = await this.arenaManager.getArena(sessionId, null);
-                   if (message.actor === 'user') {
-                     // Find task with input.messageId == messageId
-                     for (const taskId in arena.taskStore) {
-                       const task = arena.taskStore[taskId];
-                       if (task.input?.messageId === messageId) {
-                         arena.removeTask(taskId);
-                         break;
-                       }
-                     }
-                   } else if (message.actor === 'game-master') {
-                     // Remove chunks with messageId
-                     arena.removeChunksByMessageId(messageId);
-                   }
-                   await this.arenaManager.saveArenaState(sessionId, arena);
-                 }
                  return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                } else {
                  return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
@@ -331,70 +436,6 @@ export class ChatHistory implements HasStorage, PromptProvider {
              }
            }
          }),
-        "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
-          DELETE: async (req) => {
-            try {
-              const storage = (req as any).context.get('storage');
-               const messageId = (req as any).params.messageid;
-               const sessionId = (req as any).params.sessionid;
-              // Get messages to know which to remove
-              const messages = await this.getMessages(storage);
-              const index = messages.findIndex(m => m.id === messageId);
-              if (index === -1) {
-                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-              }
-              const messagesToDelete = messages.slice(index);
-              const success = await this.deleteMessagesFrom(storage, messageId);
-              if (success) {
-                if (this.arenaManager) {
-                  const arena = await this.arenaManager.getArena(sessionId, null);
-                  for (const msg of messagesToDelete) {
-                    if (msg.actor === 'user') {
-                      for (const taskId in arena.taskStore) {
-                        const task = arena.taskStore[taskId];
-                        if (task.input?.messageId === msg.id) {
-                          arena.removeTask(taskId);
-                          break;
-                        }
-                      }
-                    } else if (msg.actor === 'game-master') {
-                      arena.removeChunksByMessageId(msg.id);
-                    }
-                  }
-                  await this.arenaManager.saveArenaState(sessionId, arena);
-                }
-                return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-              } else {
-                return new Response(JSON.stringify({ error: 'Failed to delete messages' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-              }
-            } catch (error) {
-              logError((error as Error).message);
-              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-            }
-          }
-        }),
-        "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
-          POST: async (req) => {
-            try {
-              const storage = (req as any).context.get('storage');
-               const messageId = (req as any).params.messageid;
-              const body = await req.json();
-              const { additionalContent, finishReason } = body;
-              if (additionalContent === undefined) {
-                return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-              }
-              const success = await this.appendToMessage(storage, messageId, additionalContent, finishReason);
-              if (success) {
-                return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-              } else {
-                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-              }
-            } catch (error) {
-              logError((error as Error).message);
-              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-            }
-          }
-        }),
         "/sessions/:sessionid/chat/messages/:messageid/annotations": createMethodRouter({
           GET: async (req) => {
             try {
@@ -402,7 +443,11 @@ export class ChatHistory implements HasStorage, PromptProvider {
               const messageId = (req as any).params.messageid;
               if (this.arenaManager) {
                 const arena = await this.arenaManager.getArena(sessionId, null);
-                const chunks = arena.dataChunks.filter((chunk: Chunk) => chunk.messageId === messageId);
+                const chunks: Chunk[] = [];
+                for (const taskId in arena.taskStore) {
+                  const task = arena.taskStore[taskId];
+                  chunks.push(...task.scratchpad.filter((chunk: Chunk) => chunk.messageId === messageId));
+                }
                 const annotations = chunks.flatMap((chunk: Chunk) => chunk.annotations || {});
                 return new Response(JSON.stringify({ annotations }), { headers: { 'Content-Type': 'application/json' } });
               } else {

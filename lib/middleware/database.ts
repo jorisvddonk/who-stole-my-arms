@@ -51,9 +51,9 @@ export function applyStorageMiddleware(
   for (const { routes, component } of routeGroups) {
     for (const [path, handler] of Object.entries(routes)) {
       let wrappedHandler = handler;
-      if (component && typeof component.getFQDN === 'function') {
-        wrappedHandler = withStorage(dbManager, component as HasStorage)(wrappedHandler);
-      }
+       if (component && typeof component.getFQDN === 'function' && typeof component.init === 'function') {
+         wrappedHandler = withStorage(dbManager, component as HasStorage)(wrappedHandler);
+       }
       wrappedRoutes[path] = wrappedHandler;
     }
   }

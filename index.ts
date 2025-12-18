@@ -344,8 +344,6 @@ const routeGroups = [
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
               const defaultAgentStorage = new Storage(db, defaultAgentTool.getFQDN(), sessionId);
               await defaultAgentTool.init(defaultAgentStorage);
               const records = await defaultAgentStorage.findAll();
@@ -408,11 +406,8 @@ const routeGroups = [
                 }
               }
 
-              // Add user message to history
-              await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
-
-              // Add generated message to history (trim trailing whitespace)
-              const messageId = await chatHistory.addMessage(chatStorage, 'game-master', text.trimEnd());
+              // Generate messageId for the response
+              const messageId = Math.random().toString(36).substring(2, 11);
 
               // Set messageId on LlmOutput chunks
               if (arena.currentContinuationTask) {
@@ -443,8 +438,6 @@ const routeGroups = [
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
               const defaultAgentStorage = new Storage(db, defaultAgentTool.getFQDN(), sessionId);
               await defaultAgentTool.init(defaultAgentStorage);
               const records = await defaultAgentStorage.findAll();
@@ -548,9 +541,8 @@ const routeGroups = [
                     const finishData = JSON.stringify({ finishReason: 'stop' });
                     enqueueData(finishData);
 
-                    // Add to history
-                    await chatHistory.addMessage(chatStorage, 'user', userPrompt, new Date(), null, userMessageId);
-                    const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd());
+                    // Generate messageId
+                    const messageId = Math.random().toString(36).substring(2, 11);
 
                     // Save state
                     await arenaManager.saveArenaState(sessionId, arena);
@@ -562,8 +554,7 @@ const routeGroups = [
                   } catch (error) {
                     logError((error as Error).message);
                     if (fullResponse) {
-                      await chatHistory.addMessage(chatStorage, 'user', userPrompt);
-                      const messageId = await chatHistory.addMessage(chatStorage, 'game-master', fullResponse.trimEnd(), new Date(), 'abort');
+                      const messageId = Math.random().toString(36).substring(2, 11);
                       const idData = JSON.stringify({ messageId });
                       enqueueData(idData);
                     }
@@ -593,8 +584,6 @@ const routeGroups = [
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
               await characterBioDockWidget.init(bioStorage);
               const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
@@ -607,7 +596,7 @@ const routeGroups = [
               }
 
               // Get existing message
-              const messages = await chatHistory.getMessages(chatStorage);
+              const messages = await chatHistory.getMessages(arenaManager, sessionId);
               const message = messages.find(m => m.id === messageId);
               if (!message || message.actor !== 'game-master') {
                 return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
@@ -629,8 +618,8 @@ const routeGroups = [
 
                 const text = await api.generate(fullPrompt, sessionId, promptStorage);
 
-                 // Append to existing message (trim trailing whitespace)
-                await chatHistory.appendToMessage(chatStorage, messageId, text.trimEnd());
+                  // Append to existing message (trim trailing whitespace)
+                 await chatHistory.appendToMessage(arenaManager, sessionId, messageId, text.trimEnd());
 
                logGenerate(`Continue on message ${messageId}`, text.length);
                // Parse the appended text with MarkdownParser
@@ -647,8 +636,6 @@ const routeGroups = [
             try {
               const sessionId = (req as any).params.sessionId;
               const db = await dbManager.getSessionDB(sessionId);
-              const chatStorage = new Storage(db, chatHistory.getFQDN(), sessionId);
-              await chatHistory.init(chatStorage);
               const bioStorage = new Storage(db, characterBioDockWidget.getFQDN(), sessionId);
               await characterBioDockWidget.init(bioStorage);
               const formatterStorage = new Storage(db, formatterSettingsTool.getFQDN(), sessionId);
@@ -661,7 +648,7 @@ const routeGroups = [
               }
 
               // Get existing message
-              const messages = await chatHistory.getMessages(chatStorage);
+              const messages = await chatHistory.getMessages(arenaManager, sessionId);
               const message = messages.find(m => m.id === messageId);
               if (!message || message.actor !== 'game-master') {
                 return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
@@ -706,7 +693,7 @@ const routeGroups = [
                           const data = JSON.stringify({ finishReason: chunk.finishReason });
                           controller.enqueue(`data: ${data}\n\n`);
                            // Append to existing message (trim trailing whitespace)
-                           await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse.trimEnd(), chunk.finishReason);
+                            await chatHistory.appendToMessage(arenaManager, sessionId, messageId, additionalResponse.trimEnd(), chunk.finishReason);
                           logGenerate(`Continue on message ${messageId}`, totalLength);
                           // Parse the appended text with MarkdownParser
                           markdownParser.parse(additionalResponse);
@@ -717,7 +704,7 @@ const routeGroups = [
                      logError(error.message);
                      // If there was partial response, append it
                      if (additionalResponse) {
-                       await chatHistory.appendToMessage(chatStorage, messageId, additionalResponse.trimEnd(), 'abort');
+                        await chatHistory.appendToMessage(arenaManager, sessionId, messageId, additionalResponse.trimEnd(), 'abort');
                      }
                     controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
                   } finally {
