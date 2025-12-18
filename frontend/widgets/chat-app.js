@@ -269,31 +269,47 @@ export class ChatApp extends LitElement {
      editContent: { type: String }
    };
 
-  constructor() {
-    super();
-    this.messages = [];
-    this.loading = false;
-    this.dockHeight = 0;
-    this.isResizing = false;
-    this.startY = 0;
-    this.supportsStreaming = false;
-    this.currentSession = sessionManager.getCurrentSession();
-    this.sessionChangeHandler = this.handleSessionChange.bind(this);
-    this.currentToolCall = null;
-     this.voiceEventSource = null;
-     this.voiceQueue = [];
-     this.isPlayingVoice = false;
-     this.editingMessageId = null;
-     this.editContent = '';
-     this.checkLLMSettings();
-  }
+   constructor() {
+     super();
+     this.messages = [];
+     this.loading = false;
+     this.dockHeight = 0;
+     this.isResizing = false;
+     this.startY = 0;
+     this.supportsStreaming = false;
+     this.currentSession = sessionManager.getCurrentSession();
+     this.sessionChangeHandler = this.handleSessionChange.bind(this);
+     this.currentToolCall = null;
+      this.voiceEventSource = null;
+      this.voiceQueue = [];
+      this.isPlayingVoice = false;
+      this.editingMessageId = null;
+      this.editContent = '';
+      this.checkLLMSettings();
+   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    sessionManager.addSessionChangeListener(this.sessionChangeHandler);
-    this.loadChatHistory();
-    // Connect to voice events
-    this.voiceEventSource = new EventSource('/voice/events');
+   openImagePopup(img) {
+     if (!this.imagePopup) {
+       this.imagePopup = document.createElement('popup-dialog');
+       document.body.appendChild(this.imagePopup);
+     }
+     this.imagePopup.maxWidth = '90vw';
+     this.imagePopup.maxHeight = '90vh';
+     this.imagePopup.title = img.filename;
+     this.imagePopup.contentTemplate = () => html`<img src="/images/${img.path}" style="max-width: 100%; max-height: 100%; display: block; margin: auto;">`;
+     this.imagePopup.open = true;
+   }
+
+   connectedCallback() {
+     super.connectedCallback();
+     sessionManager.addSessionChangeListener(this.sessionChangeHandler);
+     this.loadChatHistory();
+     if (!this.imagePopup) {
+       this.imagePopup = document.createElement('popup-dialog');
+       document.body.appendChild(this.imagePopup);
+     }
+     // Connect to voice events
+     this.voiceEventSource = new EventSource('/voice/events');
     this.voiceEventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -1229,7 +1245,7 @@ export class ChatApp extends LitElement {
             return html`
               <div class="message-container">
                  <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
-                ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px;">`)}</div>` : ''}
+                 ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)}>`)}</div>` : ''}
                 ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
               </div>
             `;
