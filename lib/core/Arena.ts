@@ -88,7 +88,7 @@ export class Arena {
             Logger.globalLog(`Chunk from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${chunk.type} - ${chunk.content}`);
             // Prevent infinite loops: don't emit chunks from evaluator tasks
             if (agent.currentTask?.taskType === TaskType.Evaluator) return;
-            this.eventEmitter.emit('chunk', {agentName: agent.constructor.name, chunk});
+            this.eventEmitter.emit('chunk', {agentName: agent.constructor.name, chunk, agent});
         });
         agent.eventEmitter.on('token', (token: string) => {
             Logger.globalLog(`Token from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${token}`);
@@ -146,9 +146,9 @@ export class Arena {
      * Sets up event listeners to trigger evaluator execution when chunks are emitted.
      */
     private wireEvaluators(): void {
-        this.eventEmitter.on('chunk', ({ chunk, agentName }: { agentName: string, chunk: Chunk }) => {
+        this.eventEmitter.on('chunk', ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
             Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
-            this.runEvaluators(chunk);
+            this.runEvaluators(chunk, agent);
         });
     }
 
@@ -164,13 +164,15 @@ export class Arena {
     }
 
     /**
-     * Runs all evaluators that support the given chunk type.
+     * Runs evaluators that support the given chunk type and are selected by the agent.
      * @param chunk The chunk to evaluate.
+     * @param agent The agent that emitted the chunk.
      */
-    private async runEvaluators(chunk: Chunk): Promise<void> {
+    private async runEvaluators(chunk: Chunk, agent?: LLMAgent): Promise<void> {
         Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
+        const agentEvaluatorFqdns = agent ? (agent.evaluators === null ? Object.keys(this.evaluators) : agent.evaluators) : Object.keys(this.evaluators);
         const matchingEvaluators = Object.values(this.evaluators).filter(
-            evaluator => evaluator.supportedChunkTypes.includes(chunk.type)
+            evaluator => evaluator.supportedChunkTypes.includes(chunk.type) && agentEvaluatorFqdns.includes(evaluator.fqdn)
         );
 
         Logger.globalLog(`Running ${matchingEvaluators.length} evaluators for chunk type ${chunk.type}: ${matchingEvaluators.map(e => e.fqdn).join(', ')}`);

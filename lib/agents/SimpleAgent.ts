@@ -8,6 +8,12 @@ import { Task } from '../../interfaces/AgentTypes';
 export class SimpleAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
+    constructor(streamingLLM: any, arena: any) {
+        super(streamingLLM, arena);
+        // Example: only use LengthEvaluator and TypeEvaluator
+        this.evaluators = ['evaluators.LengthEvaluator', 'evaluators.TypeEvaluator'];
+    }
+
     /**
      * Builds a prompt for the simple agent that includes conversation history and current input.
      * @param task The task containing input and scratchpad data
