@@ -34,9 +34,10 @@ export class SimpleEvaluator extends Evaluator {
      * Evaluates a chunk by applying the configured evaluation function.
      * @param chunk The chunk to evaluate.
      * @param arena The arena context (not used by SimpleEvaluator).
+     * @param agent The agent that emitted the chunk (not used by SimpleEvaluator).
      * @returns The result of applying the evaluation function to the chunk.
      */
-    async evaluate(chunk: Chunk, arena: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
+    async evaluate(chunk: Chunk, arena: any, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
         return this.evalFunction(chunk);
     }
 }

@@ -19,7 +19,8 @@ export abstract class Evaluator {
      * Evaluates a chunk and returns annotations to add to it.
      * @param chunk The chunk to evaluate.
      * @param arena The arena context containing evaluators and data.
+     * @param agent The agent that emitted the chunk (optional).
      * @returns Promise resolving to annotation data or multiple annotations.
      */
-    abstract evaluate(chunk: Chunk, arena: any): Promise<{annotation?: any, annotations?: Record<string, any>}>;
+    abstract evaluate(chunk: Chunk, arena: any, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}>;
 }

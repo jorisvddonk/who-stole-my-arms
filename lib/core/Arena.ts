@@ -194,7 +194,7 @@ export class Arena {
 
         const evaluationPromises = matchingEvaluators.map(async (evaluator) => {
             try {
-                const result = await evaluator.evaluate(chunk, this);
+                const result = await evaluator.evaluate(chunk, this, agent);
                 if (result.annotation !== undefined || result.annotations !== undefined) {
                     Logger.globalLog(`Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
                     if (!chunk.annotations) {
@@ -391,7 +391,7 @@ export class Arena {
     return_result_to_parent(task: Task, result: string | {content: string, annotation?: any, annotations?: Record<string, any>}) {
         const output = typeof result === 'string' ? result : result.content;
         Logger.debugLog(`Returning result from task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}): ${output}`);
-        if (task.parent_task_id === null) {
+        if (task.parent_task_id === null || task.taskType === TaskType.Evaluator) {
             Logger.globalLog(`${YELLOW}FINAL OUTPUT:${RESET} ${BRIGHT_YELLOW}${output}${RESET}`);
             if (process.argv.includes('--debug')) {
                 this.printInvocationTree();

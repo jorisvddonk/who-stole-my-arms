@@ -50,16 +50,17 @@ export class AgentEvaluator extends Evaluator {
      * Evaluates a chunk by creating an agent task and waiting for completion.
      * @param chunk The chunk to evaluate.
      * @param arena The arena context for task management.
+     * @param agent The agent that emitted the chunk.
      * @returns Promise resolving to annotation data.
      */
-    async evaluate(chunk: Chunk, arena: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
+    async evaluate(chunk: Chunk, arena: any, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
         return new Promise((resolve) => {
             // Create task with chunk as input
             const task: Task = {
                 id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
                 agent_name: this.agentClass.name,
                 input: chunk,
-                parent_task_id: null,
+                parent_task_id: agent?.currentTask?.id || null,
                 scratchpad: [],
                 retryCount: 0,
                 executionCount: 0,
