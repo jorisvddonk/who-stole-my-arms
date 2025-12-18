@@ -11,7 +11,7 @@ import { Logger } from '../logging/debug-logger';
  */
 export class EvaluatorManager {
     private static instance: EvaluatorManager;
-    private evaluators: Record<string, Evaluator> = {};
+    private evaluators: (Evaluator | Evaluator[])[] = [];
     private initialized = false;
 
     /** Private constructor for singleton pattern */
@@ -39,35 +39,38 @@ export class EvaluatorManager {
         Logger.debugLog('Initializing EvaluatorManager');
 
         // Load hardcoded evaluators
-        this.evaluators = {
-            'LengthEvaluator': new SimpleEvaluator(
-                (chunk) => ({
-                    annotation: {
-                        chars: chunk.content.length,
-                        words: chunk.content.split(/\s+/).filter(w => w.length > 0).length
-                    }
-                }),
-                [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
-                'evaluators.LengthEvaluator'
-            ),
-            'TypeEvaluator': new SimpleEvaluator(
-                (chunk) => ({
-                    annotation: {
-                        type: chunk.type,
-                        timestamp: Date.now(),
-                        processed: chunk.processed
-                    }
-                }),
-                [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
-                'evaluators.TypeEvaluator'
-            ),
-            'SentimentEvaluator': new AgentEvaluator(
+        // Example: LengthEvaluator and TypeEvaluator run sequentially, others in parallel
+        const lengthEvaluator = new SimpleEvaluator(
+            (chunk) => ({
+                annotation: {
+                    chars: chunk.content.length,
+                    words: chunk.content.split(/\s+/).filter(w => w.length > 0).length
+                }
+            }),
+            [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
+            'evaluators.LengthEvaluator'
+        );
+        const typeEvaluator = new SimpleEvaluator(
+            (chunk) => ({
+                annotation: {
+                    type: chunk.type,
+                    timestamp: Date.now(),
+                    processed: chunk.processed
+                }
+            }),
+            [ChunkType.Input, ChunkType.LlmOutput, ChunkType.ToolOutput, ChunkType.AgentOutput],
+            'evaluators.TypeEvaluator'
+        );
+        this.evaluators = [
+            lengthEvaluator,
+            [typeEvaluator, lengthEvaluator], // Sequential group example: TypeEvaluator then LengthEvaluator again
+            new AgentEvaluator(
                 SentimentAgent,
                 streamingLLM,
                 [ChunkType.Input],
                 'evaluators.SentimentEvaluator'
             )
-        };
+        ];
 
         // TODO: Load dynamic evaluators if needed
 
@@ -76,26 +79,28 @@ export class EvaluatorManager {
 
     /**
      * Gets a copy of all loaded evaluators.
-     * @returns Record mapping evaluator names to evaluator instances.
+     * @returns Array of evaluators or evaluator groups.
      */
-    getEvaluators(): Record<string, Evaluator> {
-        return { ...this.evaluators };
+    getEvaluators(): (Evaluator | Evaluator[])[] {
+        return [...this.evaluators];
     }
 
     /**
-     * Gets the names of all loaded evaluators.
-     * @returns Array of evaluator names.
+     * Gets the fqdns of all loaded evaluators.
+     * @returns Array of evaluator fqdns.
      */
     getEvaluatorNames(): string[] {
-        return Object.keys(this.evaluators);
+        const flat = this.evaluators.flat();
+        return flat.map(e => e.fqdn);
     }
 
     /**
-     * Gets a specific evaluator by name.
-     * @param name The name of the evaluator to retrieve.
+     * Gets a specific evaluator by fqdn.
+     * @param fqdn The fqdn of the evaluator to retrieve.
      * @returns The evaluator instance, or undefined if not found.
      */
-    getEvaluator(name: string): Evaluator | undefined {
-        return this.evaluators[name];
+    getEvaluator(fqdn: string): Evaluator | undefined {
+        const flat = this.evaluators.flat();
+        return flat.find(e => e.fqdn === fqdn);
     }
 }

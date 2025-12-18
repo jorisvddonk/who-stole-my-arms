@@ -22,8 +22,8 @@ export class Arena {
     // Registry of available agents that can be called. These are only available for agents that don't have registered agents themselves.
     agents: Record<string, LLMAgent>;
 
-    // Registry of evaluators for annotating chunks
-    evaluators: Record<string, Evaluator>;
+    // Registry of evaluators for annotating chunks (can include sequential groups)
+    evaluators: (Evaluator | Evaluator[])[];
 
     taskQueue: Task[] = [];
 
@@ -49,7 +49,8 @@ export class Arena {
         this.agents = agentManager.getAgents();
         evaluatorManager.init(streamingLLM);
         this.evaluators = evaluatorManager.getEvaluators();
-        Logger.globalLog(`Arena created with evaluators: ${Object.keys(this.evaluators).join(', ')}`);
+        const allFqdns = this.evaluators.flat().map(e => e.fqdn);
+        Logger.globalLog(`Arena created with evaluators: ${allFqdns.join(', ')}`);
         // Set arena on agents and wire events
         for (const agent of Object.values(this.agents)) {
             (agent as any).arena = this;
@@ -165,34 +166,89 @@ export class Arena {
 
     /**
      * Runs evaluators that support the given chunk type and are selected by the agent.
+     * Evaluators can be run in parallel or sequential groups.
      * @param chunk The chunk to evaluate.
      * @param agent The agent that emitted the chunk.
      */
     private async runEvaluators(chunk: Chunk, agent?: LLMAgent): Promise<void> {
         Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
-        const allEvaluators = { ...this.evaluators };
+        const evaluatorConfig = [...this.evaluators];
         let agentEvaluatorFqdns: string[] = [];
-        if (agent && agent.evaluators !== null) {
-            agentEvaluatorFqdns = agent.evaluators.map(e => {
+        if (agent && agent.evaluators) {
+            // Agent specifies evaluators: only run those
+            const agentEvalFqdns = new Set<string>();
+            for (const e of agent.evaluators) {
                 if (typeof e === 'string') {
-                    return e;
+                    agentEvalFqdns.add(e);
                 } else {
-                    allEvaluators[e.fqdn] = e;
-                    return e.fqdn;
+                    evaluatorConfig.push(e);  // Add evaluator instances
+                    agentEvalFqdns.add(e.fqdn);
                 }
-            });
+            }
+            agentEvaluatorFqdns = Array.from(agentEvalFqdns);
         } else {
-            agentEvaluatorFqdns = Object.keys(this.evaluators);
+            // No agent-specific evaluators: run all global ones
+            agentEvaluatorFqdns = evaluatorConfig.flat().map(e => e.fqdn);
         }
-        const matchingEvaluators = Object.values(allEvaluators).filter(
-            evaluator => evaluator.supportedChunkTypes.includes(chunk.type) && agentEvaluatorFqdns.includes(evaluator.fqdn)
-        );
+        const allFqdns = evaluatorConfig.flat().map(e => e.fqdn);
+        Logger.debugLog(`All available evaluator FQDNs: ${allFqdns.join(', ')}`);
+        Logger.debugLog(`Agent evaluator FQDNs (filtered): ${agentEvaluatorFqdns.join(', ')}`);
+        Logger.debugLog(`Evaluator config structure: ${evaluatorConfig.map(item => Array.isArray(item) ? `[${item.map(e => e.fqdn).join(', ')}]` : item.fqdn).join(', ')}`);
 
-        Logger.globalLog(`Running ${matchingEvaluators.length} evaluators for chunk type ${chunk.type}: ${matchingEvaluators.map(e => e.fqdn).join(', ')}`);
+        const parallelBatch: Evaluator[] = [];
 
-        if (matchingEvaluators.length === 0) return;
+        for (const item of evaluatorConfig) {
+            if (Array.isArray(item)) {
+                // Sequential group
+                const groupEvaluators = item;
+                Logger.debugLog(`Processing sequential group: ${groupEvaluators.map(e => e.fqdn).join(', ')}`);
+                const matchingGroup = groupEvaluators.filter(
+                    evaluator => {
+                        const supportsType = evaluator.supportedChunkTypes.includes(chunk.type);
+                        const inAgentList = agentEvaluatorFqdns.includes(evaluator.fqdn);
+                        Logger.debugLog(`  Evaluator ${evaluator.fqdn}: supportsType=${supportsType}, inAgentList=${inAgentList}`);
+                        return supportsType && inAgentList;
+                    }
+                );
+                Logger.globalLog(`Running sequential group with ${matchingGroup.length} evaluators for chunk type ${chunk.type}: ${matchingGroup.map(e => e.fqdn).join(', ')}`);
+                for (const evaluator of matchingGroup) {
+                    try {
+                        const result = await evaluator.evaluate(chunk, this, agent);
+                        if (result.annotation !== undefined || result.annotations !== undefined) {
+                            Logger.globalLog(`Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
+                            if (!chunk.annotations) {
+                                chunk.annotations = {};
+                            }
+                            if (result.annotation !== undefined) {
+                                chunk.annotations[evaluator.fqdn] = result.annotation;
+                            }
+                            if (result.annotations !== undefined) {
+                                Object.assign(chunk.annotations, result.annotations);
+                            }
+                        } else {
+                            Logger.debugLog(`Evaluator ${evaluator.fqdn} returned no annotations`);
+                        }
+                    } catch (error) {
+                        Logger.debugLog(`Evaluator ${evaluator.fqdn} failed: ${error}`);
+                    }
+                }
+            } else {
+                // Single evaluator - collect for parallel
+                const supportsType = item.supportedChunkTypes.includes(chunk.type);
+                const inAgentList = agentEvaluatorFqdns.includes(item.fqdn);
+                Logger.debugLog(`Processing single evaluator ${item.fqdn}: supportsType=${supportsType}, inAgentList=${inAgentList}`);
+                if (supportsType && inAgentList) {
+                    parallelBatch.push(item);
+                    Logger.debugLog(`Added ${item.fqdn} to parallel batch`);
+                }
+            }
+        }
 
-        const evaluationPromises = matchingEvaluators.map(async (evaluator) => {
+        Logger.globalLog(`Running ${parallelBatch.length} parallel evaluators for chunk type ${chunk.type}: ${parallelBatch.map(e => e.fqdn).join(', ')}`);
+
+        if (parallelBatch.length === 0) return;
+
+        const evaluationPromises = parallelBatch.map(async (evaluator) => {
             try {
                 const result = await evaluator.evaluate(chunk, this, agent);
                 if (result.annotation !== undefined || result.annotations !== undefined) {
