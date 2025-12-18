@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { StreamingLLMInvoke } from '../../interfaces/LLMInvoke';
 import { Logger, AGENT_COLOR, TOOL_COLOR, RESET } from '../logging/debug-logger';
 import { Tool } from './Tool';
+import { Evaluator } from './Evaluator';
 import { ChunkType, TaskType, Chunk, Task } from '../../interfaces/AgentTypes';
 
 // Re-export for backward compatibility
@@ -18,7 +19,7 @@ export abstract class LLMAgent {
     public supportsContinuation: boolean = false;
     public tools: Record<string, Tool> = {};
     public registeredAgents: Record<string, LLMAgent> = {};
-    public evaluators: string[] | null = null; // FQDNs of evaluators to use; null means all available, empty array means none
+    public evaluators: (string | Evaluator)[] | null = null; // FQDNs or Evaluator instances; null means all available, empty array means none
     protected streamingLLM: StreamingLLMInvoke;
     public fqdn: string;
     public currentTask: Task | null = null;

@@ -170,8 +170,21 @@ export class Arena {
      */
     private async runEvaluators(chunk: Chunk, agent?: LLMAgent): Promise<void> {
         Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
-        const agentEvaluatorFqdns = agent ? (agent.evaluators === null ? Object.keys(this.evaluators) : agent.evaluators) : Object.keys(this.evaluators);
-        const matchingEvaluators = Object.values(this.evaluators).filter(
+        const allEvaluators = { ...this.evaluators };
+        let agentEvaluatorFqdns: string[] = [];
+        if (agent && agent.evaluators !== null) {
+            agentEvaluatorFqdns = agent.evaluators.map(e => {
+                if (typeof e === 'string') {
+                    return e;
+                } else {
+                    allEvaluators[e.fqdn] = e;
+                    return e.fqdn;
+                }
+            });
+        } else {
+            agentEvaluatorFqdns = Object.keys(this.evaluators);
+        }
+        const matchingEvaluators = Object.values(allEvaluators).filter(
             evaluator => evaluator.supportedChunkTypes.includes(chunk.type) && agentEvaluatorFqdns.includes(evaluator.fqdn)
         );
 

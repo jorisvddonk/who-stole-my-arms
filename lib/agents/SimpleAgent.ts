@@ -1,5 +1,7 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { Task } from '../../interfaces/AgentTypes';
+import { SimpleEvaluator } from '../evaluators/SimpleEvaluator';
+import { ChunkType } from '../../interfaces/AgentTypes';
 
 /**
  * Simple conversational agent that provides basic assistance.
@@ -10,8 +12,15 @@ export class SimpleAgent extends LLMAgent {
 
     constructor(streamingLLM: any, arena: any) {
         super(streamingLLM, arena);
-        // Example: only use LengthEvaluator and TypeEvaluator
-        this.evaluators = ['evaluators.LengthEvaluator', 'evaluators.TypeEvaluator'];
+        // Example: use registered evaluators and an inline one
+        this.evaluators = [
+            'evaluators.LengthEvaluator',
+            new SimpleEvaluator(
+                (chunk) => ({ annotation: { simpleAgentCustom: chunk.content.length > 10 } }),
+                [ChunkType.Input, ChunkType.LlmOutput],
+                'agents.SimpleAgent.CustomEvaluator'
+            )
+        ];
     }
 
     /**
