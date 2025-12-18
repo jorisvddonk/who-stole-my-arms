@@ -61,6 +61,11 @@ arena.eventEmitter.on('chunk', (details: any) => {
     }
 });
 
+arena.eventEmitter.on('token', (details: any) => {
+    // Tokens are streamed frequently, so only log if needed for debugging
+    // Logger.globalLog(`Token from ${AGENT_COLOR}${details.agentName}${RESET}: ${details.token}`);
+});
+
 async function handle_user_input(text: string, arena: Arena, isInteractive: boolean = false) {
     arena.errorCount = 0;
     Logger.debugLog(`Handling user input: "${text}"`);

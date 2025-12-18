@@ -93,7 +93,7 @@ export class Arena {
         });
         agent.eventEmitter.on('token', (token: string) => {
             //Logger.globalLog(`Token from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${token}`);
-            this.eventEmitter.emit('token', token);
+            this.eventEmitter.emit('token', {agentName: agent.constructor.name, token});
         });
         // wire up event forwarders
         agent.eventEmitter.on('toolCall', (call: any) => {
@@ -124,7 +124,7 @@ export class Arena {
         });
         evaluator.eventEmitter.on('token', (token: string) => {
             Logger.globalLog(`Evaluator Token from ${AGENT_COLOR}${evaluator.constructor.name}${RESET}: ${token}`);
-            this.eventEmitter.emit('evaluatorToken', token);
+            this.eventEmitter.emit('evaluatorToken', {evaluatorName: evaluator.constructor.name, token});
         });
         // wire up event forwarders
         evaluator.eventEmitter.on('toolCall', (call: any) => {

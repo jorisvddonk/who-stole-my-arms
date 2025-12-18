@@ -501,10 +501,12 @@ const routeGroups = [
                     }
 
                     // Listen to events
-                    const onToken = (token: string) => {
-                      fullResponse += token;
-                      const data = JSON.stringify({ token });
-                      enqueueData(data);
+                    const onToken = (details: { agentName: string, token: string }) => {
+                      if (details.agentName == defaultAgent) {
+                        fullResponse += details.token;
+                        const data = JSON.stringify({ token: details.token });
+                        enqueueData(data);
+                      }
                     };
                     const onToolCall = (details: any) => {
                       const data = JSON.stringify({ tool_call: details.call });
