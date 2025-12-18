@@ -6,6 +6,7 @@ import { createMethodRouter } from './util/route-utils.js';
 import { DatabaseManager } from "./database-manager.js";
 import { FormatterRegistry } from "./formatters.js";
 import { FormatterSettingsTool } from "./tools/formatter-settings-tool.js";
+import { Chunk } from "../interfaces/AgentTypes.js";
 
 export interface ChatMessage {
   id: string;
@@ -372,28 +373,47 @@ export class ChatHistory implements HasStorage, PromptProvider {
             }
           }
         }),
-       "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
-         POST: async (req) => {
-           try {
-             const storage = (req as any).context.get('storage');
+        "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
+          POST: async (req) => {
+            try {
+              const storage = (req as any).context.get('storage');
+               const messageId = (req as any).params.messageid;
+              const body = await req.json();
+              const { additionalContent, finishReason } = body;
+              if (additionalContent === undefined) {
+                return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              }
+              const success = await this.appendToMessage(storage, messageId, additionalContent, finishReason);
+              if (success) {
+                return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+              } else {
+                return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+              }
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        }),
+        "/sessions/:sessionid/chat/messages/:messageid/annotations": createMethodRouter({
+          GET: async (req) => {
+            try {
+              const sessionId = (req as any).params.sessionid;
               const messageId = (req as any).params.messageid;
-             const body = await req.json();
-             const { additionalContent, finishReason } = body;
-             if (additionalContent === undefined) {
-               return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-             }
-             const success = await this.appendToMessage(storage, messageId, additionalContent, finishReason);
-             if (success) {
-               return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-             } else {
-               return new Response(JSON.stringify({ error: 'Message not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-             }
-           } catch (error) {
-             logError((error as Error).message);
-             return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-           }
-         }
-       })
+              if (this.arenaManager) {
+                const arena = await this.arenaManager.getArena(sessionId, null);
+                const chunks = arena.dataChunks.filter((chunk: Chunk) => chunk.messageId === messageId);
+                const annotations = chunks.flatMap((chunk: Chunk) => chunk.annotations || {});
+                return new Response(JSON.stringify({ annotations }), { headers: { 'Content-Type': 'application/json' } });
+              } else {
+                return new Response(JSON.stringify({ annotations: [] }), { headers: { 'Content-Type': 'application/json' } });
+              }
+            } catch (error) {
+              logError((error as Error).message);
+              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        })
     };
   }
 }

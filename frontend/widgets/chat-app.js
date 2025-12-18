@@ -316,22 +316,46 @@ export class ChatApp extends LitElement {
     }
   }
 
-  handleSessionChange(sessionId) {
-    this.currentSession = sessionId;
-    this.messages = [];
-    this.loadChatHistory();
-  }
+   handleSessionChange(sessionId) {
+     console.log('ChatApp: Session changed to', sessionId);
+     this.currentSession = sessionId;
+     this.messages = [];
+     this.loadChatHistory();
+   }
 
   async loadChatHistory() {
+    console.log('ChatApp: Loading chat history for session', this.currentSession);
     try {
       const res = await fetch(`/sessions/${this.currentSession}/chat/messages`);
       if (res.ok) {
         const data = await res.json();
-        this.messages = data.messages.map(msg => ({
-          id: msg.id,
-          role: msg.actor === 'user' ? 'user' : 'system',
-          content: msg.content
-        }));
+        console.log('ChatApp: Loaded', data.messages.length, 'messages');
+        const messages = [];
+        for (const msg of data.messages) {
+          const message = {
+            id: msg.id,
+            role: msg.actor === 'user' ? 'user' : 'system',
+            content: msg.content,
+            images: []
+          };
+          if (message.role === 'system') {
+            try {
+              const annRes = await fetch(`/sessions/${this.currentSession}/chat/messages/${msg.id}/annotations`);
+              if (annRes.ok) {
+                const annData = await annRes.json();
+                const imageAnnotation = annData.annotations.find(ann => ann['tool.image.result']);
+                if (imageAnnotation) {
+                  message.images = imageAnnotation['tool.image.result'];
+                  console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
+                }
+              }
+            } catch (error) {
+              console.warn('Failed to load annotations:', error);
+            }
+          }
+          messages.push(message);
+        }
+        this.messages = messages;
         this.requestUpdate();
       }
     } catch (error) {
@@ -588,11 +612,12 @@ export class ChatApp extends LitElement {
      }
    }
 
-  async handleGenerate(e) {
-    const { prompt } = e.detail;
-    const userMessageId = crypto.randomUUID();
-    this.messages = [...this.messages, { id: userMessageId, role: 'user', content: prompt }];
-    this.loading = true;
+   async handleGenerate(e) {
+     const { prompt } = e.detail;
+     console.log('ChatApp: Handling generate with prompt:', prompt);
+     const userMessageId = crypto.randomUUID();
+     this.messages = [...this.messages, { id: userMessageId, role: 'user', content: prompt }];
+     this.loading = true;
 
      // Add a new system message that we'll update with content
      const systemMessageIndex = this.messages.length;
@@ -642,9 +667,10 @@ export class ChatApp extends LitElement {
 
             for (const line of message.split('\n')) {
               if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                     if (data.token) {
+                   try {
+                    const data = JSON.parse(line.slice(6));
+                      if (data.token) {
+                        console.log('ChatApp: Received token:', data.token);
                        fullContent += data.token;
                        this.messages[systemMessageIndex].content += data.token;
            this.requestUpdate();
@@ -670,9 +696,10 @@ export class ChatApp extends LitElement {
                       const container = this.shadowRoot.querySelector('.chat-container');
                        container.scrollTop = container.scrollHeight;
                      }, 0);
-                      } else if (data.tool_call) {
-                        // Handle tool call message
-                        console.log('🎯 Frontend received tool_call:', data.tool_call);
+                        } else if (data.tool_call) {
+                         // Handle tool call message
+                         console.log('🎯 Frontend received tool_call:', data.tool_call);
+                         console.log('ChatApp: Tool call received:', data.tool_call.name);
                         // this.messages[systemMessageIndex].content += `<|tool_call|>${JSON.stringify(data.tool_call)}<|tool_call_end|>`;
                         this.requestUpdate();
                         // Scroll to bottom
@@ -695,8 +722,8 @@ export class ChatApp extends LitElement {
                            }, 0);
                          }
                      } else if (data.finishReason) {
-                      console.log('Generation finished:', data.finishReason);
-                      break;
+                       console.log('ChatApp: Generation finished:', data.finishReason);
+                       break;
                    } else if (data.messageId) {
                      // Set the message id for continuation
                      this.messages[systemMessageIndex].id = data.messageId;
@@ -1199,12 +1226,13 @@ export class ChatApp extends LitElement {
              `;
            }
 
-           return html`
-             <div class="message-container">
-                <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
-               ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
-             </div>
-           `;
+            return html`
+              <div class="message-container">
+                 <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
+                ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px;">`)}</div>` : ''}
+                ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
+              </div>
+            `;
          })}
       </div>
       <div class="resizer" @mousedown=${this.startResize}></div>

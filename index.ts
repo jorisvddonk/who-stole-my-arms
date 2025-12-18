@@ -24,6 +24,7 @@ import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
 import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
 import { InteractionHistoryTool } from "./lib/tools/interaction-history-tool.js";
+import { ImageDisplayTool } from "./lib/tools/image-display-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
@@ -58,6 +59,7 @@ const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_
   api.updateSettings(settings);
 } : undefined);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
+const imageDisplayTool = new ImageDisplayTool(toolboxCollector);
 const formatterSettingsTool = new FormatterSettingsTool(toolboxCollector);
 const autoScrollSettingsTool = new AutoScrollSettingsTool();
 const osMetricsDockWidget = new OsMetricsDockWidget();
