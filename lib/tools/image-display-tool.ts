@@ -8,8 +8,9 @@ export class ImageDisplayTool implements ToolboxTool {
 
   getRoutes(): Record<string, any> {
     return {
-      "/images/:path*": async (req: any) => {
-        const path = (req as any).params.path;
+      "/images/*": async (req: any) => {
+        const url = new URL(req.url);
+        const path = decodeURIComponent(url.pathname.slice('/images/'.length));
         try {
           const data = await fs.readFile(path);
           // Determine content type based on extension

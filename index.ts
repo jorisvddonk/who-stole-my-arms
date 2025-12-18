@@ -133,6 +133,7 @@ const routeGroups = [
   osMetricsDockWidget,
   characterBioDockWidget,
   dockManager,
+  imageDisplayTool,
   promptManager,
   chatHistory,
   {
