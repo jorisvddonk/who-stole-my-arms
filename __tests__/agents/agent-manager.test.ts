@@ -1,7 +1,20 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, beforeAll, afterAll, mock } from 'bun:test';
 import { AgentManager } from '../../lib/agents/AgentManager';
 import { LLMAgent } from '../../lib/core/LLMAgent';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
+
+// Prevent loading external agents during tests
+const originalEnv = process.env.WSMA_AGENT_SEARCH_PATH;
+beforeAll(() => {
+    delete process.env.WSMA_AGENT_SEARCH_PATH;
+});
+
+// Restore environment after tests
+afterAll(() => {
+    if (originalEnv !== undefined) {
+        process.env.WSMA_AGENT_SEARCH_PATH = originalEnv;
+    }
+});
 
 // Mock agent for testing
 class MockTestAgent extends LLMAgent {
