@@ -160,7 +160,7 @@ export class KoboldAPI implements NonStreamingLLMInvoke, StreamingLLMInvoke, LLM
     }
 
     const data = await response.json();
-    return data.results ? data.results[0].text : '';
+    return data.results && data.results.length > 0 ? data.results[0].text : '';
   }
 
   async *generateStream(prompt: string, sessionId?: string | null, abortSignal?: AbortSignal): AsyncIterable<{ token?: string; finishReason?: string }> {
