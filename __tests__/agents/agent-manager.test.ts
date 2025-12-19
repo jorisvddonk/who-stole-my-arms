@@ -3,16 +3,21 @@ import { AgentManager } from '../../lib/agents/AgentManager';
 import { LLMAgent } from '../../lib/core/LLMAgent';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
 
-// Prevent loading external agents during tests
-const originalEnv = process.env.WSMA_AGENT_SEARCH_PATH;
+// Prevent loading external agents and prompts during tests
+const originalAgentEnv = process.env.WSMA_AGENT_SEARCH_PATH;
+const originalPromptEnv = process.env.WSMA_SYSTEM_PROMPT_SEARCH_PATH;
 beforeAll(() => {
     delete process.env.WSMA_AGENT_SEARCH_PATH;
+    delete process.env.WSMA_SYSTEM_PROMPT_SEARCH_PATH;
 });
 
 // Restore environment after tests
 afterAll(() => {
-    if (originalEnv !== undefined) {
-        process.env.WSMA_AGENT_SEARCH_PATH = originalEnv;
+    if (originalAgentEnv !== undefined) {
+        process.env.WSMA_AGENT_SEARCH_PATH = originalAgentEnv;
+    }
+    if (originalPromptEnv !== undefined) {
+        process.env.WSMA_SYSTEM_PROMPT_SEARCH_PATH = originalPromptEnv;
     }
 });
 
