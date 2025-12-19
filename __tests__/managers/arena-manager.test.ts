@@ -20,7 +20,7 @@ class MockStorage implements Storage {
     query(sql: string, params?: any[]): any[] { return []; }
     async getComponentVersion(): Promise<number | null> { return null; }
     async setComponentVersion(version: number): Promise<void> {}
-    async insert(data: any, id?: string): Promise<void> { this.data[id || 'test'] = data; }
+    async insert(data: any, id?: string): Promise<string> { const key = id || 'test'; this.data[key] = data; return key; }
     async update(id: string, data: any): Promise<void> { this.data[id] = data; }
     async delete(id: string): Promise<void> { delete this.data[id]; }
     async findAll(): Promise<any[]> { return Object.values(this.data); }
@@ -43,7 +43,7 @@ describe('ArenaManager', () => {
         dbManager = {
             getSessionDB: mock(async () => ({
                 run: mock(() => {}),
-                query: mock(() => [])
+                query: mock(() => ({ all: mock(() => []) }))
             }))
         } as any;
 
@@ -109,7 +109,14 @@ describe('ArenaManager', () => {
             // Mock dbManager to return database with storage
             const mockDB = {
                 run: mock(() => {}),
-                query: mock(() => [])
+                query: mock(() => ({ all: mock(() => [
+                    { id: 'taskStore', key: 'taskStore', value: JSON.stringify({ 'task1': { id: 'task1', agent_name: 'TestAgent' } }) },
+                    { id: 'taskQueue', key: 'taskQueue', value: JSON.stringify([]) },
+                    { id: 'invocationLog', key: 'invocationLog', value: JSON.stringify([]) },
+                    { id: 'currentContinuationTask', key: 'currentContinuationTask', value: JSON.stringify(null) },
+                    { id: 'errorCount', key: 'errorCount', value: JSON.stringify(5) },
+                    { id: 'dataChunks', key: 'dataChunks', value: JSON.stringify([]) }
+                ]) }))
             };
             dbManager.getSessionDB = mock(async () => mockDB);
 

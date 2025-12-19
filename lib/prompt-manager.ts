@@ -79,11 +79,12 @@ export class PromptManager implements ToolboxTool, HasStorage {
 
 
 
-  constructor(toolboxCollector?: any) {
-    if (toolboxCollector) {
-      toolboxCollector.register('/widgets/prompt-manager-widget.js');
-    }
-  }
+   constructor(toolboxCollector?: any) {
+     this.currentContext = {};
+     if (toolboxCollector) {
+       toolboxCollector.register('/widgets/prompt-manager-widget.js');
+     }
+   }
 
   registerProvider(name: string, provider: PromptProvider): void {
     this.providers.set(name, provider);

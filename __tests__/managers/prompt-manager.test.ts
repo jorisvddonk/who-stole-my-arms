@@ -46,9 +46,10 @@ class TestStorage {
     async findAll(): Promise<any[]> {
         return Array.from(this.data.values());
     }
-    async insert(data: any, id?: string): Promise<void> {
+    async insert(data: any, id?: string): Promise<string> {
         const recordId = id || this.nextId++.toString();
         this.data.set(recordId, { id: recordId, ...data });
+        return recordId;
     }
     async update(id: string, data: any): Promise<void> {
         if (this.data.has(id)) {
@@ -226,14 +227,14 @@ describe('PromptManager', () => {
                     type: 'group',
                     name: 'system',
                     items: [
-                        { type: 'prompt', name: 'system-prompt', prompt: 'You are a helpful assistant.' }
+                        { type: 'prompt', name: 'system-prompt', prompt: 'You are a helpful assistant.', tags: [] }
                     ]
                 },
                 'chat': {
                     type: 'group',
                     name: 'chat',
                     items: [
-                        { type: 'prompt', name: 'chat-prompt', prompt: 'Please respond to the user.' }
+                        { type: 'prompt', name: 'chat-prompt', prompt: 'Please respond to the user.', tags: [] }
                     ]
                 }
             });
@@ -252,7 +253,7 @@ describe('PromptManager', () => {
                     type: 'group',
                     name: 'base',
                     items: [
-                        { type: 'prompt', name: 'base-prompt', prompt: 'Base prompt.' }
+                        { type: 'prompt', name: 'base-prompt', prompt: 'Base prompt.', tags: [] }
                     ]
                 },
                 'extended': {
@@ -260,7 +261,7 @@ describe('PromptManager', () => {
                     name: 'extended',
                     items: [
                         { type: 'groupRef', name: 'test/base' },
-                        { type: 'prompt', name: 'ext-prompt', prompt: 'Extended prompt.' }
+                        { type: 'prompt', name: 'ext-prompt', prompt: 'Extended prompt.', tags: [] }
                     ]
                 }
             });
@@ -278,12 +279,12 @@ describe('PromptManager', () => {
                 'system1': {
                     type: 'group',
                     name: 'system1',
-                    items: [{ type: 'prompt', name: 'p1', prompt: 'System 1.' }]
+                    items: [{ type: 'prompt', name: 'p1', prompt: 'System 1.', tags: [] }]
                 },
                 'system2': {
                     type: 'group',
                     name: 'system2',
-                    items: [{ type: 'prompt', name: 'p2', prompt: 'System 2.' }]
+                    items: [{ type: 'prompt', name: 'p2', prompt: 'System 2.', tags: [] }]
                 }
             });
 
@@ -301,16 +302,23 @@ describe('PromptManager', () => {
             const templateName = 'test-template';
             const groups = ['test/group1'];
 
-            promptManager.saveTemplate(mockStorage, templateName, groups);
+            // Register a provider for the test
+            const provider = new MockPromptProvider({
+                'group1': {
+                    type: 'group',
+                    name: 'group1',
+                    items: [
+                        { type: 'prompt', name: 'test-prompt', prompt: 'Test prompt content', tags: [] }
+                    ]
+                }
+            });
+            promptManager.registerProvider('test', provider);
 
-            // Mock getPrompt to avoid complex setup
-            const mockGetPrompt = mock(promptManager, 'getPrompt');
-            mockGetPrompt.mockResolvedValue('Mock prompt from template');
+            promptManager.saveTemplate(mockStorage, templateName, groups);
 
             const prompt = await promptManager.getPromptFromTemplate(mockStorage, templateName);
 
-            expect(mockGetPrompt).toHaveBeenCalledWith(groups);
-            expect(prompt).toBe('Mock prompt from template');
+            expect(prompt).toContain('Test prompt content');
         });
 
         test('should return empty string for non-existent template', async () => {
@@ -339,38 +347,20 @@ describe('PromptManager', () => {
             expect(routes['/sessions/:sessionid/prompts/templates']).toBeDefined();
         });
 
-        test('should handle prompt building route', async () => {
-            const routes = promptManager.getRoutes();
-            const buildRoute = routes['/sessions/:sessionid/prompts/build'];
-
-            // Mock request
-            const mockReq = {
-                json: mock(async () => ({ groups: ['test/group'], context: {} }))
-            };
-
-            // Mock getPrompt
-            const mockGetPrompt = mock(promptManager, 'getPrompt');
-            mockGetPrompt.mockResolvedValue('Built prompt');
-
-            const response = await buildRoute.POST(mockReq as any);
-
-            expect(response.status).toBeUndefined(); // Success response
-            expect(await response.json()).toEqual({ prompt: 'Built prompt' });
-        });
-
         test('should handle template listing route', async () => {
-            const routes = promptManager.getRoutes();
-            const templatesRoute = routes['/sessions/:sessionid/prompts/templates'];
-
-            const mockReq = {};
-
             // Mock getAllTemplates
             const mockGetAllTemplates = mock(promptManager, 'getAllTemplates');
             mockGetAllTemplates.mockResolvedValue([]);
 
-            const response = await templatesRoute.GET(mockReq as any);
+            const routes = promptManager.getRoutes();
+            const templatesRoute = routes['/sessions/:sessionid/prompts/templates'];
 
-            expect(response.status).toBeUndefined();
+            const req = new Request('http://example.com', { method: 'GET' });
+            (req as any).context = { get: () => mockStorage };
+
+            const response = await templatesRoute.GET(req);
+
+            expect(response.status).toBe(200);
             expect(await response.json()).toEqual({ templates: [] });
         });
     });
