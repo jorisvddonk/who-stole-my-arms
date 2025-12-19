@@ -9,11 +9,8 @@ setupTestEnv();
 describe('ChatterboxVoiceEngine', () => {
   let mockFetch: any;
   let mockEmit: any;
-  let mockReadFileSync: any;
 
   beforeEach(() => {
-    mockReadFileSync = mock(() => { throw new Error('ENOENT'); });
-
     mockFetch = mock(() => Promise.resolve({
       ok: true,
       blob: () => Promise.resolve(new Blob(['audio data']))
@@ -73,6 +70,12 @@ describe('ChatterboxVoiceEngine', () => {
   });
 
   describe('voice handling', () => {
+    beforeEach(() => {
+      mock.module('fs', () => ({
+        readFileSync: mock(() => { throw new Error('ENOENT'); })
+      }));
+    });
+
     test('should queue and process text voice', async () => {
       const engine = new ChatterboxVoiceEngine();
       engine.onText('hello world');
@@ -86,10 +89,17 @@ describe('ChatterboxVoiceEngine', () => {
       }));
     });
 
-    test('should skip quote voice if no voice file', () => {
+    test('should queue and process quote voice', async () => {
       const engine = new ChatterboxVoiceEngine();
       engine.onQuote('quoted text');
-      expect(mockFetch).not.toHaveBeenCalled();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/tts', expect.any(Object));
+      expect(mockEmit).toHaveBeenCalledWith('voice', expect.objectContaining({
+        audioDataUrl: expect.stringContaining('data:audio/wav;base64,'),
+        text: 'quoted text'
+      }));
     });
 
     test('should skip bold if no voice file', () => {
@@ -130,6 +140,12 @@ describe('ChatterboxVoiceEngine', () => {
   });
 
   describe('error handling', () => {
+    beforeEach(() => {
+      mock.module('fs', () => ({
+        readFileSync: mock(() => { throw new Error('ENOENT'); })
+      }));
+    });
+
     test('should handle fetch error gracefully', async () => {
       const engine = new ChatterboxVoiceEngine();
       mockFetch.mockImplementation(() => Promise.resolve({ ok: false, statusText: 'error' }));
@@ -154,6 +170,12 @@ describe('ChatterboxVoiceEngine', () => {
   });
 
   describe('queue processing', () => {
+    beforeEach(() => {
+      mock.module('fs', () => ({
+        readFileSync: mock(() => { throw new Error('ENOENT'); })
+      }));
+    });
+
     test('should process multiple voices sequentially', async () => {
       const engine = new ChatterboxVoiceEngine();
       engine.onText('first');
