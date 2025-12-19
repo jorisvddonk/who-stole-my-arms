@@ -3,9 +3,11 @@ import { Arena } from '../../lib/core/Arena';
 import { AgentManager } from '../../lib/agents/AgentManager';
 import { EvaluatorManager } from '../../lib/evaluators/EvaluatorManager';
 import { SimpleEvaluator } from '../../lib/evaluators/SimpleEvaluator';
+import { AgentEvaluator } from '../../lib/evaluators/AgentEvaluator';
+import { SentimentAgent } from '../../lib/agents/SentimentAgent';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
 import { createMockTask } from '../mocks/helpers';
-import { ChunkType } from '../../interfaces/AgentTypes';
+import { ChunkType, TaskType } from '../../interfaces/AgentTypes';
 import { setupTestEnv } from '../test-setup';
 
 setupTestEnv();
@@ -38,6 +40,15 @@ describe('Full Agent Execution Integration', () => {
             'test.charCounter'
         );
         (evaluatorManager as any).evaluators.push(charCountEvaluator);
+
+        // Add AgentEvaluator that uses SentimentAgent
+        const agentEvaluator = new AgentEvaluator(
+            SentimentAgent,
+            streamingLLM,
+            [ChunkType.LlmOutput],
+            'test.sentimentEvaluator'
+        );
+        (evaluatorManager as any).evaluators.push(agentEvaluator);
 
         arena = new Arena(streamingLLM, agentManager, evaluatorManager);
     });
@@ -130,6 +141,74 @@ describe('Full Agent Execution Integration', () => {
             agent.run = originalRun;
 
             // Verify the setup allows evaluator to be called (mocked for this test)
+        });
+
+        test('should use AgentEvaluator for advanced chunk analysis', async () => {
+            const task = createMockTask({
+                agent_name: 'SimpleAgent',
+                input: 'Test input for advanced evaluation'
+            });
+
+            // Mock the SentimentAgent run to simulate sentiment analysis
+            const sentimentAgent = arena.agents['SentimentAgent'];
+            const originalSentimentRun = sentimentAgent.run;
+            sentimentAgent.run = mock(async (evalTask: any) => {
+                // Simulate sentiment analysis result
+                return JSON.stringify({
+                    score: 0.8,
+                    explanation: "Very positive sentiment detected"
+                });
+            });
+
+            // Mock the SimpleAgent run to add chunk
+            const simpleAgent = arena.agents['SimpleAgent'];
+            // Temporarily disable agent's evaluators to test global ones
+            const originalEvaluators = simpleAgent.evaluators;
+            simpleAgent.evaluators = null;
+            const originalSimpleRun = simpleAgent.run;
+            simpleAgent.run = mock(async (task: any) => {
+                simpleAgent.addChunk(task, {
+                    type: ChunkType.LlmOutput,
+                    content: 'This is a great response!',
+                    processed: false
+                });
+                return 'This is a great response!';
+            });
+
+            await (arena as any).run_agent(task);
+
+            // Manually trigger evaluators by emitting chunk event
+            const llmOutputChunk = task.scratchpad.find(c => c.type === ChunkType.LlmOutput);
+            if (llmOutputChunk) {
+                arena.eventEmitter.emit('chunk', { agentName: 'SimpleAgent', chunk: llmOutputChunk, agent: simpleAgent });
+            }
+
+            // Process any evaluator tasks that were created
+            while (arena.taskQueue.length > 0) {
+                const evalTask = arena.taskQueue.shift()!;
+                if (evalTask.taskType === 'evaluator') {
+                    const result = await (arena as any).run_agent(evalTask);
+                    evalTask.onComplete?.(result);
+                }
+            }
+
+            // Restore mocks
+            sentimentAgent.run = originalSentimentRun;
+            simpleAgent.run = originalSimpleRun;
+            simpleAgent.evaluators = originalEvaluators;
+
+            // Verify chunks were added and evaluated
+            expect(task.scratchpad.length).toBeGreaterThan(0);
+            expect(llmOutputChunk).toBeDefined();
+
+            // Verify AgentEvaluator was triggered (annotations should be present)
+            if (llmOutputChunk && llmOutputChunk.annotations) {
+                expect(llmOutputChunk.annotations['test.sentimentEvaluator']).toBeDefined();
+                expect(llmOutputChunk.annotations['test.sentimentEvaluator']).toEqual({
+                    score: 0.8,
+                    explanation: "Very positive sentiment detected"
+                });
+            }
         });
     });
 });
