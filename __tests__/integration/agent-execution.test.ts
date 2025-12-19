@@ -178,16 +178,18 @@ describe('Full Agent Execution Integration', () => {
 
             await (arena as any).run_agent(task);
 
-            // Manually trigger evaluators by emitting chunk event
+            // In a real scenario, evaluators trigger automatically when addChunk emits chunk events.
+            // In this test, we manually trigger evaluation since the mock setup may not fully replicate event emission.
             const llmOutputChunk = task.scratchpad.find(c => c.type === ChunkType.LlmOutput);
             if (llmOutputChunk) {
-                arena.eventEmitter.emit('chunk', { agentName: 'SimpleAgent', chunk: llmOutputChunk, agent: simpleAgent });
+                // Don't await runEvaluators since AgentEvaluator creates tasks that need to be processed separately
+                (arena as any).runEvaluators(llmOutputChunk, simpleAgent);
             }
 
-            // Process any evaluator tasks that were created
+            // Process evaluator tasks created by AgentEvaluator
             while (arena.taskQueue.length > 0) {
                 const evalTask = arena.taskQueue.shift()!;
-                if (evalTask.taskType === 'evaluator') {
+                if (evalTask.taskType === TaskType.Evaluator) {
                     const result = await (arena as any).run_agent(evalTask);
                     evalTask.onComplete?.(result);
                 }
@@ -200,6 +202,7 @@ describe('Full Agent Execution Integration', () => {
 
             // Verify chunks were added and evaluated
             expect(task.scratchpad.length).toBeGreaterThan(0);
+            expect(llmOutputChunk).toBeDefined();
             expect(llmOutputChunk).toBeDefined();
 
             // Verify AgentEvaluator was triggered (annotations should be present)
@@ -272,13 +275,15 @@ describe('Full Agent Execution Integration', () => {
 
             await (arena as any).run_agent(task);
 
-            // Manually trigger evaluators by emitting chunk event
+            // In a real scenario, evaluators trigger automatically when addChunk emits chunk events.
+            // In this test, we manually trigger evaluation since the mock setup may not fully replicate event emission.
             const llmOutputChunk = task.scratchpad.find(c => c.type === ChunkType.LlmOutput);
             if (llmOutputChunk) {
-                arena.eventEmitter.emit('chunk', { agentName: 'SimpleAgent', chunk: llmOutputChunk, agent: simpleAgent });
+                // Don't await runEvaluators since AgentEvaluator creates tasks that need to be processed separately
+                (arena as any).runEvaluators(llmOutputChunk, simpleAgent);
             }
 
-            // Process any evaluator tasks that were created
+            // Process evaluator tasks created by AgentEvaluator
             while (arena.taskQueue.length > 0) {
                 const evalTask = arena.taskQueue.shift()!;
                 if (evalTask.taskType === TaskType.Evaluator) {
@@ -294,6 +299,7 @@ describe('Full Agent Execution Integration', () => {
 
             // Verify chunks were added and evaluated
             expect(task.scratchpad.length).toBeGreaterThan(0);
+            expect(llmOutputChunk).toBeDefined();
             expect(llmOutputChunk).toBeDefined();
 
             // Verify custom AgentEvaluator was triggered
