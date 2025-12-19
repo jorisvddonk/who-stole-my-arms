@@ -3,6 +3,9 @@ import { ArenaManager } from '../../lib/arena-manager';
 import { Arena } from '../../lib/core/Arena';
 import { AgentManager } from '../../lib/agents/AgentManager';
 import { EvaluatorManager } from '../../lib/evaluators/EvaluatorManager';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 import { DatabaseManager, Storage } from '../../lib/database-manager';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
 import { MockAgentManager } from '../mocks/MockAgentManager';

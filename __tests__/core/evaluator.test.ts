@@ -1,6 +1,9 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { Evaluator } from '../../lib/core/Evaluator';
 import { Chunk, ChunkType } from '../../interfaces/AgentTypes';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 // Concrete implementation for testing the abstract Evaluator class
 class TestEvaluator extends Evaluator {

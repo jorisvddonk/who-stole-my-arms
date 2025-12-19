@@ -3,6 +3,9 @@ import { EvaluatorManager } from '../../lib/evaluators/EvaluatorManager';
 import { Evaluator } from '../../lib/core/Evaluator';
 import { ChunkType } from '../../interfaces/AgentTypes';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 // Mock evaluator for testing
 class MockTestEvaluator extends Evaluator {

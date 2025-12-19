@@ -2,6 +2,9 @@ import { describe, test, expect, beforeEach, mock, afterEach } from 'bun:test';
 import { DatabaseManager, DBStorage } from '../../lib/database-manager';
 import { rm, mkdir } from 'fs/promises';
 import { join } from 'path';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 // Mock HasStorage component
 class MockComponent {

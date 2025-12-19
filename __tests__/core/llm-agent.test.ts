@@ -3,6 +3,9 @@ import { LLMAgent } from '../../lib/core/LLMAgent';
 import { ChunkType, Task } from '../../interfaces/AgentTypes';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
 import { createMockTask, createMockChunk } from '../mocks/helpers';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 // Concrete implementation for testing the abstract LLMAgent class
 class TestAgent extends LLMAgent {

@@ -1,5 +1,8 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { KoboldAPI } from '../../lib/llm-api/KoboldAPI';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 describe('KoboldAPI', () => {
   let api: KoboldAPI;

@@ -5,6 +5,9 @@ import { MockAgentManager } from '../mocks/MockAgentManager';
 import { MockEvaluatorManager } from '../mocks/MockEvaluatorManager';
 import { createMockTask, createMockChunk } from '../mocks/helpers';
 import { ChunkType } from '../../interfaces/AgentTypes';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 
 describe('Arena', () => {
     let streamingLLM: MockStreamingLLM;

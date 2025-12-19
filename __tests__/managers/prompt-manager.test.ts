@@ -1,5 +1,8 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { PromptManager, PromptProvider, NamedGroup, PromptTemplate } from '../../lib/prompt-manager';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv();
 import { MockStorage } from '../mocks/MockStorage';
 
 // Mock prompt provider

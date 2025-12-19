@@ -65,10 +65,13 @@ Tests will show:
 
 ### Test Structure
 
-Tests use Bun's test API:
+Tests use Bun's test API. All test files include global setup to prevent loading external agents and prompts during testing.
 
 ```typescript
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { setupTestEnv } from '../test-setup';
+
+setupTestEnv(); // Global test environment setup
 
 describe('Component Name', () => {
     let setupVar: any;
@@ -84,6 +87,8 @@ describe('Component Name', () => {
     });
 });
 ```
+
+The `setupTestEnv()` function (defined in `__tests__/test-setup.ts`) handles environment variable management to isolate tests from external dependencies.
 
 ### Test Organization
 
@@ -256,6 +261,8 @@ test('test 1')
 ```
 
 ### Setup/Teardown
+
+All test files include global setup via `setupTestEnv()` to manage environment variables and prevent external dependencies.
 
 Use `beforeEach` for common setup:
 
