@@ -5,6 +5,7 @@ import { EvaluatorManager } from '../../lib/evaluators/EvaluatorManager';
 import { SimpleEvaluator } from '../../lib/evaluators/SimpleEvaluator';
 import { AgentEvaluator } from '../../lib/evaluators/AgentEvaluator';
 import { SentimentAgent } from '../../lib/agents/SentimentAgent';
+import { LLMAgent } from '../../lib/core/LLMAgent';
 import { MockStreamingLLM } from '../mocks/MockStreamingLLM';
 import { createMockTask } from '../mocks/helpers';
 import { ChunkType, TaskType } from '../../interfaces/AgentTypes';
@@ -207,6 +208,99 @@ describe('Full Agent Execution Integration', () => {
                 expect(llmOutputChunk.annotations['test.sentimentEvaluator']).toEqual({
                     score: 0.8,
                     explanation: "Very positive sentiment detected"
+                });
+            }
+        });
+
+        test('should use custom agentic evaluator for another agent', async () => {
+            // Create a custom WordCountAgent for evaluation
+            class WordCountAgent extends LLMAgent {
+                buildPrompt(task: any): string {
+                    const text = this.getInputText(task);
+                    return `Count the words in: "${text}". Return JSON: {"wordCount": number}`;
+                }
+
+                postProcessResponse(response: string): any {
+                    try {
+                        return { annotation: JSON.parse(response.trim()) };
+                    } catch {
+                        return { annotation: { wordCount: 0 } };
+                    }
+                }
+            }
+
+            // Register the WordCountAgent
+            const wordCountAgent = new WordCountAgent(streamingLLM, arena);
+            arena.agents['WordCountAgent'] = wordCountAgent;
+
+            // Create AgentEvaluator wrapping the WordCountAgent
+            const wordCountEvaluator = new AgentEvaluator(
+                WordCountAgent,
+                streamingLLM,
+                [ChunkType.LlmOutput],
+                'test.wordCountEvaluator'
+            );
+
+            const task = createMockTask({
+                agent_name: 'SimpleAgent',
+                input: 'Test input for custom evaluator'
+            });
+
+            // Mock the WordCountAgent run
+            const originalWordCountRun = wordCountAgent.run;
+            wordCountAgent.run = mock(async (evalTask: any) => {
+                const inputText = evalTask.input.content; // The chunk content
+                const wordCount = inputText.split(/\s+/).length;
+                return JSON.stringify({ wordCount });
+            });
+
+            // Set SimpleAgent's evaluators to include the custom AgentEvaluator
+            const simpleAgent = arena.agents['SimpleAgent'];
+            const originalEvaluators = simpleAgent.evaluators;
+            simpleAgent.evaluators = [wordCountEvaluator];
+
+            // Mock the SimpleAgent run to add chunk
+            const originalSimpleRun = simpleAgent.run;
+            simpleAgent.run = mock(async (task: any) => {
+                simpleAgent.addChunk(task, {
+                    type: ChunkType.LlmOutput,
+                    content: 'This is a test response with several words.',
+                    processed: false
+                });
+                return 'This is a test response with several words.';
+            });
+
+            await (arena as any).run_agent(task);
+
+            // Manually trigger evaluators by emitting chunk event
+            const llmOutputChunk = task.scratchpad.find(c => c.type === ChunkType.LlmOutput);
+            if (llmOutputChunk) {
+                arena.eventEmitter.emit('chunk', { agentName: 'SimpleAgent', chunk: llmOutputChunk, agent: simpleAgent });
+            }
+
+            // Process any evaluator tasks that were created
+            while (arena.taskQueue.length > 0) {
+                const evalTask = arena.taskQueue.shift()!;
+                if (evalTask.taskType === TaskType.Evaluator) {
+                    const result = await (arena as any).run_agent(evalTask);
+                    evalTask.onComplete?.(result);
+                }
+            }
+
+            // Restore mocks
+            wordCountAgent.run = originalWordCountRun;
+            simpleAgent.run = originalSimpleRun;
+            simpleAgent.evaluators = originalEvaluators;
+
+            // Verify chunks were added and evaluated
+            expect(task.scratchpad.length).toBeGreaterThan(0);
+            expect(llmOutputChunk).toBeDefined();
+
+            // Verify custom AgentEvaluator was triggered
+            if (llmOutputChunk && llmOutputChunk.annotations) {
+                expect(llmOutputChunk.annotations['test.wordCountEvaluator']).toBeDefined();
+                expect(llmOutputChunk.annotations['test.wordCountEvaluator']).toEqual({
+                    wordCount: 8 // "This is a test response with several words." has 8 words
                 });
             }
         });
