@@ -118,25 +118,25 @@ export class ChatApp extends LitElement {
       .regenerate-button:hover {
         background: var(--hover-bg);
       }
-      .voice-button {
-        position: absolute;
-        top: 5px;
-        right: 55px;
-        background: var(--border-color);
-        color: var(--text-color);
-        border: none;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.2s;
-        font-size: 10px;
-        line-height: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+       .voice-button {
+         position: absolute;
+         top: 5px;
+         right: 105px;
+         background: var(--border-color);
+         color: var(--text-color);
+         border: none;
+         border-radius: 50%;
+         width: 20px;
+         height: 20px;
+         cursor: pointer;
+         opacity: 0;
+         transition: opacity 0.2s;
+         font-size: 10px;
+         line-height: 1;
+         display: flex;
+         align-items: center;
+         justify-content: center;
+       }
       .voice-button:hover {
         background: var(--hover-bg);
       }
