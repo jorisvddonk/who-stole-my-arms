@@ -198,12 +198,12 @@ export class VoiceEvaluator extends Evaluator {
       const audioArray = new Uint8Array(audioBuffer);
 
       // Generate filename similar to ImageGenerationAgent pattern
-      // Use messageId if available, otherwise random UUID
-      const messageId = chunk?.messageId || 'unknown';
+      // Use parentChunkId if available, otherwise random UUID
+      const parentChunkId = chunk?.parentChunkId || 'unknown';
       const evaluatorName = this.constructor.name;
       const now = new Date();
       const timeHHMMSS = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-      const filename = `${messageId}_${evaluatorName}_${timeHHMMSS}.wav`;
+      const filename = `${parentChunkId}_${evaluatorName}_${timeHHMMSS}.wav`;
       const filePath = join(this.voicesDirectory, filename);
 
       // Save the file

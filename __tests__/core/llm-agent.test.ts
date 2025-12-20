@@ -278,7 +278,7 @@ describe('LLMAgent', () => {
             expect(emitSpy).toHaveBeenCalledWith(`chunk:${chunk.type}`, chunk);
         });
 
-        test('should set messageId on LLM output chunks', () => {
+        test('should add chunk to task scratchpad', () => {
             const task = createMockTask({
                 input: { messageId: 'input-message-id' },
                 scratchpad: []
@@ -290,7 +290,7 @@ describe('LLMAgent', () => {
 
             agent.addChunk(task, chunk);
 
-            expect(chunk.messageId).toBe('input-message-id');
+            expect(task.scratchpad).toContain(chunk);
         });
     });
 

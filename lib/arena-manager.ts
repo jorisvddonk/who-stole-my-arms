@@ -50,7 +50,7 @@ export class ArenaManager {
         arena.taskStore = state.taskStore || {};
         arena.taskQueue = state.taskQueue || [];
         arena.invocationLog = state.invocationLog || [];
-        arena.currentContinuationTask = state.currentContinuationTask || null;
+        arena.currentContinuationTask = state.currentContinuationTask ? arena.taskStore[state.currentContinuationTask] : null;
         arena.errorCount = state.errorCount || 0;
         arena.dataChunks = state.dataChunks || [];
 
@@ -79,7 +79,7 @@ export class ArenaManager {
         taskStore: arena.taskStore,
         taskQueue: arena.taskQueue,
         invocationLog: arena.invocationLog,
-        currentContinuationTask: arena.currentContinuationTask,
+        currentContinuationTask: arena.currentContinuationTask?.id || null,
         errorCount: arena.errorCount,
         dataChunks: arena.dataChunks,
       };

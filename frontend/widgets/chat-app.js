@@ -622,8 +622,8 @@ export class ChatApp extends LitElement {
                      }
                    } else if (data.finishReason) {
                      break;
-                   } else if (data.messageId) {
-                     this.messages[systemMessageIndex].id = data.messageId;
+                   } else if (data.chunkId) {
+                     this.messages[systemMessageIndex].id = data.chunkId;
                      this.requestUpdate();
                     } else if (data.error) {
                       this.messages[systemMessageIndex] = { role: 'system', content: `<|error|>${data.error}<|error_end|>` };
@@ -641,7 +641,7 @@ export class ChatApp extends LitElement {
        } else {
          // Handle non-streaming response
          const data = await res.json();
-         this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
+         this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.chunkId };
          this.requestUpdate();
          if (sessionStorage.getItem('chatAutoScroll') !== 'false') {
            setTimeout(() => {
@@ -772,9 +772,9 @@ export class ChatApp extends LitElement {
                      } else if (data.finishReason) {
                        console.log('ChatApp: Generation finished:', data.finishReason);
                        break;
-                   } else if (data.messageId) {
+                   } else if (data.chunkId) {
                      // Set the message id for continuation
-                     this.messages[systemMessageIndex].id = data.messageId;
+                     this.messages[systemMessageIndex].id = data.chunkId;
                      this.requestUpdate();
                    } else if (data.error) {
                      //this.messages[systemMessageIndex] = { role: 'system', content: `<|error|>${data.error}<|error_end|>` };
@@ -794,7 +794,7 @@ export class ChatApp extends LitElement {
          } else {
           // Handle non-streaming response
            const data = await res.json();
-           this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.messageId };
+           this.messages[systemMessageIndex] = { role: 'system', content: data.text || 'No response', id: data.chunkId };
             this.requestUpdate();
            // Scroll to bottom
            if (sessionStorage.getItem('chatAutoScroll') !== 'false') {

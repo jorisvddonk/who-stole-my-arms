@@ -5,6 +5,8 @@ import { Tool } from './Tool';
 import { Evaluator } from './Evaluator';
 import { ChunkType, TaskType, Chunk, Task } from '../../interfaces/AgentTypes';
 import { generateId } from '../util/id';
+import { FormatterRegistry } from '../formatters';
+import { ChatMessage } from '../chat-history';
 
 // Re-export for backward compatibility
 export { Tool, ChunkType, TaskType };
@@ -205,6 +207,67 @@ export abstract class LLMAgent {
     }
 
     /**
+     * Formats the conversation history using a formatter.
+     * @param task The task containing scratchpad data
+     * @returns The formatted history string
+     */
+    protected formatHistory(task: Task, formatterName: string = 'chatHistoryMessageFormatter_Alpaca'): string {
+        const registry = FormatterRegistry.getInstance();
+        const formatter = registry.get(formatterName);
+        if (!formatter) {
+            return this.getScratchpadContent(task);
+        }
+
+        const messages: ChatMessage[] = [];
+        for (const chunk of task.scratchpad) {
+            if (chunk.type === ChunkType.Input) {
+                messages.push({
+                    id: chunk.id,
+                    actor: 'user',
+                    content: chunk.content,
+                    finishedAt: new Date(),
+                    finishReason: null
+                });
+            } else if (chunk.type === ChunkType.LlmOutput) {
+                messages.push({
+                    id: chunk.id,
+                    actor: 'game-master',
+                    content: chunk.content,
+                    finishedAt: new Date(),
+                    finishReason: null
+                });
+            } else if (chunk.type === ChunkType.AgentOutput) {
+                messages.push({
+                    id: chunk.id,
+                    actor: 'game-master',
+                    content: chunk.content,
+                    finishedAt: new Date(),
+                    finishReason: null
+                });
+            } else if (chunk.type === ChunkType.ToolOutput) {
+                messages.push({
+                    id: chunk.id,
+                    actor: 'game-master',
+                    content: chunk.content,
+                    finishedAt: new Date(),
+                    finishReason: null
+                });
+            }
+        }
+
+        let formatted = '';
+        if (formatter.preFirstMessage && messages.length > 0) {
+            formatted += formatter.preFirstMessage(messages[0]);
+        }
+        formatted += messages.map(msg => formatter.historyMessage(msg)).join('');
+        if (formatter.postLastHistoryMessage && messages.length > 0) {
+            formatted += formatter.postLastHistoryMessage(messages[messages.length - 1]);
+        }
+
+        return `Conversation history:\n${formatted}`;
+    }
+
+    /**
      * Safely parses agent results from content, optionally adding error chunks on failure.
      * @param task The task context.
      * @param contents The content to parse.
@@ -253,20 +316,12 @@ export abstract class LLMAgent {
      * @param task The task to add the chunk to.
      * @param chunk The chunk to add.
      */
-    public addChunk(task: Task, chunk: Chunk): void {
-        // If no messageId, find the last input chunk with messageId in scratchpad
-        if (!chunk.messageId) {
-            for (let i = task.scratchpad.length - 1; i >= 0; i--) {
-                if (task.scratchpad[i].type === ChunkType.Input && task.scratchpad[i].messageId) {
-                    chunk.messageId = task.scratchpad[i].messageId;
-                    break;
-                }
-            }
+    public addChunk(task: Task, chunk: Chunk, parentChunk?: Chunk): void {
+        // Set parentChunkId if a parent is provided (for hierarchies)
+        if (parentChunk && !chunk.parentChunkId) {
+            chunk.parentChunkId = parentChunk.id;
         }
-        // If still no messageId, use task.input.messageId
-        if (!chunk.messageId && task.input && task.input.messageId) {
-            chunk.messageId = task.input.messageId;
-        }
+        //console.log("\x1b[47m\x1b[30m ADDING CHUNK OF TYPE " + chunk.type + " TO TASK " + task.id + "'s SCRATCHPAD \x1b[0m");
         task.scratchpad.push(chunk);
         this.eventEmitter.emit('chunk', chunk);
         this.eventEmitter.emit(`chunk:${chunk.type}`, chunk);

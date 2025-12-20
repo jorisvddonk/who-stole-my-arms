@@ -4,6 +4,8 @@ import { SimpleEvaluator } from '../evaluators/SimpleEvaluator';
 import { ChunkType } from '../../interfaces/AgentTypes';
 import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
+import { FormatterRegistry } from '../formatters';
+import { ChatMessage } from '../chat-history';
 
 /**
  * Simple conversational agent that provides basic assistance.
@@ -36,18 +38,23 @@ export class SimpleAgent extends LLMAgent {
      * @returns The constructed prompt string
      */
     buildPrompt(task: Task): string {
-        const scratchpadContent = this.getScratchpadContent(task);
+        const formattedHistory = this.formatHistory(task);
         const currentInput = this.getInputText(task);
 
+        const registry = FormatterRegistry.getInstance();
+        const formatter = registry.get('chatHistoryMessageFormatter_Alpaca');
+        let formattedInput = currentInput;
+        if (formatter?.userPrompt) {
+            formattedInput = formatter.userPrompt(currentInput);
+        }
+
         let prompt = `You are a helpful assistant.
-        
-Conversation history (scratchpad):
-${scratchpadContent}
 
-Current user input: ${currentInput}
-
-Respond helpfully to the user's input.`;
+${formattedHistory}
+${formattedInput}`;
 
         return prompt;
     }
+
+
 }

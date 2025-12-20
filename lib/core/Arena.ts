@@ -341,14 +341,62 @@ export class Arena {
     }
 
     /**
-     * Removes all chunks with a specific message ID from all tasks.
-     * @param messageId The message ID to filter by.
+     * Find all chunks with a specific ID from all tasks.
+     * @param id The chunk ID to filter by.
      */
-    removeChunksByMessageId(messageId: string) {
+    findChunksById(id: string) {
+        let foundChunks: Chunk[] = [];
         for (const taskId in this.taskStore) {
             const task = this.taskStore[taskId];
-            task.scratchpad = task.scratchpad.filter(chunk => chunk.messageId !== messageId);
+            foundChunks = foundChunks.concat(task.scratchpad.filter(chunk => chunk.id === id));
         }
+        return foundChunks;
+    }
+
+    /**
+     * Check whether the supplied chunkId is the first input chunk of its task
+     * @param id The chunk ID to filter by.
+     */
+    isChunkFirstInputChunk(id: string) {
+        let foundChunks: Chunk[] = [];
+        for (const taskId in this.taskStore) {
+            const task = this.taskStore[taskId];
+            const inputChunks = task.scratchpad.filter(chunk => chunk.type === ChunkType.Input);
+            const firstChunk = inputChunks.shift();
+            if (firstChunk) {
+                if (firstChunk.id === id) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Removes all chunks with a specific ID from all tasks.
+     * @param id The chunk ID to filter by.
+     */
+    removeChunksById(id: string) {
+        for (const taskId in this.taskStore) {
+            const task = this.taskStore[taskId];
+            task.scratchpad = task.scratchpad.filter(chunk => chunk.id !== id);
+        }
+    }
+
+    /**
+     * Get the taskid for a chunk id
+     * @param id The chunk ID to filter by.
+     */
+    getTaskIDForChunk(id: string) {
+        let foundChunks: Chunk[] = [];
+        for (const taskId in this.taskStore) {
+            const task = this.taskStore[taskId];
+            const found = task.scratchpad.filter(chunk => chunk.id === id);
+            if (found.length > 0) {
+                return taskId;
+            }
+        }
+        return undefined;
     }
 
     /**

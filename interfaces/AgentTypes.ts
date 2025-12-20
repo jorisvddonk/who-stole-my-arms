@@ -39,8 +39,8 @@ export interface Chunk {
     content: string;
     /** Whether this chunk has been processed by the system */
     processed: boolean;
-    /** Optional ID linking this chunk to a specific message */
-    messageId?: string;
+    /** Optional ID of the parent chunk in the hierarchy (for sub-agents, evaluators, etc.) */
+    parentChunkId?: string;
     /** Optional metadata annotations added by evaluators */
     annotations?: Record<string, any>;
 }

@@ -125,27 +125,13 @@ export class ChatHistory implements PromptProvider {
     try {
       const arena = await arenaManager.getArena(sessionId, null);
       const messageId = id || Math.random().toString(36).substring(2, 11);
-      if (actor === 'user') {
-        // Create a task for user input
-        const task = {
-          id: Arena.generateId(),
-          agent_name: 'default', // dummy
-          input: { text: content, messageId },
-          parent_task_id: null,
-          scratchpad: [],
-          retryCount: 0,
-          executionCount: 0
-        };
-        arena.taskStore[task.id] = task;
-      } else if (actor === 'game-master') {
-        // Add a chunk
-        const chunk = {
-          type: ChunkType.LlmOutput,
-          content,
-          processed: true,
-          messageId
-        };
-        arena.dataChunks.push(chunk);
+      const task = arena.currentContinuationTask || arena.taskStore[Object.keys(arena.taskStore)[0]];
+      if (task) {
+        if (actor === 'user') {
+          task.scratchpad.push({ id: messageId, type: ChunkType.Input, content, processed: true } as Chunk);
+        } else if (actor === 'game-master') {
+          task.scratchpad.push({ id: messageId, type: ChunkType.LlmOutput, content, processed: true } as Chunk);
+        }
       }
       await arenaManager.saveArenaState(sessionId, arena);
       return messageId;
@@ -166,36 +152,24 @@ export class ChatHistory implements PromptProvider {
         const task = arena.taskStore[taskId];
         if (task.parent_task_id !== null) continue;  // skip subagent tasks
         const hasInputChunks = task.scratchpad.some(chunk => chunk.type === 'input');
-        // Add task.input only if no input chunks in scratchpad and it has messageId
-        if (!hasInputChunks && task.input && task.input.messageId) {
-          messages.push({
-            id: task.input.messageId,
-            actor: 'user',
-            content: typeof task.input === 'string' ? task.input : task.input.text || JSON.stringify(task.input),
-            finishedAt: now,
-            finishReason: null
-          });
-        }
         // Add inputs and outputs from scratchpad
         for (const chunk of task.scratchpad) {
-          if (chunk.messageId) {
-            if (chunk.type === 'input') {
-              messages.push({
-                id: chunk.messageId,
-                actor: 'user',
-                content: chunk.content,
-                finishedAt: now,
-                finishReason: null
-              });
-            } else if (chunk.type === 'llmOutput') {
-              messages.push({
-                id: chunk.messageId,
-                actor: 'game-master',
-                content: chunk.content,
-                finishedAt: now,
-                finishReason: null
-              });
-            }
+          if (chunk.type === 'input') {
+            messages.push({
+              id: chunk.id,
+              actor: 'user',
+              content: chunk.content,
+              finishedAt: now,
+              finishReason: null
+            });
+          } else if (chunk.type === 'llmOutput') {
+            messages.push({
+              id: chunk.id,
+              actor: 'game-master',
+              content: chunk.content,
+              finishedAt: now,
+              finishReason: null
+            });
           }
         }
       }
@@ -218,25 +192,15 @@ export class ChatHistory implements PromptProvider {
     }
   }
 
-  async deleteMessagesFrom(arenaManager: any, sessionId: string, messageId: string): Promise<boolean> {
+  async deleteMessagesFrom(arenaManager: any, sessionId: string, chunkId: string): Promise<boolean> {
     try {
       const arena = await arenaManager.getArena(sessionId, null);
       const allMessages = await this.getMessages(arenaManager, sessionId);
-      const index = allMessages.findIndex(msg => msg.id === messageId);
+      const index = allMessages.findIndex(msg => msg.id === chunkId);
       if (index === -1) return false;
       const messagesToDelete = allMessages.slice(index);
       for (const msg of messagesToDelete) {
-        if (msg.actor === 'user') {
-          for (const taskId in arena.taskStore) {
-            const task = arena.taskStore[taskId];
-            if (task.input?.messageId === msg.id) {
-              arena.removeTask(taskId);
-              break;
-            }
-          }
-        } else if (msg.actor === 'game-master') {
-          arena.removeChunksByMessageId(msg.id);
-        }
+        arena.removeChunksById(msg.id);
       }
       await arenaManager.saveArenaState(sessionId, arena);
       return true;
@@ -246,27 +210,14 @@ export class ChatHistory implements PromptProvider {
     }
   }
 
-  async appendToMessage(arenaManager: any, sessionId: string, messageId: string, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
+  async appendToMessage(arenaManager: any, sessionId: string, chunkId: string, additionalContent: string, finishReason: string | null = null): Promise<boolean> {
     try {
       const arena = await arenaManager.getArena(sessionId, null);
-      // Check user messages
-      for (const taskId in arena.taskStore) {
-        const task = arena.taskStore[taskId];
-        if (task.input && task.input.messageId === messageId) {
-          if (typeof task.input === 'string') {
-            task.input += additionalContent;
-          } else {
-            task.input.text += additionalContent;
-          }
-          await arenaManager.saveArenaState(sessionId, arena);
-          return true;
-        }
-      }
-      // Check game-master messages
+      // Find the chunk with matching id
       for (const taskId in arena.taskStore) {
         const task = arena.taskStore[taskId];
         for (const chunk of task.scratchpad) {
-          if (chunk.messageId === messageId) {
+          if (chunk.id === chunkId) {
             chunk.content += additionalContent;
             await arenaManager.saveArenaState(sessionId, arena);
             return true;
@@ -280,27 +231,14 @@ export class ChatHistory implements PromptProvider {
     }
   }
 
-  async editMessage(arenaManager: any, sessionId: string, messageId: string, newContent: string): Promise<boolean> {
+  async editMessage(arenaManager: any, sessionId: string, chunkId: string, newContent: string): Promise<boolean> {
     try {
       const arena = await arenaManager.getArena(sessionId, null);
-      // Find if user message
-      for (const taskId in arena.taskStore) {
-        const task = arena.taskStore[taskId];
-        if (task.input && task.input.messageId === messageId) {
-          if (typeof task.input === 'string') {
-            task.input = newContent;
-          } else {
-            task.input.text = newContent;
-          }
-          await arenaManager.saveArenaState(sessionId, arena);
-          return true;
-        }
-      }
-      // Find if game-master message
+      // Find the chunk with matching id
       for (const taskId in arena.taskStore) {
         const task = arena.taskStore[taskId];
         for (const chunk of task.scratchpad) {
-          if (chunk.messageId === messageId) {
+          if (chunk.id === chunkId) {
             chunk.content = newContent;
             await arenaManager.saveArenaState(sessionId, arena);
             return true;
@@ -338,17 +276,16 @@ export class ChatHistory implements PromptProvider {
            }
          }
       }),
-        "/sessions/:sessionid/chat/messages/:messageid": createMethodRouter({
-            PUT: async (req) => {
-              try {
-                const sessionId = (req as any).params.sessionid;
-                const messageId = (req as any).params.messageid;
+        "/sessions/:sessionid/chat/messages/:chunkid": createMethodRouter({
+          PUT: async (req) => {
+            try {
+              const chunkId = (req as any).params.chunkid;
                 const body = await req.json();
                 const { content } = body;
                 if (content === undefined) {
                   return new Response(JSON.stringify({ error: 'content required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                 }
-                const success = await this.editMessage(this.arenaManager, sessionId, messageId, content);
+                const success = await this.editMessage(this.arenaManager, sessionId, chunkId, content);
                 if (success) {
                   return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                 } else {
@@ -361,31 +298,19 @@ export class ChatHistory implements PromptProvider {
             },
             DELETE: async (req) => {
               try {
-                const messageId = (req as any).params.messageid;
+                const chunkid = (req as any).params.chunkid;
                 const sessionId = (req as any).params.sessionid;
                 if (this.arenaManager) {
                   const arena = await this.arenaManager.getArena(sessionId, null);
-                  let found = false;
-                  // Check if user message
-                  for (const taskId in arena.taskStore) {
-                    const task = arena.taskStore[taskId];
-                    if (task.input?.messageId === messageId) {
-                      arena.removeTask(taskId);
-                      found = true;
-                      break;
+                  const foundChunks = arena.findChunksById(chunkid);
+                  const isFirstInputChunk = arena.isChunkFirstInputChunk(chunkid);
+                  if (foundChunks.length > 0) {
+                    if (isFirstInputChunk) {
+                      // if it's the first input chunk within its task, we remove the entire task (by convention to allow resetting a chat)
+                      arena.removeTask(arena.getTaskIDForChunk(chunkid));
+                    } else {
+                      arena.removeChunksById(chunkid);
                     }
-                  }
-                  if (!found) {
-                    // Check if game-master message
-                    for (const chunk of arena.dataChunks) {
-                      if (chunk.messageId === messageId) {
-                        arena.removeChunksByMessageId(messageId);
-                        found = true;
-                        break;
-                      }
-                    }
-                  }
-                  if (found) {
                     await this.arenaManager.saveArenaState(sessionId, arena);
                     return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                   }
@@ -397,12 +322,12 @@ export class ChatHistory implements PromptProvider {
               }
             }
          }),
-         "/sessions/:sessionid/chat/messages/:messageid/delete-after": createMethodRouter({
-           DELETE: async (req) => {
-             try {
-               const messageId = (req as any).params.messageid;
-               const sessionId = (req as any).params.sessionid;
-               const success = await this.deleteMessagesFrom(this.arenaManager, sessionId, messageId);
+          "/sessions/:sessionid/chat/messages/:chunkid/delete-after": createMethodRouter({
+            DELETE: async (req) => {
+              try {
+                const chunkId = (req as any).params.chunkid;
+                const sessionId = (req as any).params.sessionid;
+                const success = await this.deleteMessagesFrom(this.arenaManager, sessionId, chunkId);
                if (success) {
                  return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                } else {
@@ -414,17 +339,16 @@ export class ChatHistory implements PromptProvider {
              }
            }
          }),
-         "/sessions/:sessionid/chat/messages/:messageid/continue": createMethodRouter({
-           POST: async (req) => {
-             try {
-               const sessionId = (req as any).params.sessionid;
-               const messageId = (req as any).params.messageid;
-               const body = await req.json();
-               const { additionalContent, finishReason } = body;
-               if (additionalContent === undefined) {
-                 return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-               }
-               const success = await this.appendToMessage(this.arenaManager, sessionId, messageId, additionalContent, finishReason);
+          "/sessions/:sessionid/chat/messages/:chunkid/continue": createMethodRouter({
+            POST: async (req) => {
+              try {
+                const chunkId = (req as any).params.chunkid;
+                const body = await req.json();
+                const { additionalContent, finishReason } = body;
+                if (additionalContent === undefined) {
+                  return new Response(JSON.stringify({ error: 'additionalContent required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                }
+                const success = await this.appendToMessage(this.arenaManager, sessionId, chunkId, additionalContent, finishReason);
                if (success) {
                  return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
                } else {
@@ -436,22 +360,25 @@ export class ChatHistory implements PromptProvider {
              }
            }
          }),
-        "/sessions/:sessionid/chat/messages/:messageid/annotations": createMethodRouter({
+        "/sessions/:sessionid/chat/messages/:chunkid/annotations": createMethodRouter({
           GET: async (req) => {
             try {
               const sessionId = (req as any).params.sessionid;
-              const messageId = (req as any).params.messageid;
+              const chunkId = (req as any).params.chunkid;
               if (this.arenaManager) {
                 const arena = await this.arenaManager.getArena(sessionId, null);
-                const chunks: Chunk[] = [];
+                let annotations = {};
                 for (const taskId in arena.taskStore) {
                   const task = arena.taskStore[taskId];
-                  chunks.push(...task.scratchpad.filter((chunk: Chunk) => chunk.messageId === messageId));
+                  const chunk = task.scratchpad.find((chunk: Chunk) => chunk.id === chunkId);
+                  if (chunk) {
+                    annotations = chunk.annotations || {};
+                    break;
+                  }
                 }
-                const annotations = chunks.flatMap((chunk: Chunk) => chunk.annotations || {});
                 return new Response(JSON.stringify({ annotations }), { headers: { 'Content-Type': 'application/json' } });
               } else {
-                return new Response(JSON.stringify({ annotations: [] }), { headers: { 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify({ annotations: {} }), { headers: { 'Content-Type': 'application/json' } });
               }
             } catch (error) {
               logError((error as Error).message);

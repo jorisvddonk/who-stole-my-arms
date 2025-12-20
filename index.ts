@@ -372,7 +372,7 @@ const routeGroups = [
                 const rootTask = {
                   id: Arena.generateId(),
                   agent_name: defaultAgent,
-                  input: { text: userPrompt, messageId: userMessageId },
+                  input: { text: userPrompt,  },
                   parent_task_id: null,
                   scratchpad: [],
                   retryCount: 0,
@@ -381,14 +381,14 @@ const routeGroups = [
                 arena.taskStore[rootTask.id] = rootTask;
 
                       // Add input chunk (triggers evaluators synchronously)
-                      const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                       arena.addInputChunk(rootTask, inputChunk);
                       await arena.waitForEvaluators(inputChunk);
                       arena.currentContinuationTask = rootTask;
                       arena.taskQueue.push(rootTask);
                     } else {
                       // Append to existing scratchpad and re-queue
-                      const newInputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                       arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
                       await arena.waitForEvaluators(newInputChunk);
                       arena.taskQueue.push(arena.currentContinuationTask);
@@ -411,17 +411,6 @@ const routeGroups = [
 
               // Generate messageId for the response
               const messageId = Math.random().toString(36).substring(2, 11);
-
-              // Set messageId on LlmOutput chunks
-              if (arena.currentContinuationTask) {
-                const scratchpad = arena.currentContinuationTask.scratchpad;
-                for (let i = 0; i < scratchpad.length; i++) {
-                  const chunk = scratchpad[i];
-                  if (chunk.type === ChunkType.LlmOutput) {
-                    chunk.messageId = messageId;
-                  }
-                }
-              }
 
               // Save arena state
               await arenaManager.saveArenaState(sessionId, arena);
@@ -481,7 +470,7 @@ const routeGroups = [
                       const rootTask = {
                         id: Arena.generateId(),
                         agent_name: defaultAgent,
-                        input: { text: userPrompt, messageId: userMessageId },
+                        input: { text: userPrompt,  },
                         parent_task_id: null,
                         scratchpad: [],
                         retryCount: 0,
@@ -490,12 +479,12 @@ const routeGroups = [
                       arena.taskStore[rootTask.id] = rootTask;
 
                       // Add input chunk (triggers evaluators synchronously)
-                      const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                       arena.addInputChunk(rootTask, inputChunk);
                       arena.currentContinuationTask = rootTask;
                       arena.taskQueue.push(rootTask);
                     } else {
-                      const newInputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                       arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
                       arena.taskQueue.push(arena.currentContinuationTask);
                     }
@@ -550,20 +539,20 @@ const routeGroups = [
                     const finishData = JSON.stringify({ finishReason: 'stop' });
                     enqueueData(finishData);
 
-                    // Generate messageId
-                    const messageId = Math.random().toString(36).substring(2, 11);
+                    // Generate parentChunkId
+                    const parentChunkId = Math.random().toString(36).substring(2, 11);
 
                     // Save state
                     await arenaManager.saveArenaState(sessionId, arena);
 
-                    const idData = JSON.stringify({ messageId });
+                    const idData = JSON.stringify({ parentChunkId });
                     enqueueData(idData);
                     logGenerate(userPrompt, fullResponse.length);
                   } catch (error) {
                     logError((error as Error).message);
                     if (fullResponse) {
-                      const messageId = Math.random().toString(36).substring(2, 11);
-                      const idData = JSON.stringify({ messageId });
+                      const parentChunkId = Math.random().toString(36).substring(2, 11);
+                      const idData = JSON.stringify({ parentChunkId });
                       enqueueData(idData);
                     }
                     enqueueData(JSON.stringify({ error: (error as Error).message }));
@@ -598,14 +587,14 @@ const routeGroups = [
               await formatterSettingsTool.init(formatterStorage);
 
               const body = await req.json();
-              const { messageId } = body;
-              if (!messageId) {
-                return new Response(JSON.stringify({ error: 'messageId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              const { parentChunkId } = body;
+              if (!parentChunkId) {
+                return new Response(JSON.stringify({ error: 'parentChunkId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
               }
 
               // Get existing message
               const messages = await chatHistory.getMessages(arenaManager, sessionId);
-              const message = messages.find(m => m.id === messageId);
+              const message = messages.find(m => m.id === parentChunkId);
               if (!message || message.actor !== 'game-master') {
                 return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
               }
@@ -627,9 +616,9 @@ const routeGroups = [
                 const text = await api.generate(fullPrompt, sessionId, promptStorage);
 
                   // Append to existing message (trim trailing whitespace)
-                 await chatHistory.appendToMessage(arenaManager, sessionId, messageId, text.trimEnd());
+                 await chatHistory.appendToMessage(arenaManager, sessionId, parentChunkId, text.trimEnd());
 
-               logGenerate(`Continue on message ${messageId}`, text.length);
+               logGenerate(`Continue on message ${parentChunkId}`, text.length);
                return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
             } catch (error) {
               logError(error.message);
@@ -648,14 +637,14 @@ const routeGroups = [
               await formatterSettingsTool.init(formatterStorage);
 
               const body = await req.json();
-              const { messageId } = body;
-              if (!messageId) {
-                return new Response(JSON.stringify({ error: 'messageId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+              const { parentChunkId } = body;
+              if (!parentChunkId) {
+                return new Response(JSON.stringify({ error: 'parentChunkId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
               }
 
               // Get existing message
               const messages = await chatHistory.getMessages(arenaManager, sessionId);
-              const message = messages.find(m => m.id === messageId);
+              const message = messages.find(m => m.id === parentChunkId);
               if (!message || message.actor !== 'game-master') {
                 return new Response(JSON.stringify({ error: 'Message not found or not a system message' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
               }
@@ -699,8 +688,8 @@ const routeGroups = [
                           const data = JSON.stringify({ finishReason: chunk.finishReason });
                           controller.enqueue(`data: ${data}\n\n`);
                            // Append to existing message (trim trailing whitespace)
-                            await chatHistory.appendToMessage(arenaManager, sessionId, messageId, additionalResponse.trimEnd(), chunk.finishReason);
-                           logGenerate(`Continue on message ${messageId}`, totalLength);
+                            await chatHistory.appendToMessage(arenaManager, sessionId, parentChunkId, additionalResponse.trimEnd(), chunk.finishReason);
+                           logGenerate(`Continue on message ${parentChunkId}`, totalLength);
                           break;
                        }
                      }
@@ -708,7 +697,7 @@ const routeGroups = [
                      logError(error.message);
                      // If there was partial response, append it
                      if (additionalResponse) {
-                        await chatHistory.appendToMessage(arenaManager, sessionId, messageId, additionalResponse.trimEnd(), 'abort');
+                        await chatHistory.appendToMessage(arenaManager, sessionId, parentChunkId, additionalResponse.trimEnd(), 'abort');
                      }
                     controller.enqueue(`data: ${JSON.stringify({ error: error.message })}\n\n`);
                   } finally {

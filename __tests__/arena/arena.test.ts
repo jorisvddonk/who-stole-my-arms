@@ -286,21 +286,21 @@ describe('Arena', () => {
         });
     });
 
-    describe('removeChunksByMessageId', () => {
-        test('should remove chunks with matching messageId from all tasks', () => {
+    describe('removeChunksByChunkId', () => {
+        test('should remove chunks from all tasks', () => {
             const task1 = createMockTask();
-            const chunk1 = { type: ChunkType.Input, content: 'chunk1', processed: false, messageId: 'test-message' };
-            const chunk2 = { type: ChunkType.Input, content: 'chunk2', processed: false, messageId: 'other-message' };
+            const chunk1 = { id: 'c1', type: ChunkType.Input, content: 'chunk1', processed: false };
+            const chunk2 = { id: 'c2', type: ChunkType.Input, content: 'chunk2', processed: false };
 
             task1.scratchpad = [chunk1, chunk2];
             arena.taskStore[task1.id] = task1;
 
             expect(task1.scratchpad.length).toBe(2);
 
-            arena.removeChunksByMessageId('test-message');
+            arena.removeChunksById('c1');
 
             expect(task1.scratchpad.length).toBe(1);
-            expect(task1.scratchpad[0].messageId).toBe('other-message');
+            expect(task1.scratchpad[0].id).toBe('c2');
         });
     });
 
