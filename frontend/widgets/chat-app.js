@@ -384,14 +384,14 @@ export class ChatApp extends LitElement {
                if (annRes.ok) {
                  const annData = await annRes.json();
                  console.log('ChatApp: Annotations for message', msg.id, annData.annotations);
-                 const imageAnnotation = annData.annotations.find(ann => ann['tool.image.result']);
-                 if (imageAnnotation) {
-                   message.images = imageAnnotation['tool.image.result'];
+                 if (annData.annotations.hasOwnProperty('tool.image.result')) {
+                   const imageAnnotation = annData.annotations['tool.image.result'];
+                   message.images = imageAnnotation;
                    console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
                  }
-                 const voiceAnnotation = annData.annotations.find(ann => ann['evaluators.VoiceEvaluator']);
-                 if (voiceAnnotation) {
-                   message.voiceItems = voiceAnnotation['evaluators.VoiceEvaluator'].voiceItems;
+                 if (annData.annotations.hasOwnProperty('evaluators.VoiceEvaluator')) {
+                   const voiceAnnotation = annData.annotations['evaluators.VoiceEvaluator'];
+                   message.voiceItems = voiceAnnotation.voiceItems;
                    console.log('ChatApp: Found voice items for message', msg.id, message.voiceItems.length, 'voice items:', message.voiceItems);
                  } else {
                    console.log('ChatApp: No voice annotation found for message', msg.id);
