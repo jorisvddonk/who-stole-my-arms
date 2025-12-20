@@ -27,6 +27,7 @@ export class VoiceEvaluator extends Evaluator {
     referenceVoiceFile?: string;
     status: 'generated' | 'failed' | 'skipped';
   }> = [];
+  private pendingGenerations: number = 0;
 
   constructor(voiceConfig?: Partial<VoiceSettings>) {
     super();
@@ -77,12 +78,13 @@ export class VoiceEvaluator extends Evaluator {
   async evaluate(chunk: Chunk): Promise<{ annotation?: any, annotations?: Record<string, any> }> {
     const parsedMarkdown = chunk.annotations?.['evaluators.MarkdownEvaluator']?.parsedMarkdown;
     if (!parsedMarkdown) {
-      // If no annotation, skip
+      // If no markdown annotation, skip voice processing
       return {};
     }
 
-    // Reset voice items for this evaluation
+    // Reset voice items and pending generations for this evaluation
     this.currentVoiceItems = [];
+    this.pendingGenerations = 0;
 
     // Process all parsed markdown items and track their voice generation status
     for (const item of parsedMarkdown as ParsedMarkdownItem[]) {
@@ -97,7 +99,7 @@ export class VoiceEvaluator extends Evaluator {
       this.handleVoice(item.type, item.content, chunk, voiceItem);
     }
 
-    // Wait for all queued voices to be processed
+    // Wait for all queued voices to be processed AND all HTTP requests to complete
     await this.waitForVoiceProcessing();
 
     return {
@@ -114,7 +116,7 @@ export class VoiceEvaluator extends Evaluator {
   private async waitForVoiceProcessing(): Promise<void> {
     return new Promise((resolve) => {
       const checkQueue = () => {
-        if (this.voiceQueue.length === 0 && !this.isProcessingVoice) {
+        if (this.voiceQueue.length === 0 && !this.isProcessingVoice && this.pendingGenerations === 0) {
           resolve();
         } else {
           setTimeout(checkQueue, 10);
@@ -140,10 +142,13 @@ export class VoiceEvaluator extends Evaluator {
     if (this.isProcessingVoice || this.voiceQueue.length === 0) return;
     this.isProcessingVoice = true;
     const { text, voiceFile, chunk, voiceItem } = this.voiceQueue.shift()!;
+    this.pendingGenerations++;
     this.generateVoice(text, voiceFile, chunk, voiceItem).then(() => {
+      this.pendingGenerations--;
       this.isProcessingVoice = false;
       this.processNextVoice();
     }).catch(() => {
+      this.pendingGenerations--;
       if (voiceItem) {
         voiceItem.status = 'failed';
       }
