@@ -72,7 +72,7 @@ export class AgentEvaluator extends Evaluator {
                 retryCount: 0,
                 executionCount: 0,
                 taskType: TaskType.Evaluator,
-                sessionId: agent?.sessionId,
+                sessionId: arena.sessionId,
                 onComplete: (result) => {
                     if (typeof result === 'string') {
                         // Parse as JSON if possible

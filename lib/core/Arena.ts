@@ -32,6 +32,8 @@ export class Arena {
 
     taskStore: Record<string, Task> = {};
 
+    activeTasks: Record<string, Promise<void>> = {};
+
     invocationLog: Array<{id: string, type: 'agent' | 'tool', name: string, parent_id: string | null, params?: any, result?: any}> = [];
 
     currentContinuationTask: Task | null = null;
@@ -39,6 +41,9 @@ export class Arena {
     errorCount: number = 0;
 
     dataChunks: Chunk[] = [];
+
+    // Set of chunk IDs currently awaiting evaluator processing
+    awaitingEvaluatorChunks: Set<string> = new Set();
 
     /**
      * Creates a new Arena instance.
@@ -163,7 +168,9 @@ export class Arena {
     private wireEvaluators(): void {
         this.eventEmitter.on('chunk', async ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
             Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
+            this.awaitingEvaluatorChunks.add(chunk.id);
             await this.runEvaluators(chunk, agent);
+            this.awaitingEvaluatorChunks.delete(chunk.id);
             this.eventEmitter.emit('evaluatorsFinished', { chunk, agentName, agent });
         });
     }
@@ -174,6 +181,9 @@ export class Arena {
      * @returns A promise that resolves when evaluators have finished for this chunk.
      */
     public waitForEvaluators(chunk: Chunk): Promise<void> {
+        if (!this.awaitingEvaluatorChunks.has(chunk.id)) {
+            return Promise.resolve();
+        }
         return new Promise((resolve) => {
             const listener = (details: { chunk: Chunk, agentName: string, agent?: any }) => {
                 if (details.chunk.id === chunk.id) {
@@ -527,6 +537,17 @@ export class Arena {
     }
 
     /**
+     * Checks if a task has received results from all its child tasks.
+     * @param task The task to check.
+     * @returns True if all child results have been received.
+     */
+    private hasAllChildResults(task: Task): boolean {
+        const childCount = this.invocationLog.filter(inv => inv.parent_id === task.id && inv.type === 'agent').length;
+        const resultCount = task.scratchpad.filter(chunk => chunk.type === ChunkType.AgentOutput).length;
+        return resultCount >= childCount;
+    }
+
+    /**
      * Returns the result of a completed task to its parent task or as final output.
      * @param task The completed task.
      * @param result The result from the task execution.
@@ -551,8 +572,12 @@ export class Arena {
         const agentChunk = { id: Arena.generateId(), type: ChunkType.AgentOutput, content: agentResult, processed: true };
         const parentAgent = this.agents[parent.agent_name];
         parentAgent.addChunk(parent, agentChunk);
-        this.taskQueue.push(parent);
-        Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
+        if (this.hasAllChildResults(parent)) {
+            this.taskQueue.push(parent);
+            Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
+        } else {
+            Logger.debugLog(`Parent task ${parent.id} waiting for more child results (${this.invocationLog.filter(inv => inv.parent_id === parent.id && inv.type === 'agent').length} children, ${parent.scratchpad.filter(chunk => chunk.type === ChunkType.AgentOutput).length} results received)`);
+        }
     }
 
     /**
@@ -591,218 +616,245 @@ export class Arena {
     }
 
     /**
-     * Runs the main event loop that processes tasks from the queue.
+     * Processes a single task.
+     * @param task The task to process.
+     * @param isInteractive Whether the loop is running in interactive mode.
+     */
+    private async processTask(task: Task, isInteractive: boolean): Promise<void> {
+        task.executionCount = (task.executionCount || 0) + 1;
+        Logger.debugLog(`Processing task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) - execution ${task.executionCount}`);
+        let hasNewErrors = false;
+        let result;
+        try {
+            result = await this.run_agent(task);
+        } catch (e: any) {
+            Logger.debugLog(`Task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) failed: ${e}`);
+            if (task.onComplete) {
+                // For evaluator tasks, resolve with error
+                task.onComplete({ content: `<|error|>Agent ${task.agent_name} failed: ${e.message}<|error_end|>` });
+                return;
+            } else {
+                throw e;
+            }
+        }
+        let response: string;
+        let annotations: Record<string, any> = {};
+        const agent = this.agents[task.agent_name];
+        if (typeof result === 'string') {
+            response = result;
+        } else {
+            response = result.content;
+            if (result.annotation) {
+                annotations = { [agent.fqdn]: result.annotation };
+            }
+            if (result.annotations) {
+                annotations = { ...annotations, ...result.annotations };
+            }
+        }
+        Logger.debugLog(`Agent response: ${response}`);
+
+        // Add the response as a new chunk
+        const newChunk: Chunk = { id: Arena.generateId(), type: ChunkType.LlmOutput, content: response, processed: false };
+        if (annotations) {
+            newChunk.annotations = annotations;
+        }
+        Logger.debugLog(`- adding chunk`);
+        agent.addChunk(task, newChunk);
+        Logger.debugLog(`- waiting for evaluators`);
+        await this.waitForEvaluators(newChunk);
+        Logger.debugLog(`- done waiting`);
+
+        // Check the last chunk for parsing
+        const lastChunk = task.scratchpad[task.scratchpad.length - 1];
+        if (lastChunk.type === ChunkType.LlmOutput && !lastChunk.processed) {
+            let toolCalls: Array<{ name: string; parameters: any }> = [];
+            let agentCalls: Array<{ name: string; input: any }> = [];
+            try {
+                toolCalls = Arena.parseToolCalls(lastChunk.content);
+            } catch (e) {
+                const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in toolCalls: ${e}`, processed: true };
+                agent.addChunk(task, errorChunk);
+                this.eventEmitter.emit('parseError', { type: 'toolCalls', error: e, content: lastChunk.content });
+                hasNewErrors = true;
+            }
+            try {
+                agentCalls = Arena.parseAgentCalls(lastChunk.content);
+            } catch (e) {
+                const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in agentCalls: ${e}`, processed: true };
+                agent.addChunk(task, errorChunk);
+                this.eventEmitter.emit('parseError', { type: 'agentCalls', error: e, content: lastChunk.content });
+                hasNewErrors = true;
+            }
+
+            let hasToolCalls = false;
+
+            // Process tool calls
+            for (const call of toolCalls) {
+                agent.eventEmitter.emit('toolCall', call);
+                Logger.debugLog(`Executing tool call: ${TOOL_COLOR}${call.name}${RESET} with params: ${JSON.stringify(call.parameters)}`);
+                const toolId = `tool_${task.id}_${call.name}`;
+                if (!this.invocationLog.some(inv => inv.id === toolId)) {
+                    this.invocationLog.push({id: toolId, type: 'tool', name: call.name, parent_id: task.id, params: call.parameters});
+                }
+                const tool = agent.tools[call.name];
+                let toolResult: any;
+                if (tool) {
+                    try {
+                        const toolReturn = await tool.run(call.parameters, { arena: this, task });
+                        let annotations: Record<string, any> | undefined;
+
+                        if (typeof toolReturn === 'object' && toolReturn !== null && 'result' in toolReturn) {
+                            toolResult = toolReturn.result;
+                            if (toolReturn.annotation && toolReturn.annotations) {
+                                throw new Error('Cannot specify both annotation and annotations');
+                            }
+                            if (toolReturn.annotation) {
+                                annotations = { [tool.fqdn]: toolReturn.annotation };
+                            } else if (toolReturn.annotations) {
+                                annotations = toolReturn.annotations;
+                            }
+                        } else {
+                            toolResult = toolReturn;
+                        }
+
+                        Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
+                        const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
+                        const toolChunk: Chunk = { id: Arena.generateId(), type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
+                        if (annotations) {
+                            toolChunk.annotations = annotations;
+                        }
+                        agent.addChunk(task, toolChunk);
+                        hasToolCalls = true;
+                        Logger.debugLog(`Tool result: ${toolResultStr}`);
+                    } catch (e) {
+                        const errorContent = `<|error|>Tool ${call.name} failed: ${(e as any).message || e}<|error_end|>`;
+                        const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
+                        agent.addChunk(task, errorChunk);
+                        this.eventEmitter.emit('parseError', { type: 'toolExecution', error: e, content: call.name });
+                        toolResult = { error: (e as any).message || e };
+                        Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} failed: ${e}`);
+                        hasNewErrors = true;
+                    }
+                } else {
+                    const errorContent = `<|error|>Unknown tool: ${call.name}<|error_end|>`;
+                    const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
+                    agent.addChunk(task, errorChunk);
+                    this.eventEmitter.emit('parseError', { type: 'toolExecution', error: errorContent, content: call.name });
+                    toolResult = "unknown tool";
+                    Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} not found, output: ${JSON.stringify(toolResult)}`);
+                    hasNewErrors = true;
+                }
+            }
+
+            // Process agent calls
+            for (const call of agentCalls) {
+                if (agent.registeredAgents[call.name] || this.alwaysAllowedAgents.includes(call.name) && this.agents[call.name] || (Object.keys(agent.registeredAgents).length === 0 && this.agents[call.name])) {
+                    agent.eventEmitter.emit('agentCall', call);
+                    Logger.debugLog(`Creating agent call: ${AGENT_COLOR}${call.name}${RESET} with input: ${JSON.stringify(call.input)}`);
+                    const childTask: Task = {
+                        id: Arena.generateId(),
+                        agent_name: call.name,
+                        input: call.input,
+                        parent_task_id: task.id,
+                        scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
+                        retryCount: 0,
+                        executionCount: 0,
+                        sessionId: this.sessionId
+                    };
+                    this.taskStore[childTask.id] = childTask;
+                    this.taskQueue.push(childTask);
+                    Logger.debugLog(`Created child task ${childTask.id} (${AGENT_COLOR}${childTask.agent_name}${RESET})`);
+                } else {
+                    const errorContent = `<|error|>Unknown agent: ${call.name}<|error_end|>`;
+                    const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
+                    agent.addChunk(task, errorChunk);
+                    this.eventEmitter.emit('parseError', { type: 'agentExecution', error: errorContent, content: call.name });
+                    hasNewErrors = true;
+                    Logger.debugLog(`Agent ${AGENT_COLOR}${call.name}${RESET} not found`);
+                }
+            }
+
+            lastChunk.processed = true;
+
+            if (hasNewErrors) {
+                if (task.retryCount < 3 && task.executionCount < 10) {
+                    task.retryCount++;
+                    this.taskQueue.push(task);
+                    Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/3, executions: ${task.executionCount})`);
+                } else {
+                    const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
+                    const errorDetails = `${reason}\n${task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n')}`;
+                    const errorTask: Task = {
+                        id: Arena.generateId(),
+                        agent_name: 'ErrorAgent',
+                        input: errorDetails,
+                        parent_task_id: task.id,
+                        scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true }],
+                        retryCount: 0,
+                        executionCount: 0,
+                        sessionId: this.sessionId
+                    };
+                    this.taskStore[errorTask.id] = errorTask;
+                    this.taskQueue.push(errorTask);
+                    if (this.currentContinuationTask?.id === task.id) {
+                        this.currentContinuationTask = null;
+                    }
+                    Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id} (${reason})`);
+                    Logger.globalLog(`\x1b[31mERROR: Task ${task.id} failed - ${reason}\x1b[0m`);
+                }
+            } else if (hasToolCalls) {
+                // Re-queue task
+                this.taskQueue.push(task);
+                Logger.debugLog(`Re-queued task ${task.id} after tool calls`);
+            } else if (toolCalls.length === 0 && agentCalls.length === 0) {
+                const agent = this.agents[task.agent_name];
+                if (agent && agent.supportsContinuation && isInteractive) {
+                    Logger.debugLog(`Continuation agent task ${task.id} provided response, waiting for more input`);
+                    // Do not complete or return result; leave the task for continuation
+                } else {
+                    // No calls, final result
+                    Logger.debugLog(`Task ${task.id} completed with final result: ${response}`);
+                    this.return_result_to_parent(task, typeof result === 'string' ? result : result);
+                }
+            } else {
+                // Has agent calls, parent waits for child
+                Logger.debugLog(`Task ${task.id} waiting for child agents`);
+            }
+        } else {
+            Logger.debugLog(`Last chunk already processed or not llmOutput`);
+        }
+
+        Logger.debugLog(`Task ${task.id} processing completed`);
+    }
+
+    /**
+     * Runs the main event loop that processes tasks from the queue in parallel, with one active execution per task ID.
      * @param isInteractive Whether the loop is running in interactive mode.
      */
     async run_event_loop(isInteractive: boolean = false) {
         Logger.debugLog(`Starting event loop with ${this.taskQueue.length} tasks in queue`);
         while (true) {
-            if (this.taskQueue.length > 0) {
-                const task = this.taskQueue.shift()!;
-                task.executionCount = (task.executionCount || 0) + 1;
-                Logger.debugLog(`Processing task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) - execution ${task.executionCount}`);
-                let hasNewErrors = false;
-                let result;
-                try {
-                    result = await this.run_agent(task);
-                } catch (e: any) {
-                    Logger.debugLog(`Task ${task.id} (${AGENT_COLOR}${task.agent_name}${RESET}) failed: ${e}`);
-                    if (task.onComplete) {
-                        // For evaluator tasks, resolve with error
-                        task.onComplete({ content: `<|error|>Agent ${task.agent_name} failed: ${e.message}<|error_end|>` });
-                        continue;
-                    } else {
-                        throw e;
-                    }
+            // Collect and start any new tasks that can be started
+            const tasksToStart: Task[] = [];
+            for (const task of this.taskQueue) {
+                if (!(task.id in this.activeTasks)) {
+                    tasksToStart.push(task);
+                    this.activeTasks[task.id] = this.processTask(task, isInteractive).finally(() => {
+                        delete this.activeTasks[task.id];
+                    });
                 }
-                let response: string;
-                let annotations: Record<string, any> = {};
-                const agent = this.agents[task.agent_name];
-                if (typeof result === 'string') {
-                    response = result;
-                } else {
-                    response = result.content;
-                    if (result.annotation) {
-                        annotations = { [agent.fqdn]: result.annotation };
-                    }
-                    if (result.annotations) {
-                        annotations = { ...annotations, ...result.annotations };
-                    }
-                }
-                Logger.debugLog(`Agent response: ${response}`);
+            }
+            // Clear the queue since all tasks are either started or already active
+            this.taskQueue.length = 0;
 
-                // Add the response as a new chunk
-                const newChunk: Chunk = { id: Arena.generateId(), type: ChunkType.LlmOutput, content: response, processed: false };
-                if (annotations) {
-                    newChunk.annotations = annotations;
-                }
-                agent.addChunk(task, newChunk);
-                await this.waitForEvaluators(newChunk);
-
-                    // Check the last chunk for parsing
-                    const lastChunk = task.scratchpad[task.scratchpad.length - 1];
-                    if (lastChunk.type === ChunkType.LlmOutput && !lastChunk.processed) {
-                        let toolCalls: Array<{ name: string; parameters: any }> = [];
-                        let agentCalls: Array<{ name: string; input: any }> = [];
-                        try {
-                            toolCalls = Arena.parseToolCalls(lastChunk.content);
-                        } catch (e) {
-                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in toolCalls: ${e}`, processed: true };
-                            agent.addChunk(task, errorChunk);
-                            this.eventEmitter.emit('parseError', { type: 'toolCalls', error: e, content: lastChunk.content });
-                            hasNewErrors = true;
-                        }
-                        try {
-                            agentCalls = Arena.parseAgentCalls(lastChunk.content);
-                        } catch (e) {
-                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in agentCalls: ${e}`, processed: true };
-                            agent.addChunk(task, errorChunk);
-                            this.eventEmitter.emit('parseError', { type: 'agentCalls', error: e, content: lastChunk.content });
-                            hasNewErrors = true;
-                        }
-
-                    let hasToolCalls = false;
-
-                    // Process tool calls
-                    for (const call of toolCalls) {
-                        agent.eventEmitter.emit('toolCall', call);
-                        Logger.debugLog(`Executing tool call: ${TOOL_COLOR}${call.name}${RESET} with params: ${JSON.stringify(call.parameters)}`);
-                        const toolId = `tool_${task.id}_${call.name}`;
-                        if (!this.invocationLog.some(inv => inv.id === toolId)) {
-                            this.invocationLog.push({id: toolId, type: 'tool', name: call.name, parent_id: task.id, params: call.parameters});
-                        }
-                        const tool = agent.tools[call.name];
-                        let toolResult: any;
-                         if (tool) {
-                             try {
-                                  const toolReturn = await tool.run(call.parameters, { arena: this, task });
-                                  let toolResult: any;
-                                  let annotations: Record<string, any> | undefined;
-
-                                  if (typeof toolReturn === 'object' && toolReturn !== null && 'result' in toolReturn) {
-                                      toolResult = toolReturn.result;
-                                      if (toolReturn.annotation && toolReturn.annotations) {
-                                          throw new Error('Cannot specify both annotation and annotations');
-                                      }
-                                      if (toolReturn.annotation) {
-                                          annotations = { [tool.fqdn]: toolReturn.annotation };
-                                      } else if (toolReturn.annotations) {
-                                          annotations = toolReturn.annotations;
-                                      }
-                                  } else {
-                                      toolResult = toolReturn;
-                                  }
-
-                                 Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
-                                 const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
-                                 const toolChunk: Chunk = { id: Arena.generateId(), type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
-                                 if (annotations) {
-                                     toolChunk.annotations = annotations;
-                                 }
-                                 agent.addChunk(task, toolChunk);
-                                 hasToolCalls = true;
-                                 Logger.debugLog(`Tool result: ${toolResultStr}`);
-                             } catch (e) {
-                                  const errorContent = `<|error|>Tool ${call.name} failed: ${(e as any).message || e}<|error_end|>`;
-                                  const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
-                                  agent.addChunk(task, errorChunk);
-                                 this.eventEmitter.emit('parseError', { type: 'toolExecution', error: e, content: call.name });
-                                  toolResult = { error: (e as any).message || e };
-                                 Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} failed: ${e}`);
-                                 hasNewErrors = true;
-                             }
-                         } else {
-                            const errorContent = `<|error|>Unknown tool: ${call.name}<|error_end|>`;
-                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
-                            agent.addChunk(task, errorChunk);
-                            this.eventEmitter.emit('parseError', { type: 'toolExecution', error: errorContent, content: call.name });
-                            toolResult = "unknown tool";
-                            Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} not found, output: ${JSON.stringify(toolResult)}`);
-                            hasNewErrors = true;                 
-                        }
-                    }
-
-                    // Process agent calls
-                    for (const call of agentCalls) {
-                        if (agent.registeredAgents[call.name] || this.alwaysAllowedAgents.includes(call.name) && this.agents[call.name] || (Object.keys(agent.registeredAgents).length === 0 && this.agents[call.name])) {
-                            agent.eventEmitter.emit('agentCall', call);
-                            Logger.debugLog(`Creating agent call: ${AGENT_COLOR}${call.name}${RESET} with input: ${JSON.stringify(call.input)}`);
-                            const childTask: Task = {
-                                id: Arena.generateId(),
-                                agent_name: call.name,
-                                input: call.input,
-                                parent_task_id: task.id,
-                                scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
-                                retryCount: 0,
-                                executionCount: 0,
-                                sessionId: this.sessionId
-                            };
-                            this.taskStore[childTask.id] = childTask;
-                            this.taskQueue.push(childTask);
-                            Logger.debugLog(`Created child task ${childTask.id} (${AGENT_COLOR}${childTask.agent_name}${RESET})`);
-                        } else {
-                            const errorContent = `<|error|>Unknown agent: ${call.name}<|error_end|>`;
-                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
-                            agent.addChunk(task, errorChunk);
-                            this.eventEmitter.emit('parseError', { type: 'agentExecution', error: errorContent, content: call.name });
-                            hasNewErrors = true;
-                            Logger.debugLog(`Agent ${AGENT_COLOR}${call.name}${RESET} not found`);
-                        }
-                    }
-
-                    lastChunk.processed = true;
-
-                    if (hasNewErrors) {
-                        if (task.retryCount < 3 && task.executionCount < 10) {
-                            task.retryCount++;
-                            this.taskQueue.push(task);
-                            Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/3, executions: ${task.executionCount})`);
-                        } else {
-                            const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
-                            const errorDetails = `${reason}\n${task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n')}`;
-                            const errorTask: Task = {
-                                id: Arena.generateId(),
-                                agent_name: 'ErrorAgent',
-                                input: errorDetails,
-                                parent_task_id: task.id,
-                                scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true }],
-                                retryCount: 0,
-                                executionCount: 0,
-                                sessionId: this.sessionId
-                            };
-                            this.taskStore[errorTask.id] = errorTask;
-                            this.taskQueue.push(errorTask);
-                            if (this.currentContinuationTask?.id === task.id) {
-                                this.currentContinuationTask = null;
-                            }
-                            Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id} (${reason})`);
-                            Logger.globalLog(`\x1b[31mERROR: Task ${task.id} failed - ${reason}\x1b[0m`);
-                        }
-                    } else if (hasToolCalls) {
-                        // Re-queue task
-                        this.taskQueue.push(task);
-                        Logger.debugLog(`Re-queued task ${task.id} after tool calls`);
-                    } else if (toolCalls.length === 0 && agentCalls.length === 0) {
-                        const agent = this.agents[task.agent_name];
-                        if (agent && agent.supportsContinuation && isInteractive) {
-                            Logger.debugLog(`Continuation agent task ${task.id} provided response, waiting for more input`);
-                            // Do not complete or return result; leave the task for continuation
-                        } else {
-                            // No calls, final result
-                            Logger.debugLog(`Task ${task.id} completed with final result: ${response}`);
-                            this.return_result_to_parent(task, typeof result === 'string' ? result : result);
-                        }
-                    } else {
-                        // Has agent calls, parent waits for child
-                        Logger.debugLog(`Task ${task.id} waiting for child agents`);
-                    }
-                } else {
-                    Logger.debugLog(`Last chunk already processed or not llmOutput`);
-                }
-
-                Logger.debugLog(`Queue now has ${this.taskQueue.length} tasks`);
+            if (tasksToStart.length > 0) {
+                // Tasks were started, continue immediately to check for more
+                Logger.debugLog(`Started ${tasksToStart.length} tasks, ${Object.keys(this.activeTasks).length} active`);
+            } else if (Object.keys(this.activeTasks).length > 0) {
+                // No new tasks, but some active, wait a short time and check again
+                await new Promise(resolve => setTimeout(resolve, 100));
             } else {
-                // Queue is empty, wait 500ms and check again
+                // No tasks at all, wait longer
                 Logger.debugLog(`Task queue empty, waiting 500ms for potential async tasks`);
                 await new Promise(resolve => setTimeout(resolve, 500));
                 if (this.taskQueue.length === 0) {
