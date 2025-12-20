@@ -122,7 +122,8 @@ export class VoiceEvaluator extends Evaluator {
         if (this.voiceQueue.length === 0 && !this.isProcessingVoice && this.pendingGenerations === 0) {
           resolve();
         } else {
-          setTimeout(checkQueue, 10);
+          Logger.debugLog(`Still waiting for voice processing... voiceQueue length: ${this.voiceQueue.length}, isProcessingVoice: ${this.isProcessingVoice}, pendingGenerations: ${this.pendingGenerations}`);
+          setTimeout(checkQueue, 250);
         }
       };
       checkQueue();

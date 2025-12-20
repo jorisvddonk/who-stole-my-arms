@@ -216,7 +216,7 @@ export class Arena {
      */
     private async runEvaluators(chunk: Chunk, agent?: LLMAgent): Promise<void> {
         Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content ? chunk.content.substring(0, 20) : 'undefined'}`);
-        let evaluatorConfig: (Evaluator | Evaluator[])[] = [...this.evaluators];
+        let evaluatorConfig: (Evaluator | Evaluator[])[] = [];
         let agentEvaluatorFqdns: string[] = [];
         if (agent && agent.evaluators && agent.evaluators.length > 0) {
             // Agent specifies evaluators: only run those
@@ -239,6 +239,7 @@ export class Arena {
             agentEvaluatorFqdns = Array.from(agentEvalFqdns);
         } else {
             // No agent-specific evaluators: run all global ones
+            evaluatorConfig = [...this.evaluators];
             agentEvaluatorFqdns = evaluatorConfig.flat().map(e => e.fqdn);
         }
         const allFqdns = evaluatorConfig.flat().map(e => e.fqdn);
@@ -246,82 +247,64 @@ export class Arena {
         Logger.debugLog(`Agent evaluator FQDNs (filtered): ${agentEvaluatorFqdns.join(', ')}`);
         Logger.debugLog(`Evaluator config structure: ${evaluatorConfig.map(item => Array.isArray(item) ? `[${item.map(e => e.fqdn).join(', ')}]` : item.fqdn).join(', ')}`);
 
-        const parallelBatch: Evaluator[] = [];
+        let checkEvaluatorSupported = (evaluator: Evaluator) => {
+            const supportsType = evaluator.supportedChunkTypes.includes(chunk.type);
+            const inAgentList = agentEvaluatorFqdns.includes(evaluator.fqdn);
+            Logger.debugLog(`  Evaluator ${evaluator.fqdn}: supportsType=${supportsType}, inAgentList=${inAgentList}`);
+            return supportsType && inAgentList;
+        }
+
+        // filter out all unsupported evaluators and map single evaluators into array of evaluators so we can simplify our code further down
+        evaluatorConfig = evaluatorConfig.map(ev => {
+            let evaluators;
+            if (Array.isArray(ev)) {
+                evaluators = ev;
+            } else {
+                evaluators = [ev];
+            }
+            return evaluators.filter(e => {
+                return checkEvaluatorSupported(e);
+            });
+        });
+
+        const promises = [];
 
         for (const item of evaluatorConfig) {
             if (Array.isArray(item)) {
                 // Sequential group
-                const groupEvaluators = item;
-                Logger.debugLog(`Processing sequential group: ${groupEvaluators.map(e => e.fqdn).join(', ')}`);
-                const matchingGroup = groupEvaluators.filter(
-                    evaluator => {
-                        const supportsType = evaluator.supportedChunkTypes.includes(chunk.type);
-                        const inAgentList = agentEvaluatorFqdns.includes(evaluator.fqdn);
-                        Logger.debugLog(`  Evaluator ${evaluator.fqdn}: supportsType=${supportsType}, inAgentList=${inAgentList}`);
-                        return supportsType && inAgentList;
-                    }
-                );
-                Logger.globalLog(`Running sequential group with ${matchingGroup.length} evaluators for chunk type ${chunk.type}: ${matchingGroup.map(e => e.fqdn).join(', ')}`);
-                for (const evaluator of matchingGroup) {
-                    try {
-                        const result = await evaluator.evaluate(chunk, this, agent);
-                        if (result.annotation !== undefined || result.annotations !== undefined) {
-                            Logger.globalLog(`Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
-                            if (!chunk.annotations) {
-                                chunk.annotations = {};
+                Logger.globalLog(`Running sequential group with ${item.length} evaluators for chunk type ${chunk.type}: ${item.map(e => e.fqdn).join(', ')}`);
+                const promise = (async () => {
+                    for (const evaluator of item) {
+                        try {
+                            Logger.globalLog(`  Running evaluator ${evaluator.fqdn} for chunk type ${chunk.type}..`);
+                            const result = await evaluator.evaluate(chunk, this, agent);
+                            if (result.annotation !== undefined || result.annotations !== undefined) {
+                                Logger.globalLog(`  Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
+                                if (!chunk.annotations) {
+                                    chunk.annotations = {};
+                                }
+                                if (result.annotation !== undefined) {
+                                    chunk.annotations[evaluator.fqdn] = result.annotation;
+                                }
+                                if (result.annotations !== undefined) {
+                                    Object.assign(chunk.annotations, result.annotations);
+                                }
+                            } else {
+                                Logger.debugLog(`  Evaluator ${evaluator.fqdn} returned no annotations`);
                             }
-                            if (result.annotation !== undefined) {
-                                chunk.annotations[evaluator.fqdn] = result.annotation;
-                            }
-                            if (result.annotations !== undefined) {
-                                Object.assign(chunk.annotations, result.annotations);
-                            }
-                        } else {
-                            Logger.debugLog(`Evaluator ${evaluator.fqdn} returned no annotations`);
+                        } catch (error) {
+                            Logger.debugLog(`  Evaluator ${evaluator.fqdn} failed: ${error}`);
                         }
-                    } catch (error) {
-                        Logger.debugLog(`Evaluator ${evaluator.fqdn} failed: ${error}`);
                     }
-                }
+                })();
+                promises.push(promise);
             } else {
-                // Single evaluator - collect for parallel
-                const supportsType = item.supportedChunkTypes.includes(chunk.type);
-                const inAgentList = agentEvaluatorFqdns.includes(item.fqdn);
-                Logger.debugLog(`Processing single evaluator ${item.fqdn}: supportsType=${supportsType}, inAgentList=${inAgentList}`);
-                if (supportsType && inAgentList) {
-                    parallelBatch.push(item);
-                    Logger.debugLog(`Added ${item.fqdn} to parallel batch`);
-                }
+                // Single evaluator
+                throw new Error("??? single evaluator found. should not happen!");
             }
         }
 
-        Logger.globalLog(`Running ${parallelBatch.length} parallel evaluators for chunk type ${chunk.type}: ${parallelBatch.map(e => e.fqdn).join(', ')}`);
-
-        if (parallelBatch.length === 0) return;
-
-        const evaluationPromises = parallelBatch.map(async (evaluator) => {
-            try {
-                const result = await evaluator.evaluate(chunk, this, agent);
-                if (result.annotation !== undefined || result.annotations !== undefined) {
-                    Logger.globalLog(`Evaluator ${evaluator.fqdn} succeeded with result: ${JSON.stringify(result)}`);
-                    if (!chunk.annotations) {
-                        chunk.annotations = {};
-                    }
-                    if (result.annotation !== undefined) {
-                        chunk.annotations[evaluator.fqdn] = result.annotation;
-                    }
-                    if (result.annotations !== undefined) {
-                        Object.assign(chunk.annotations, result.annotations);
-                    }
-                } else {
-                    Logger.debugLog(`Evaluator ${evaluator.fqdn} returned no annotations`);
-                }
-            } catch (error) {
-                Logger.debugLog(`Evaluator ${evaluator.fqdn} failed: ${error}`);
-            }
-        });
-
-        await Promise.all(evaluationPromises);
+        await Promise.all(promises);
     }
 
     /**
