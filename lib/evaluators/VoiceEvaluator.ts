@@ -1,4 +1,4 @@
-import { Chunk, ChunkType } from '../../interfaces/AgentTypes';
+import { Chunk, ChunkType, Task } from '../../interfaces/AgentTypes';
 import { Evaluator } from '../core/Evaluator';
 import { VoiceSettings } from '../../interfaces/VoiceConfig';
 import { voiceEmitter } from '../voice-emitter';
@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { Logger } from '../logging/debug-logger';
+import { Arena } from '../core/Arena';
 
 interface ParsedMarkdownItem {
   type: 'text' | 'quote' | 'bold' | 'emphasis' | 'code' | 'tool_call' | 'tool_result' | 'reasoning';
@@ -21,6 +22,7 @@ export class VoiceEvaluator extends Evaluator {
   private voiceQueue: { text: string; voiceFile: string; chunk?: Chunk; voiceItem?: any }[] = [];
   private isProcessingVoice: boolean = false;
   private voicesDirectory: string;
+  private arena: Arena | null = null;
   private currentVoiceItems: Array<{
     type: string;
     content: string;
@@ -76,7 +78,8 @@ export class VoiceEvaluator extends Evaluator {
     }
   }
 
-  async evaluate(chunk: Chunk): Promise<{ annotation?: any, annotations?: Record<string, any> }> {
+  async evaluate(chunk: Chunk, arena: Arena): Promise<{ annotation?: any, annotations?: Record<string, any> }> {
+    this.arena = arena;
     const parsedMarkdown = chunk.annotations?.['evaluators.MarkdownEvaluator']?.parsedMarkdown;
     if (!parsedMarkdown) {
       // If no markdown annotation, skip voice processing
@@ -119,7 +122,7 @@ export class VoiceEvaluator extends Evaluator {
   private async waitForVoiceProcessing(): Promise<void> {
     return new Promise((resolve) => {
       const checkQueue = () => {
-        if (this.voiceQueue.length === 0 && !this.isProcessingVoice && this.pendingGenerations === 0) {
+        if (this.voiceQueue.length === 0 && !this.isProcessingVoice && this.pendingGenerations <= 0) {
           resolve();
         } else {
           Logger.debugLog(`Still waiting for voice processing... voiceQueue length: ${this.voiceQueue.length}, isProcessingVoice: ${this.isProcessingVoice}, pendingGenerations: ${this.pendingGenerations}`);
@@ -203,11 +206,11 @@ export class VoiceEvaluator extends Evaluator {
 
       // Generate filename similar to ImageGenerationAgent pattern
       // Use parentChunkId if available, otherwise random UUID
-      const parentChunkId = chunk?.parentChunkId || 'unknown';
+      const sessionId = this.arena?.sessionId || 'unknown';
       const evaluatorName = this.constructor.name;
       const now = new Date();
       const timeHHMMSS = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-      const filename = `${parentChunkId}_${evaluatorName}_${timeHHMMSS}.wav`;
+      const filename = `${sessionId}_${evaluatorName}_${timeHHMMSS}.wav`;
       const filePath = join(this.voicesDirectory, filename);
 
       // Save the file
