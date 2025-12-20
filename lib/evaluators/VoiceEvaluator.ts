@@ -70,7 +70,7 @@ export class VoiceEvaluator extends Evaluator {
   }
 
   private handleVoice(category: string, content: string): void {
-    const voiceFile = this.voiceSettings.voices[category];
+    const voiceFile = this.voiceSettings.voices[category as keyof typeof this.voiceSettings.voices];
     if (typeof voiceFile === 'string') {
       this.voiceQueue.push({ text: content, voiceFile });
       this.processNextVoice();
