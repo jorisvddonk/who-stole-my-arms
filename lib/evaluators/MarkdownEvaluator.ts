@@ -121,7 +121,7 @@ export class MarkdownEvaluator extends Evaluator {
       { regex: /`([^`]*)`/g, type: 'code' as const }
     ];
     while (pos < text.length) {
-      let earliestMatch: { match: RegExpExecArray; type: string; regex: RegExp } | null = null;
+      let earliestMatch: { match: RegExpExecArray; type: ParsedMarkdownItem['type']; regex: RegExp } | null = null;
       let earliestIndex = text.length;
       for (const { regex, type } of patterns) {
         regex.lastIndex = pos;
