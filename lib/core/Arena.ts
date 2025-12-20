@@ -17,6 +17,8 @@ export class Arena {
 
     streamingLLM: any;
 
+    sessionId?: string;
+
     // Agents that are always allowed to be called, even if the calling agent has registered agents
     alwaysAllowedAgents: string[] = ['ErrorAgent'];
 
@@ -43,12 +45,14 @@ export class Arena {
      * @param streamingLLM The streaming LLM interface for agent communication.
      * @param agentManager Manager containing registered agents.
      * @param evaluatorManager Manager containing registered evaluators.
+     * @param sessionId Optional session identifier for session-specific context.
      */
-    constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager) {
+    constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager, sessionId?: string) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
         this.agents = agentManager.getAgents();
         evaluatorManager.init(streamingLLM);
+        this.sessionId = sessionId;
         this.evaluators = evaluatorManager.getEvaluators();
         const allFqdns = this.evaluators.flat().map(e => e.fqdn);
         Logger.globalLog(`Arena created with evaluators: ${allFqdns.join(', ')}`);
@@ -730,7 +734,8 @@ export class Arena {
                                 parent_task_id: task.id,
                                 scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
                                 retryCount: 0,
-                                executionCount: 0
+                                executionCount: 0,
+                                sessionId: this.sessionId
                             };
                             this.taskStore[childTask.id] = childTask;
                             this.taskQueue.push(childTask);
@@ -762,7 +767,8 @@ export class Arena {
                                 parent_task_id: task.id,
                                 scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true }],
                                 retryCount: 0,
-                                executionCount: 0
+                                executionCount: 0,
+                                sessionId: this.sessionId
                             };
                             this.taskStore[errorTask.id] = errorTask;
                             this.taskQueue.push(errorTask);

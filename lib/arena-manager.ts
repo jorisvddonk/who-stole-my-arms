@@ -33,7 +33,7 @@ export class ArenaManager {
       return existing;
     }
 
-    const arena = new Arena(streamingLLM, this.agentManager, this.evaluatorManager);
+    const arena = new Arena(streamingLLM, this.agentManager, this.evaluatorManager, sessionId);
 
     // Hydrate state from DB
     try {
