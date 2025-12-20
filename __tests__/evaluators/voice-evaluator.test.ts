@@ -25,8 +25,23 @@ describe('VoiceEvaluator', () => {
 
         // Mock file system
         mockReadFileSync = mock(() => { throw new Error('ENOENT'); });
+        const mockWriteFileSync = mock(() => undefined);
+        const mockMkdirSync = mock(() => undefined);
+        const mockExistsSync = mock(() => true);
         mock.module('fs', () => ({
-            readFileSync: mockReadFileSync
+            readFileSync: mockReadFileSync,
+            writeFileSync: mockWriteFileSync,
+            mkdirSync: mockMkdirSync,
+            existsSync: mockExistsSync
+        }));
+
+        // Mock path and url modules
+        mock.module('path', () => ({
+            join: (...args: string[]) => args.join('/'),
+            dirname: (path: string) => path.split('/').slice(0, -1).join('/')
+        }));
+        mock.module('url', () => ({
+            fileURLToPath: (url: string) => url.replace('file://', '')
         }));
     });
 
@@ -160,10 +175,23 @@ describe('VoiceEvaluator', () => {
             };
 
             const result = await evaluator.evaluate(chunk);
-            expect(result).toEqual({ annotation: { voiceGenerated: true } });
-
-            // Wait for async processing
-            await new Promise(resolve => setTimeout(resolve, 100));
+            expect(result.annotation).toEqual({
+                voiceGenerated: true,
+                voiceItems: expect.arrayContaining([
+                    expect.objectContaining({
+                        type: 'text',
+                        status: 'generated',
+                        filePath: expect.any(String),
+                        referenceVoiceFile: 'Robert.wav'
+                    }),
+                    expect.objectContaining({
+                        type: 'quote',
+                        status: 'generated',
+                        filePath: expect.any(String),
+                        referenceVoiceFile: 'Robert.wav'
+                    })
+                ])
+            });
 
             expect(mockFetch).toHaveBeenCalledTimes(2);
             expect(mockEmit).toHaveBeenCalledTimes(2);
@@ -209,7 +237,10 @@ describe('VoiceEvaluator', () => {
             };
 
             const result = await evaluator.evaluate(chunk);
-            expect(result).toEqual({ annotation: { voiceGenerated: true } });
+            expect(result.annotation).toEqual({
+                voiceGenerated: true,
+                voiceItems: []
+            });
             expect(mockFetch).not.toHaveBeenCalled();
         });
     });
@@ -251,7 +282,7 @@ describe('VoiceEvaluator', () => {
             });
         });
 
-        test('should generate correct base64 audio data URL', async () => {
+        test('should save audio file and emit file path', async () => {
             const evaluator = new VoiceEvaluator();
             const chunk: Chunk = {
                 type: ChunkType.LlmOutput,
@@ -270,6 +301,7 @@ describe('VoiceEvaluator', () => {
             await new Promise(resolve => setTimeout(resolve, 100));
 
             expect(mockEmit).toHaveBeenCalledWith('voice', {
+                audioFilePath: expect.stringContaining('generated/voices/'),
                 audioDataUrl: expect.stringContaining('data:audio/wav;base64,'),
                 text: 'test'
             });
@@ -350,7 +382,17 @@ describe('VoiceEvaluator', () => {
             };
 
             // Should not throw
-            await expect(evaluator.evaluate(chunk)).resolves.toEqual({ annotation: { voiceGenerated: true } });
+            const result = await evaluator.evaluate(chunk);
+            expect(result.annotation).toEqual({
+                voiceGenerated: true,
+                voiceItems: expect.arrayContaining([
+                    expect.objectContaining({
+                        type: 'text',
+                        status: 'failed',
+                        referenceVoiceFile: 'Robert.wav'
+                    })
+                ])
+            });
             await new Promise(resolve => setTimeout(resolve, 100));
 
             // Should not emit voice event on error
