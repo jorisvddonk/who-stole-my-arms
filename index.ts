@@ -409,9 +409,6 @@ const routeGroups = [
                 }
               }
 
-              // Generate messageId for the response
-              const messageId = Math.random().toString(36).substring(2, 11);
-
               // Save arena state
               await arenaManager.saveArenaState(sessionId, arena);
 
