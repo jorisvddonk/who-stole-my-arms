@@ -6,6 +6,7 @@ import { EvaluatorManager } from '../evaluators/EvaluatorManager';
 import { Evaluator } from './Evaluator';
 import { ErrorAgent } from '../agents/ErrorAgent';
 import { Logger, DEBUG_COLOR, GLOBAL_COLOR, AGENT_COLOR, TOOL_COLOR, YELLOW, BRIGHT_YELLOW, RESET } from '../logging/debug-logger';
+import { generateId } from '../util/id';
 
 /**
  * Central orchestration class that manages agents, tasks, and evaluators.
@@ -83,14 +84,23 @@ export class Arena {
      * Wires up event listeners for an agent's event emitter to forward events to the arena.
      * @param agent The agent whose events to wire up.
      */
-    public wireAgentEventEmitter(agent: LLMAgent) {
-        // wire up logging
-        agent.eventEmitter.on('chunk', (chunk: Chunk) => {
-            Logger.globalLog(`Chunk from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${chunk.type} - ${chunk.content}`);
-            // Prevent infinite loops: don't emit chunks from evaluator tasks
-            if (agent.currentTask?.taskType === TaskType.Evaluator) return;
-            this.eventEmitter.emit('chunk', {agentName: agent.constructor.name, chunk, agent});
-        });
+     public wireAgentEventEmitter(agent: LLMAgent) {
+         // wire up logging
+         agent.eventEmitter.on('chunk', (data: any) => {
+             let chunk: Chunk;
+             let agentName: string;
+             if (data.type && data.content !== undefined) { // it's a chunk
+                 chunk = data;
+                 agentName = agent.constructor.name;
+             } else {
+                 ({ agentName, chunk } = data);
+             }
+
+             Logger.globalLog(`Chunk from ${AGENT_COLOR}${agentName}${RESET}: ${chunk.type} - ${chunk.content}`);
+             // Prevent infinite loops: don't emit chunks from evaluator tasks
+             if (agent.currentTask?.taskType === TaskType.Evaluator) return;
+             this.eventEmitter.emit('chunk', {agentName, chunk, agent});
+         });
         agent.eventEmitter.on('token', (token: string) => {
             //Logger.globalLog(`Token from ${AGENT_COLOR}${agent.constructor.name}${RESET}: ${token}`);
             this.eventEmitter.emit('token', {agentName: agent.constructor.name, token});
@@ -147,9 +157,27 @@ export class Arena {
      * Sets up event listeners to trigger evaluator execution when chunks are emitted.
      */
     private wireEvaluators(): void {
-        this.eventEmitter.on('chunk', ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
+        this.eventEmitter.on('chunk', async ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
             Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
-            this.runEvaluators(chunk, agent);
+            await this.runEvaluators(chunk, agent);
+            this.eventEmitter.emit('evaluatorsFinished', { chunk, agentName, agent });
+        });
+    }
+
+    /**
+     * Waits for evaluators to finish processing a specific chunk.
+     * @param chunk The chunk to wait for evaluators to finish.
+     * @returns A promise that resolves when evaluators have finished for this chunk.
+     */
+    public waitForEvaluators(chunk: Chunk): Promise<void> {
+        return new Promise((resolve) => {
+            const listener = (details: { chunk: Chunk, agentName: string, agent?: any }) => {
+                if (details.chunk.id === chunk.id) {
+                    this.eventEmitter.off('evaluatorsFinished', listener);
+                    resolve();
+                }
+            };
+            this.eventEmitter.on('evaluatorsFinished', listener);
         });
     }
 
@@ -171,7 +199,7 @@ export class Arena {
      * @param agent The agent that emitted the chunk.
      */
     private async runEvaluators(chunk: Chunk, agent?: LLMAgent): Promise<void> {
-        Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content.substring(0, 20)}`);
+        Logger.globalLog(`runEvaluators called for chunk type ${chunk.type}, content: ${chunk.content ? chunk.content.substring(0, 20) : 'undefined'}`);
         let evaluatorConfig: (Evaluator | Evaluator[])[] = [...this.evaluators];
         let agentEvaluatorFqdns: string[] = [];
         if (agent && agent.evaluators && agent.evaluators.length > 0) {
@@ -325,11 +353,11 @@ export class Arena {
 
     /**
      * Generates a unique ID for tasks.
-     * @returns A random string ID.
-     */
-    static generateId(): string {
-        return Math.random().toString(36).substring(2, 11);
-    }
+      * @returns A random string ID.
+      */
+     static generateId(): string {
+         return generateId();
+     }
 
     /**
      * Parses tool calls from a response string.
@@ -468,7 +496,7 @@ export class Arena {
         const parent = this.taskStore[task.parent_task_id];
         Logger.debugLog(`Adding result to parent task ${parent.id} (${AGENT_COLOR}${parent.agent_name}${RESET}) scratchpad`);
         const agentResult = `<|agent_result|>${JSON.stringify(output)}<|agent_result_end|>`;
-        const agentChunk = { type: ChunkType.AgentOutput, content: agentResult, processed: true };
+        const agentChunk = { id: Arena.generateId(), type: ChunkType.AgentOutput, content: agentResult, processed: true };
         const parentAgent = this.agents[parent.agent_name];
         parentAgent.addChunk(parent, agentChunk);
         this.taskQueue.push(parent);
@@ -552,11 +580,12 @@ export class Arena {
                 Logger.debugLog(`Agent response: ${response}`);
 
                 // Add the response as a new chunk
-                const newChunk: Chunk = { type: ChunkType.LlmOutput, content: response, processed: false };
+                const newChunk: Chunk = { id: Arena.generateId(), type: ChunkType.LlmOutput, content: response, processed: false };
                 if (annotations) {
                     newChunk.annotations = annotations;
                 }
                 agent.addChunk(task, newChunk);
+                await this.waitForEvaluators(newChunk);
 
                     // Check the last chunk for parsing
                     const lastChunk = task.scratchpad[task.scratchpad.length - 1];
@@ -566,7 +595,7 @@ export class Arena {
                         try {
                             toolCalls = Arena.parseToolCalls(lastChunk.content);
                         } catch (e) {
-                            const errorChunk = { type: ChunkType.Error, content: `Parse error in toolCalls: ${e}`, processed: true };
+                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in toolCalls: ${e}`, processed: true };
                             agent.addChunk(task, errorChunk);
                             this.eventEmitter.emit('parseError', { type: 'toolCalls', error: e, content: lastChunk.content });
                             hasNewErrors = true;
@@ -574,7 +603,7 @@ export class Arena {
                         try {
                             agentCalls = Arena.parseAgentCalls(lastChunk.content);
                         } catch (e) {
-                            const errorChunk = { type: ChunkType.Error, content: `Parse error in agentCalls: ${e}`, processed: true };
+                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in agentCalls: ${e}`, processed: true };
                             agent.addChunk(task, errorChunk);
                             this.eventEmitter.emit('parseError', { type: 'agentCalls', error: e, content: lastChunk.content });
                             hasNewErrors = true;
@@ -614,7 +643,7 @@ export class Arena {
 
                                  Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
                                  const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
-                                 const toolChunk: Chunk = { type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
+                                 const toolChunk: Chunk = { id: Arena.generateId(), type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
                                  if (annotations) {
                                      toolChunk.annotations = annotations;
                                  }
@@ -623,8 +652,8 @@ export class Arena {
                                  Logger.debugLog(`Tool result: ${toolResultStr}`);
                              } catch (e) {
                                   const errorContent = `<|error|>Tool ${call.name} failed: ${(e as any).message || e}<|error_end|>`;
-                                 const errorChunk = { type: ChunkType.Error, content: errorContent, processed: true };
-                                 agent.addChunk(task, errorChunk);
+                                  const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
+                                  agent.addChunk(task, errorChunk);
                                  this.eventEmitter.emit('parseError', { type: 'toolExecution', error: e, content: call.name });
                                   toolResult = { error: (e as any).message || e };
                                  Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} failed: ${e}`);
@@ -632,7 +661,7 @@ export class Arena {
                              }
                          } else {
                             const errorContent = `<|error|>Unknown tool: ${call.name}<|error_end|>`;
-                            const errorChunk = { type: ChunkType.Error, content: errorContent, processed: true };
+                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
                             agent.addChunk(task, errorChunk);
                             this.eventEmitter.emit('parseError', { type: 'toolExecution', error: errorContent, content: call.name });
                             toolResult = "unknown tool";
@@ -651,7 +680,7 @@ export class Arena {
                                 agent_name: call.name,
                                 input: call.input,
                                 parent_task_id: task.id,
-                                scratchpad: [{ type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
+                                scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
                                 retryCount: 0,
                                 executionCount: 0
                             };
@@ -660,7 +689,7 @@ export class Arena {
                             Logger.debugLog(`Created child task ${childTask.id} (${AGENT_COLOR}${childTask.agent_name}${RESET})`);
                         } else {
                             const errorContent = `<|error|>Unknown agent: ${call.name}<|error_end|>`;
-                            const errorChunk = { type: ChunkType.Error, content: errorContent, processed: true };
+                            const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
                             agent.addChunk(task, errorChunk);
                             this.eventEmitter.emit('parseError', { type: 'agentExecution', error: errorContent, content: call.name });
                             hasNewErrors = true;
@@ -683,7 +712,7 @@ export class Arena {
                                 agent_name: 'ErrorAgent',
                                 input: errorDetails,
                                 parent_task_id: task.id,
-                                scratchpad: [{ type: ChunkType.Input, content: errorDetails, processed: true }],
+                                scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true }],
                                 retryCount: 0,
                                 executionCount: 0
                             };

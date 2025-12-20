@@ -4,6 +4,7 @@ import { Logger, AGENT_COLOR, TOOL_COLOR, RESET } from '../logging/debug-logger'
 import { Tool } from './Tool';
 import { Evaluator } from './Evaluator';
 import { ChunkType, TaskType, Chunk, Task } from '../../interfaces/AgentTypes';
+import { generateId } from '../util/id';
 
 // Re-export for backward compatibility
 export { Tool, ChunkType, TaskType };
@@ -216,7 +217,7 @@ export abstract class LLMAgent {
         } catch (e) {
             this.eventEmitter.emit('parseError', { type: 'agentResults', error: e, content: contents });
             if (addErrorChunk) {
-                const errorChunk = { type: ChunkType.Error, content: `Parse error in agentResults: ${e}`, processed: true };
+                const errorChunk = { id: Math.random().toString(36).substring(2, 11), type: ChunkType.Error, content: `Parse error in agentResults: ${e}`, processed: true };
                 this.addChunk(task, errorChunk);
                 return []; // or some default
             } else {
@@ -238,7 +239,7 @@ export abstract class LLMAgent {
         } catch (e) {
             this.eventEmitter.emit('parseError', { type: 'toolResults', error: e, content: contents });
             if (addErrorChunk) {
-                const errorChunk = { type: ChunkType.Error, content: `Parse error in toolResults: ${e}`, processed: true };
+                const errorChunk = { id: Math.random().toString(36).substring(2, 11), type: ChunkType.Error, content: `Parse error in toolResults: ${e}`, processed: true };
                 this.addChunk(task, errorChunk);
                 return []; // or some default
             } else {
@@ -253,19 +254,18 @@ export abstract class LLMAgent {
      * @param chunk The chunk to add.
      */
     public addChunk(task: Task, chunk: Chunk): void {
-        if (chunk.type === ChunkType.LlmOutput && !chunk.messageId) {
-            // Find the last input chunk with messageId in scratchpad
+        // If no messageId, find the last input chunk with messageId in scratchpad
+        if (!chunk.messageId) {
             for (let i = task.scratchpad.length - 1; i >= 0; i--) {
-                const c = task.scratchpad[i];
-                if (c.type === ChunkType.Input && c.messageId) {
-                    chunk.messageId = c.messageId;
+                if (task.scratchpad[i].type === ChunkType.Input && task.scratchpad[i].messageId) {
+                    chunk.messageId = task.scratchpad[i].messageId;
                     break;
                 }
             }
-            // If no input in scratchpad, use task.input.messageId
-            if (!chunk.messageId && task.input && task.input.messageId) {
-                chunk.messageId = task.input.messageId;
-            }
+        }
+        // If still no messageId, use task.input.messageId
+        if (!chunk.messageId && task.input && task.input.messageId) {
+            chunk.messageId = task.input.messageId;
         }
         task.scratchpad.push(chunk);
         this.eventEmitter.emit('chunk', chunk);
@@ -292,6 +292,7 @@ export abstract class LLMAgent {
         }
         Logger.globalLog(`${AGENT_COLOR}${this.constructor.name}${RESET} writing task data chunk: ${JSON.stringify(data)}`);
         const chunk: Chunk = {
+            id: generateId(),
             type: ChunkType.Data,
             content: JSON.stringify({ fqdn: this.fqdn, data }),
             processed: true
@@ -313,6 +314,7 @@ export abstract class LLMAgent {
         }
         Logger.globalLog(`${AGENT_COLOR}${this.constructor.name}${RESET} writing session data chunk: ${JSON.stringify(data)}`);
         const chunk: Chunk = {
+            id: generateId(),
             type: ChunkType.Data,
             content: JSON.stringify({ fqdn: this.fqdn, data }),
             processed: true

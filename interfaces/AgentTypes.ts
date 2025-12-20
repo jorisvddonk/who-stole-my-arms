@@ -31,6 +31,8 @@ export enum TaskType {
  * Chunks are the basic units of communication and data storage in the agent system.
  */
 export interface Chunk {
+    /** Unique identifier for this chunk */
+    id: string;
     /** The type of this chunk, determining how it's processed */
     type: ChunkType;
     /** The actual content of the chunk as a string */

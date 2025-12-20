@@ -380,17 +380,19 @@ const routeGroups = [
                 };
                 arena.taskStore[rootTask.id] = rootTask;
 
-                // Add input chunk (triggers evaluators synchronously)
-                const inputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
-                arena.addInputChunk(rootTask, inputChunk);
-                arena.currentContinuationTask = rootTask;
-                arena.taskQueue.push(rootTask);
-              } else {
-                // Append to existing scratchpad and re-queue
-                const newInputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
-                arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
-                arena.taskQueue.push(arena.currentContinuationTask);
-              }
+                      // Add input chunk (triggers evaluators synchronously)
+                      const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      arena.addInputChunk(rootTask, inputChunk);
+                      await arena.waitForEvaluators(inputChunk);
+                      arena.currentContinuationTask = rootTask;
+                      arena.taskQueue.push(rootTask);
+                    } else {
+                      // Append to existing scratchpad and re-queue
+                      const newInputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                      await arena.waitForEvaluators(newInputChunk);
+                      arena.taskQueue.push(arena.currentContinuationTask);
+                    }
 
               await arena.run_event_loop(false);
 
@@ -488,12 +490,12 @@ const routeGroups = [
                       arena.taskStore[rootTask.id] = rootTask;
 
                       // Add input chunk (triggers evaluators synchronously)
-                      const inputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
                       arena.addInputChunk(rootTask, inputChunk);
                       arena.currentContinuationTask = rootTask;
                       arena.taskQueue.push(rootTask);
                     } else {
-                      const newInputChunk = { type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
+                      const newInputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: userPrompt, processed: true, messageId: userMessageId };
                       arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
                       arena.taskQueue.push(arena.currentContinuationTask);
                     }
@@ -518,25 +520,31 @@ const routeGroups = [
                       const data = JSON.stringify({ error: details.error, type: details.type });
                       enqueueData(data);
                     };
-                    const onChunk = (details: any) => {
-                      const data = { chunk: details.chunk };
-                      enqueueData(JSON.stringify(data));
-                    };
+                     const onChunk = (details: any) => {
+                       const data = { chunk: { id: details.chunk.id, type: details.chunk.type, content: details.chunk.content, processed: details.chunk.processed } };
+                       enqueueData(JSON.stringify(data));
+                     };
+                     const onEvaluatorsFinished = (details: any) => {
+                       const data = JSON.stringify({ evaluatorsFinished: { chunkId: details.chunk.id, chunkType: details.chunk.type } });
+                       enqueueData(data);
+                     };
 
-                    arena.eventEmitter.on('token', onToken);
-                    arena.eventEmitter.on('toolCall', onToolCall);
-                    arena.eventEmitter.on('agentCall', onAgentCall);
-                    arena.eventEmitter.on('parseError', onParseError);
-                    arena.eventEmitter.on('chunk', onChunk);
+                     arena.eventEmitter.on('token', onToken);
+                     arena.eventEmitter.on('toolCall', onToolCall);
+                     arena.eventEmitter.on('agentCall', onAgentCall);
+                     arena.eventEmitter.on('parseError', onParseError);
+                     arena.eventEmitter.on('chunk', onChunk);
+                     arena.eventEmitter.on('evaluatorsFinished', onEvaluatorsFinished);
 
                     await arena.run_event_loop(false);
 
-                    // Clean up listeners
-                    arena.eventEmitter.off('token', onToken);
-                    arena.eventEmitter.off('toolCall', onToolCall);
-                    arena.eventEmitter.off('agentCall', onAgentCall);
-                    arena.eventEmitter.off('parseError', onParseError);
-                    arena.eventEmitter.off('chunk', onChunk);
+                     // Clean up listeners
+                     arena.eventEmitter.off('token', onToken);
+                     arena.eventEmitter.off('toolCall', onToolCall);
+                     arena.eventEmitter.off('agentCall', onAgentCall);
+                     arena.eventEmitter.off('parseError', onParseError);
+                     arena.eventEmitter.off('chunk', onChunk);
+                     arena.eventEmitter.off('evaluatorsFinished', onEvaluatorsFinished);
 
                     // Send finish
                     const finishData = JSON.stringify({ finishReason: 'stop' });
