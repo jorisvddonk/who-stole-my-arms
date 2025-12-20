@@ -45,12 +45,13 @@ export class ChatApp extends LitElement {
     .message-container {
       margin-bottom: 10px;
     }
-     .message-container:hover .delete-button,
-     .message-container:hover .continue-button,
-     .message-container:hover .edit-button,
-     .message-container:hover .regenerate-button {
-       opacity: 1;
-     }
+      .message-container:hover .delete-button,
+      .message-container:hover .continue-button,
+      .message-container:hover .edit-button,
+      .message-container:hover .regenerate-button,
+      .message-container:hover .voice-button {
+        opacity: 1;
+      }
     .delete-button {
       position: absolute;
       top: 5px;
@@ -114,9 +115,31 @@ export class ChatApp extends LitElement {
        align-items: center;
        justify-content: center;
      }
-     .regenerate-button:hover {
-       background: var(--hover-bg);
-     }
+      .regenerate-button:hover {
+        background: var(--hover-bg);
+      }
+      .voice-button {
+        position: absolute;
+        top: 5px;
+        right: 55px;
+        background: var(--border-color);
+        color: var(--text-color);
+        border: none;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s;
+        font-size: 10px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .voice-button:hover {
+        background: var(--hover-bg);
+      }
      .edit-button {
        position: absolute;
        top: 5px;
@@ -352,23 +375,32 @@ export class ChatApp extends LitElement {
             id: msg.id,
             role: msg.actor === 'user' ? 'user' : 'system',
             content: msg.content,
-            images: []
+            images: [],
+            voiceItems: []
           };
-          if (message.role === 'system') {
-            try {
-              const annRes = await fetch(`/sessions/${this.currentSession}/chat/messages/${msg.id}/annotations`);
-              if (annRes.ok) {
-                const annData = await annRes.json();
-                const imageAnnotation = annData.annotations.find(ann => ann['tool.image.result']);
-                if (imageAnnotation) {
-                  message.images = imageAnnotation['tool.image.result'];
-                  console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
-                }
-              }
-            } catch (error) {
-              console.warn('Failed to load annotations:', error);
-            }
-          }
+           if (message.role === 'system') {
+             try {
+                const annRes = await fetch(`/sessions/${this.currentSession}/chat/messages/${msg.id}/annotations`);
+               if (annRes.ok) {
+                 const annData = await annRes.json();
+                 console.log('ChatApp: Annotations for message', msg.id, annData.annotations);
+                 const imageAnnotation = annData.annotations.find(ann => ann['tool.image.result']);
+                 if (imageAnnotation) {
+                   message.images = imageAnnotation['tool.image.result'];
+                   console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
+                 }
+                 const voiceAnnotation = annData.annotations.find(ann => ann['evaluators.VoiceEvaluator']);
+                 if (voiceAnnotation) {
+                   message.voiceItems = voiceAnnotation['evaluators.VoiceEvaluator'].voiceItems;
+                   console.log('ChatApp: Found voice items for message', msg.id, message.voiceItems.length, 'voice items:', message.voiceItems);
+                 } else {
+                   console.log('ChatApp: No voice annotation found for message', msg.id);
+                 }
+               }
+             } catch (error) {
+               console.warn('Failed to load annotations:', error);
+             }
+           }
           messages.push(message);
         }
         this.messages = messages;
@@ -1200,21 +1232,87 @@ export class ChatApp extends LitElement {
     }
   }
 
-  playNextVoice() {
-    if (this.isPlayingVoice || this.voiceQueue.length === 0) return;
-    this.isPlayingVoice = true;
-    const audioUrl = this.voiceQueue.shift();
-    const audio = new Audio(audioUrl);
-    audio.onended = () => {
-      this.isPlayingVoice = false;
-      this.playNextVoice();
-    };
-    audio.play().catch(err => {
-      console.warn('Failed to play voice:', err);
-      this.isPlayingVoice = false;
-      this.playNextVoice();
-    });
-  }
+   playNextVoice() {
+     if (this.isPlayingVoice || this.voiceQueue.length === 0) return;
+     this.isPlayingVoice = true;
+     const audioUrl = this.voiceQueue.shift();
+     const audio = new Audio(audioUrl);
+     audio.onended = () => {
+       this.isPlayingVoice = false;
+       this.playNextVoice();
+     };
+     audio.play().catch(err => {
+       console.warn('Failed to play voice:', err);
+       this.isPlayingVoice = false;
+       this.playNextVoice();
+     });
+   }
+
+   async replayVoice(voiceItems) {
+     if (this.isPlayingVoice) return; // Don't interrupt current playback
+
+     if (!voiceItems || voiceItems.length === 0) {
+       console.log('No voice items available for replay');
+       return;
+     }
+
+     // Filter to only successfully generated voice items
+     const generatedVoices = voiceItems.filter(item => item.status === 'generated' && item.filePath);
+
+     if (generatedVoices.length === 0) {
+       console.warn('No successfully generated voice files to replay');
+       return;
+     }
+
+     // Add voice files to queue in order
+     for (const voiceItem of generatedVoices) {
+       try {
+         // Fetch the audio file - filePath is like "generated/voices/filename.wav"
+         const filename = voiceItem.filePath.split('/').pop();
+         const response = await fetch(`/voices/${filename}`);
+         if (!response.ok) {
+           console.warn('Failed to fetch voice file:', voiceItem.filePath);
+           continue;
+         }
+
+         const blob = await response.blob();
+         const audioUrl = URL.createObjectURL(blob);
+         this.voiceQueue.push(audioUrl);
+       } catch (error) {
+         console.warn('Failed to load voice file:', voiceItem.filePath, error);
+       }
+     }
+
+     // Start playing if not already playing
+     if (!this.isPlayingVoice && this.voiceQueue.length > 0) {
+       this.playNextVoice();
+     }
+   
+
+     // Add voice files to queue in order
+     for (const voiceItem of generatedVoices) {
+       try {
+         // Fetch the audio file - filePath is like "generated/voices/filename.wav"
+         const filename = voiceItem.filePath.split('/').pop();
+         const response = await fetch(`/voices/${filename}`);
+         if (!response.ok) {
+           console.warn('Failed to fetch voice file:', voiceItem.filePath);
+           continue;
+         }
+
+         const blob = await response.blob();
+         const audioUrl = URL.createObjectURL(blob);
+         this.voiceQueue.push(audioUrl);
+       } catch (error) {
+         console.warn('Failed to load voice file:', voiceItem.filePath, error);
+       }
+     }
+
+     // Start playing if not already playing
+     if (!this.isPlayingVoice && this.voiceQueue.length > 0) {
+       this.playNextVoice();
+     }
+   }
 
   render() {
     return html`
@@ -1244,7 +1342,7 @@ export class ChatApp extends LitElement {
 
             return html`
               <div class="message-container">
-                 <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}</div>
+                  <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}${msg.voiceItems && msg.voiceItems.length > 0 ? html`<button class="voice-button" @click=${() => this.replayVoice(msg.voiceItems)}>📣</button>` : ''}</div>
                  ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)}>`)}</div>` : ''}
                 ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
               </div>

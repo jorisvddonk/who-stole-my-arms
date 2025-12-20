@@ -25,6 +25,7 @@ import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js
 import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
 import { InteractionHistoryTool } from "./lib/tools/interaction-history-tool.js";
 import { ImageDisplayTool } from "./lib/tools/image-display-tool.js";
+import { VoiceDisplayTool } from "./lib/tools/voice-display-tool.js";
 
 import { OsMetricsDockWidget } from "./lib/widgets/os-metrics-dock-widget.js";
 import { CharacterBioDockWidget } from "./lib/widgets/character-bio-dock-widget.js";
@@ -60,6 +61,7 @@ const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_
 } : undefined);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const imageDisplayTool = new ImageDisplayTool(toolboxCollector);
+const voiceDisplayTool = new VoiceDisplayTool(toolboxCollector);
 const formatterSettingsTool = new FormatterSettingsTool(toolboxCollector);
 const autoScrollSettingsTool = new AutoScrollSettingsTool();
 const osMetricsDockWidget = new OsMetricsDockWidget();
@@ -132,6 +134,7 @@ const routeGroups = [
   dockManager,
   imageDisplayTool,
   promptManager,
+  voiceDisplayTool,
   chatHistory,
   {
     routes: {
