@@ -4,7 +4,7 @@ import { Task } from '../../interfaces/AgentTypes';
 export class RPGGameMasterAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
         const currentInput = this.getInputText(task);
 

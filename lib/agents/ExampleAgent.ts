@@ -10,7 +10,7 @@ export class ExampleAgent extends LLMAgent {
         this.tools['example'] = new ExampleTool();
     }
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
 
         let prompt = `You are the ExampleAgent, demonstrating tool usage and annotations.
@@ -34,7 +34,7 @@ Provide a response, and consider using the tool if appropriate.`;
 
     async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
         // Build prompt and generate response, then count tokens
-        const prompt = this.buildPrompt(task);            
+        const prompt = await this.buildPrompt(task);            
         let tokenCount = 0;
         let callback = () => {
             tokenCount += 1;

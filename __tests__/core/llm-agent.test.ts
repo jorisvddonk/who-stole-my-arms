@@ -13,7 +13,7 @@ class TestAgent extends LLMAgent {
         super(streamingLLM, arena);
     }
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         return `Test prompt for: ${task.input}`;
     }
 }

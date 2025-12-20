@@ -99,7 +99,7 @@ export abstract class LLMAgent {
     async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
         this.currentTask = task;
         try {
-            const prompt = this.buildPrompt(task);
+            const prompt = await this.buildPrompt(task);
             let response = await this.generateStreamingResponse(prompt);
             return this.postProcessResponse(response);
         } catch (error) {
@@ -485,5 +485,5 @@ export abstract class LLMAgent {
      * @param task The task to build a prompt for.
      * @returns The constructed prompt string.
      */
-    abstract buildPrompt(task: Task): string;
+    abstract buildPrompt(task: Task): Promise<string>;
 }

@@ -2,7 +2,7 @@ import { LLMAgent } from '../core/LLMAgent';
 import { Task } from '../../interfaces/AgentTypes';
 
 export class MathAgent extends LLMAgent {
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
 
         const prompt = `You are the MathAgent, specialized in mathematical calculations and comparisons.

@@ -7,7 +7,7 @@ import { ChatMessage } from '../chat-history';
 export class ConversationalAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const formattedHistory = this.formatHistory(task);
         const currentInput = this.getInputText(task);
 

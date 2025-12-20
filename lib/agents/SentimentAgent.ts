@@ -4,7 +4,7 @@ import { ChunkType, Task } from '../../interfaces/AgentTypes';
 export class SentimentAgent extends LLMAgent {
     // supportsContinuation = false (default)
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const text = this.getInputText(task);
 
         const prompt = `You are a sentiment analysis expert. Analyze the sentiment of the following text.

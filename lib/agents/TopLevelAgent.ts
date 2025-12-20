@@ -11,7 +11,7 @@ export class TopLevelAgent extends LLMAgent {
      * @param task The task containing user input and conversation history
      * @returns The constructed prompt string
      */
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
         const agentContents = this.getFilteredContents(task, ChunkType.AgentOutput);
         const agentResults = this.parseAgentResultsSafe(task, agentContents);

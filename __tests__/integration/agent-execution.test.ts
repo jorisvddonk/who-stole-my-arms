@@ -218,7 +218,7 @@ describe('Full Agent Execution Integration', () => {
         test('should use custom agentic evaluator for another agent', async () => {
             // Create a custom WordCountAgent for evaluation
             class WordCountAgent extends LLMAgent {
-                buildPrompt(task: any): string {
+                async buildPrompt(task: any): Promise<string> {
                     const text = this.getInputText(task);
                     return `Count the words in: "${text}". Return JSON: {"wordCount": number}`;
                 }

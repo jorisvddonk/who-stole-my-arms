@@ -11,7 +11,7 @@ export class ErrorAgent extends LLMAgent {
      * @param task The task containing error information
      * @returns The constructed prompt string
      */
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
 
         const prompt = `You are the ErrorAgent, specialized in summarizing errors in a neutral, human-readable way.

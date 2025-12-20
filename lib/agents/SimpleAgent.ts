@@ -29,7 +29,7 @@ export class SimpleAgent extends LLMAgent {
                 temperature: 1.0
             }
         });
-        this.evaluators = [[markdownEvaluator, voiceEvaluator]];
+        this.evaluators = [markdownEvaluator, voiceEvaluator];
     }
 
     /**
@@ -37,7 +37,7 @@ export class SimpleAgent extends LLMAgent {
      * @param task The task containing input and scratchpad data
      * @returns The constructed prompt string
      */
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const formattedHistory = this.formatHistory(task);
         const currentInput = this.getInputText(task);
 

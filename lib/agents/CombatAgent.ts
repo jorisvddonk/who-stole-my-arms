@@ -8,7 +8,7 @@ export class CombatAgent extends LLMAgent {
         this.registerTool(new RollDiceTool());
     }
 
-    buildPrompt(task: Task): string {
+    async buildPrompt(task: Task): Promise<string> {
         const scratchpadContent = this.getScratchpadContent(task);
         const toolContents = this.getFilteredContents(task, ChunkType.ToolOutput);
         const agentContents = this.getFilteredContents(task, ChunkType.AgentOutput);

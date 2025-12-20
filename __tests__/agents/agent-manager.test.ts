@@ -12,7 +12,7 @@ class MockTestAgent extends LLMAgent {
         super(streamingLLM, arena);
     }
 
-    buildPrompt(task: any): string {
+    async buildPrompt(task: any): Promise<string> {
         return 'Mock prompt';
     }
 }
