@@ -74,7 +74,7 @@ describe('DBStorage', () => {
         test('should generate session table name', () => {
             const tableName = storage.getTableName();
 
-            expect(tableName).toBe('session_test-session_test_fqdn');
+            expect(tableName).toBe('session_test_session_test_fqdn');
         });
 
         test('should generate global table name when no session', () => {

@@ -24,9 +24,9 @@ export class DBStorage implements Storage {
 
   getTableName(): string {
     if (this.sessionId) {
-      return `session_${this.sessionId}_${this.fqdn.replace(/\./g, '_')}`;
+      return `session_${this.sessionId.replace(/[\.\-]/g, '_')}_${this.fqdn.replace(/[\.\-]/g, '_')}`;
     } else {
-      return `global_${this.fqdn.replace(/\./g, '_')}`;
+      return `global_${this.fqdn.replace(/[\.\-]/g, '_')}`;
     }
   }
 
