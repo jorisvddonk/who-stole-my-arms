@@ -63,6 +63,14 @@ export class EvaluatorManager {
     }
 
     /**
+     * Registers a new evaluator.
+     * @param evaluator The evaluator to register.
+     */
+    registerEvaluator(evaluator: Evaluator): void {
+        this.evaluators.push(evaluator);
+    }
+
+    /**
      * Gets a specific evaluator by fqdn.
      * @param fqdn The fqdn of the evaluator to retrieve.
      * @returns The evaluator instance, or undefined if not found.

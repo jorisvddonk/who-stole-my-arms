@@ -37,15 +37,15 @@ import { ChatHistory } from "./lib/chat-history.js";
 import { DockManager } from "./lib/dock-manager.js";
 import { createMethodRouter } from "./lib/util/route-utils.js";
 import { FormatterRegistry } from "./lib/formatters.js";
-import { MarkdownParser } from "./lib/markdown-parser.js";
-import { DebugLogger } from "./lib/debug-logger.js";
-import { ChatterboxVoiceEngine } from "./lib/chatterbox-voice-engine.js";
-import { voiceEmitter } from "./lib/voice-emitter.js";
+import { MarkdownEvaluator } from "./lib/evaluators/MarkdownEvaluator.js";
+import { VoiceEvaluator } from "./lib/evaluators/VoiceEvaluator.js";
 import { ArenaManager } from "./lib/arena-manager.js";
 import { AgentManager } from "./lib/agents/AgentManager.js";
 import { EvaluatorManager } from "./lib/evaluators/EvaluatorManager.js";
 import { Arena } from "./lib/core/Arena.js";
 import { ChunkType } from "./interfaces/AgentTypes.js";
+
+import { voiceEmitter } from "./lib/voice-emitter.js";
 
 // Initialize database manager
 const dbManager = new DatabaseManager();
@@ -112,14 +112,11 @@ promptManager.registerProvider('system', systemPromptProvider);
 promptManager.registerProvider('character-bio', characterBioDockWidget);
 promptManager.registerProvider('chat', chatHistory);
 
-// Initialize MarkdownParser with debug logging
-const markdownParser = new MarkdownParser();
-const debugLogger = new DebugLogger();
-markdownParser.registerHandler(debugLogger);
-
-// Initialize Chatterbox Voice Engine
-const voiceEngine = new ChatterboxVoiceEngine();
-markdownParser.registerHandler(voiceEngine);
+// Initialize Evaluators
+const markdownEvaluator = new MarkdownEvaluator();
+const voiceEvaluator = new VoiceEvaluator();
+evaluatorManager.registerEvaluator(markdownEvaluator);
+evaluatorManager.registerEvaluator(voiceEvaluator);
 
 // Define route groups
 const routeGroups = [
@@ -424,13 +421,11 @@ const routeGroups = [
               // Save arena state
               await arenaManager.saveArenaState(sessionId, arena);
 
-              logGenerate(userPrompt, text.length);
-              // Parse the generated text with MarkdownParser
-              markdownParser.parse(text);
-              return new Response(JSON.stringify({ text, messageId }), { headers: { 'Content-Type': 'application/json' } });
+               logGenerate(userPrompt, text.length);
+                return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
             } catch (error) {
-              logError((error as Error).message);
-              return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+              logError(error.message);
+              return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
             }
           }
         }),
@@ -553,7 +548,6 @@ const routeGroups = [
                     const idData = JSON.stringify({ messageId });
                     enqueueData(idData);
                     logGenerate(userPrompt, fullResponse.length);
-                    markdownParser.parse(fullResponse);
                   } catch (error) {
                     logError((error as Error).message);
                     if (fullResponse) {
@@ -625,8 +619,6 @@ const routeGroups = [
                  await chatHistory.appendToMessage(arenaManager, sessionId, messageId, text.trimEnd());
 
                logGenerate(`Continue on message ${messageId}`, text.length);
-               // Parse the appended text with MarkdownParser
-               markdownParser.parse(text);
                return new Response(JSON.stringify({ text }), { headers: { 'Content-Type': 'application/json' } });
             } catch (error) {
               logError(error.message);
@@ -697,9 +689,7 @@ const routeGroups = [
                           controller.enqueue(`data: ${data}\n\n`);
                            // Append to existing message (trim trailing whitespace)
                             await chatHistory.appendToMessage(arenaManager, sessionId, messageId, additionalResponse.trimEnd(), chunk.finishReason);
-                          logGenerate(`Continue on message ${messageId}`, totalLength);
-                          // Parse the appended text with MarkdownParser
-                          markdownParser.parse(additionalResponse);
+                           logGenerate(`Continue on message ${messageId}`, totalLength);
                           break;
                        }
                      }

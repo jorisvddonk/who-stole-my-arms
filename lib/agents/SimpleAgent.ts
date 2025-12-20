@@ -2,6 +2,8 @@ import { LLMAgent } from '../core/LLMAgent';
 import { Task } from '../../interfaces/AgentTypes';
 import { SimpleEvaluator } from '../evaluators/SimpleEvaluator';
 import { ChunkType } from '../../interfaces/AgentTypes';
+import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
+import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
 
 /**
  * Simple conversational agent that provides basic assistance.
@@ -12,15 +14,20 @@ export class SimpleAgent extends LLMAgent {
 
     constructor(streamingLLM: any, arena: any) {
         super(streamingLLM, arena);
-        // Example: use registered evaluators and an inline one
-        this.evaluators = [
-            'evaluators.LengthEvaluator',
-            new SimpleEvaluator(
-                (chunk) => ({ annotation: { simpleAgentCustom: chunk.content.length > 10 } }),
-                [ChunkType.Input, ChunkType.LlmOutput],
-                'agents.SimpleAgent.CustomEvaluator'
-            )
-        ];
+        // Set up evaluators for markdown parsing and voice generation
+        const markdownEvaluator = new MarkdownEvaluator();
+        const voiceEvaluator = new VoiceEvaluator({
+            voices: {
+                text: 'Robert.wav',
+                bold: 'Eli.wav',
+                emphasis: 'Adrian.wav',
+                quote: 'Austin.wav'
+            },
+            generation: {
+                temperature: 1.0
+            }
+        });
+        this.evaluators = [[markdownEvaluator, voiceEvaluator]];
     }
 
     /**
