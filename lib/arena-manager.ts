@@ -25,6 +25,7 @@ export class ArenaManager {
   }
 
   async getArena(sessionId: string, streamingLLM: any): Promise<Arena> {
+    Logger.debugLog(`Getting arena for session "${sessionId}"`);
     if (this.arenas.has(sessionId)) {
       const existing = this.arenas.get(sessionId)!;
       if (!existing.streamingLLM && streamingLLM) {

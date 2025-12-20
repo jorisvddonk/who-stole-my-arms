@@ -19,7 +19,7 @@ await agentManager.init(koboldAPI);
 const evaluatorManager = EvaluatorManager.getInstance();
 await evaluatorManager.init(koboldAPI);
 
-const arena = new Arena(koboldAPI, agentManager, evaluatorManager);
+const arena = new Arena(koboldAPI, agentManager, evaluatorManager, "cli");
 
 arena.eventEmitter.on('parseError', (details: any) => {
     if (details.agentName) {

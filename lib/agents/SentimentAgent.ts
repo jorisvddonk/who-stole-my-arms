@@ -19,7 +19,11 @@ Return your analysis in the following JSON format:
 
 Only return the JSON, no other text.`;
 
-        return `{{[INPUT]}}${prompt}{{[OUTPUT]}}`;
+        const formatter = await this.getFormatter(task);
+        if (formatter?.userPrompt) {
+            return formatter.userPrompt(prompt);
+        }
+        return prompt;
     }
 
     postProcessResponse(response: string): string | { content: string, annotation?: any, annotations?: Record<string, any> } {

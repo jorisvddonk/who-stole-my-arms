@@ -47,7 +47,7 @@ export class Arena {
      * @param evaluatorManager Manager containing registered evaluators.
      * @param sessionId Optional session identifier for session-specific context.
      */
-    constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager, sessionId?: string) {
+    constructor(streamingLLM: any, agentManager: AgentManager, evaluatorManager: EvaluatorManager, sessionId: string) {
         this.streamingLLM = streamingLLM;
         this.eventEmitter = new EventEmitter();
         this.agents = agentManager.getAgents();

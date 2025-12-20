@@ -19,7 +19,7 @@ describe('Arena', () => {
         streamingLLM = new MockStreamingLLM();
         agentManager = new MockAgentManager();
         evaluatorManager = new MockEvaluatorManager();
-        arena = new Arena(streamingLLM, agentManager, evaluatorManager);
+        arena = new Arena(streamingLLM, agentManager, evaluatorManager, "arena.test.ts");
     });
 
     describe('constructor', () => {
@@ -99,7 +99,7 @@ describe('Arena', () => {
         let testAgent: any;
 
         beforeEach(() => {
-            testArena = new Arena(streamingLLM, agentManager, evaluatorManager);
+            testArena = new Arena(streamingLLM, agentManager, evaluatorManager, "arena.test.ts");
             testAgent = agentManager.getAgents()['MockAgent'];
         });
 
@@ -154,7 +154,7 @@ describe('Arena', () => {
         let testEvaluator: any;
 
         beforeEach(() => {
-            testArena = new Arena(streamingLLM, agentManager, evaluatorManager);
+            testArena = new Arena(streamingLLM, agentManager, evaluatorManager, "arena.test.ts");
             testEvaluator = evaluatorManager.getEvaluators()[0] as any;
         });
 

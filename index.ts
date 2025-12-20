@@ -472,7 +472,8 @@ const routeGroups = [
                         parent_task_id: null,
                         scratchpad: [],
                         retryCount: 0,
-                        executionCount: 0
+                        executionCount: 0,
+                        sessionId
                       };
                       arena.taskStore[rootTask.id] = rootTask;
 

@@ -51,7 +51,7 @@ describe('Full Agent Execution Integration', () => {
         );
         (evaluatorManager as any).evaluators.push(agentEvaluator);
 
-        arena = new Arena(streamingLLM, agentManager, evaluatorManager);
+        arena = new Arena(streamingLLM, agentManager, evaluatorManager, "agent-execution.test.ts");
     });
 
     describe('complete agent workflow', () => {
