@@ -1256,64 +1256,38 @@ export class ChatApp extends LitElement {
        return;
      }
 
-     // Filter to only successfully generated voice items
-     const generatedVoices = voiceItems.filter(item => item.status === 'generated' && item.filePath);
+      // Filter to only successfully generated voice items
+      const generatedVoices = voiceItems.filter(item => item.status === 'generated' && item.filePath);
 
-     if (generatedVoices.length === 0) {
-       console.warn('No successfully generated voice files to replay');
-       return;
-     }
+      if (generatedVoices.length === 0) {
+        console.warn('No successfully generated voice files to replay');
+        return;
+      }
 
-     // Add voice files to queue in order
-     for (const voiceItem of generatedVoices) {
-       try {
-         // Fetch the audio file - filePath is like "generated/voices/filename.wav"
-         const filename = voiceItem.filePath.split('/').pop();
-         const response = await fetch(`/voices/${filename}`);
-         if (!response.ok) {
-           console.warn('Failed to fetch voice file:', voiceItem.filePath);
-           continue;
-         }
+      // Add voice files to queue in order
+      for (const voiceItem of generatedVoices) {
+        try {
+          // Fetch the audio file - filePath is like "generated/voices/filename.wav"
+          const filename = voiceItem.filePath.split('/').pop();
+          const response = await fetch(`/voices/${filename}`);
+          if (!response.ok) {
+            console.warn('Failed to fetch voice file:', voiceItem.filePath);
+            continue;
+          }
 
-         const blob = await response.blob();
-         const audioUrl = URL.createObjectURL(blob);
-         this.voiceQueue.push(audioUrl);
-       } catch (error) {
-         console.warn('Failed to load voice file:', voiceItem.filePath, error);
-       }
-     }
+          const blob = await response.blob();
+          const audioUrl = URL.createObjectURL(blob);
+          this.voiceQueue.push(audioUrl);
+        } catch (error) {
+          console.warn('Failed to load voice file:', voiceItem.filePath, error);
+        }
+      }
 
-     // Start playing if not already playing
-     if (!this.isPlayingVoice && this.voiceQueue.length > 0) {
-       this.playNextVoice();
-     }
-   
-
-     // Add voice files to queue in order
-     for (const voiceItem of generatedVoices) {
-       try {
-         // Fetch the audio file - filePath is like "generated/voices/filename.wav"
-         const filename = voiceItem.filePath.split('/').pop();
-         const response = await fetch(`/voices/${filename}`);
-         if (!response.ok) {
-           console.warn('Failed to fetch voice file:', voiceItem.filePath);
-           continue;
-         }
-
-         const blob = await response.blob();
-         const audioUrl = URL.createObjectURL(blob);
-         this.voiceQueue.push(audioUrl);
-       } catch (error) {
-         console.warn('Failed to load voice file:', voiceItem.filePath, error);
-       }
-     }
-
-     // Start playing if not already playing
-     if (!this.isPlayingVoice && this.voiceQueue.length > 0) {
-       this.playNextVoice();
-     }
-   }
-
+      // Start playing if not already playing
+      if (!this.isPlayingVoice && this.voiceQueue.length > 0) {
+        this.playNextVoice();
+      }
+    }
   render() {
     return html`
       <top-bar></top-bar>
