@@ -1,6 +1,6 @@
 import { ChatMessage } from './chat-history.js';
 
-interface ChatMessageFormatter {
+export interface ChatMessageFormatter {
   historyMessage: (chatMessage: ChatMessage) => string;
   postLastHistoryMessage?: (chatMessage: ChatMessage) => string;
   preFirstMessage?: (chatMessage: ChatMessage) => string;

@@ -8,11 +8,10 @@ export class ConversationalAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
     async buildPrompt(task: Task): Promise<string> {
-        const formattedHistory = this.formatHistory(task);
+        const formattedHistory = await this.formatHistory(task);
         const currentInput = this.getInputText(task);
 
-        const registry = FormatterRegistry.getInstance();
-        const formatter = registry.get('chatHistoryMessageFormatter_Alpaca');
+        const formatter = await this.getFormatter(task);
         let formattedInput = currentInput;
         if (formatter?.userPrompt) {
             formattedInput = formatter.userPrompt(currentInput);

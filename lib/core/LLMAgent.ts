@@ -5,8 +5,10 @@ import { Tool } from './Tool';
 import { Evaluator } from './Evaluator';
 import { ChunkType, TaskType, Chunk, Task } from '../../interfaces/AgentTypes';
 import { generateId } from '../util/id';
-import { FormatterRegistry } from '../formatters';
+import { ChatMessageFormatter, FormatterRegistry } from '../formatters';
 import { ChatMessage } from '../chat-history';
+import { FormatterSettingsTool } from '../tools/formatter-settings-tool';
+import { DatabaseManager } from '../database-manager';
 
 // Re-export for backward compatibility
 export { Tool, ChunkType, TaskType };
@@ -207,13 +209,51 @@ export abstract class LLMAgent {
     }
 
     /**
+     * Gets the formatter for the current session
+     * @param task The task containing scratchpad data
+     */
+    protected async getFormatter(task: Task): Promise<ChatMessageFormatter> {
+        if (task.sessionId) {
+            const formatterName = await FormatterSettingsTool.getSelectedFormatter(new DatabaseManager(), task.sessionId);
+            return this.getFormatterByName(formatterName);
+        } else {
+            throw new Error("Task does not have a sessionid - can not get formatter");
+        }
+    }
+
+    /**
+     * Gets a formatter by name
+     * @param formatterName The name of the formatter
+     */
+    protected getFormatterByName(formatterName: string): ChatMessageFormatter {
+        const registry = FormatterRegistry.getInstance();
+        const formatter = registry.get(formatterName);
+        if (!formatter) {
+            throw new Error("Unknown formatter: " + formatterName);
+        }
+        return formatter;
+    }
+
+    /**
+     * Formats the conversation history using the default formatter for the session
+     * @param task The task containing scratchpad data
+     */
+    protected async formatHistory(task: Task): Promise<string> {
+        if (task.sessionId) {
+            const formatterName = await FormatterSettingsTool.getSelectedFormatter(new DatabaseManager(), task.sessionId);
+            return this.formatHistoryWithFormatter(task, formatterName);
+        } else {
+            throw new Error("Task does not have a sessionid - can not format history");
+        }
+    }
+
+    /**
      * Formats the conversation history using a formatter.
      * @param task The task containing scratchpad data
      * @returns The formatted history string
      */
-    protected formatHistory(task: Task, formatterName: string = 'chatHistoryMessageFormatter_Alpaca'): string {
-        const registry = FormatterRegistry.getInstance();
-        const formatter = registry.get(formatterName);
+    protected formatHistoryWithFormatter(task: Task, formatterName: string = 'chatHistoryMessageFormatter_Alpaca'): string {
+        const formatter = this.getFormatterByName(formatterName);
         if (!formatter) {
             return this.getScratchpadContent(task);
         }

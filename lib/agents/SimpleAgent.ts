@@ -38,7 +38,7 @@ export class SimpleAgent extends LLMAgent {
      * @returns The constructed prompt string
      */
     async buildPrompt(task: Task): Promise<string> {
-        const formattedHistory = this.formatHistory(task);
+        const formattedHistory = await this.formatHistory(task);
         const currentInput = this.getInputText(task);
 
         const registry = FormatterRegistry.getInstance();
