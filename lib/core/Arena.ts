@@ -166,12 +166,14 @@ export class Arena {
      * Sets up event listeners to trigger evaluator execution when chunks are emitted.
      */
     private wireEvaluators(): void {
-        this.eventEmitter.on('chunk', async ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
-            Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
+        this.eventEmitter.on('chunk', ({ chunk, agentName, agent }: { agentName: string, chunk: Chunk, agent?: any }) => {
             this.awaitingEvaluatorChunks.add(chunk.id);
-            await this.runEvaluators(chunk, agent);
-            this.awaitingEvaluatorChunks.delete(chunk.id);
-            this.eventEmitter.emit('evaluatorsFinished', { chunk, agentName, agent });
+            (async () => {
+                Logger.globalLog(`Event listener called for chunk type ${chunk.type}, agentName: ${agentName}\n`);
+                await this.runEvaluators(chunk, agent);
+                this.awaitingEvaluatorChunks.delete(chunk.id);
+                this.eventEmitter.emit('evaluatorsFinished', { chunk, agentName, agent });
+            })();
         });
     }
 
