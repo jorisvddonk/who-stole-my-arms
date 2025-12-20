@@ -5,6 +5,7 @@ import { voiceEmitter } from '../voice-emitter';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { Logger } from '../logging/debug-logger';
 
 interface ParsedMarkdownItem {
   type: 'text' | 'quote' | 'bold' | 'emphasis' | 'code' | 'tool_call' | 'tool_result' | 'reasoning';
@@ -100,7 +101,9 @@ export class VoiceEvaluator extends Evaluator {
     }
 
     // Wait for all queued voices to be processed AND all HTTP requests to complete
+    Logger.debugLog(`Waiting for voices to complete for chunk ${chunk.id}`);
     await this.waitForVoiceProcessing();
+    Logger.debugLog(`Voices complete for chunk ${chunk.id}!`);
 
     return {
       annotation: {
