@@ -280,38 +280,138 @@ export class ChatApp extends LitElement {
 
   `;
 
-  static properties = {
-     messages: { type: Array },
-     loading: { type: Boolean },
-     dockHeight: { type: Number },
-     supportsStreaming: { type: Boolean },
-     voiceEventSource: { type: Object },
-     voiceQueue: { type: Array },
-     isPlayingVoice: { type: Boolean },
-     editingMessageId: { type: String },
-     editContent: { type: String }
-   };
+   static properties = {
+      messages: { type: Array },
+      loading: { type: Boolean },
+      dockHeight: { type: Number },
+      supportsStreaming: { type: Boolean },
+      voiceEventSource: { type: Object },
+      voiceQueue: { type: Array },
+      isPlayingVoice: { type: Boolean },
+      editingMessageId: { type: String },
+      editContent: { type: String },
+      tooltipVisible: { type: Boolean },
+      tooltipContent: { type: String },
+      tooltipX: { type: Number },
+      tooltipY: { type: Number }
+    };
 
-   constructor() {
-     super();
-     this.messages = [];
-     this.loading = false;
-     this.dockHeight = 0;
-     this.isResizing = false;
-     this.startY = 0;
-     this.supportsStreaming = false;
-     this.currentSession = sessionManager.getCurrentSession();
-     this.sessionChangeHandler = this.handleSessionChange.bind(this);
-     this.currentToolCall = null;
-      this.voiceEventSource = null;
-      this.voiceQueue = [];
-      this.isPlayingVoice = false;
-      this.editingMessageId = null;
-      this.editContent = '';
-      this.checkLLMSettings();
-   }
+    constructor() {
+      super();
+      this.messages = [];
+      this.loading = false;
+      this.dockHeight = 0;
+      this.isResizing = false;
+      this.startY = 0;
+      this.supportsStreaming = false;
+      this.currentSession = sessionManager.getCurrentSession();
+      this.sessionChangeHandler = this.handleSessionChange.bind(this);
+      this.currentToolCall = null;
+       this.voiceEventSource = null;
+       this.voiceQueue = [];
+       this.isPlayingVoice = false;
+       this.editingMessageId = null;
+       this.editContent = '';
+       this.tooltipVisible = false;
+       this.tooltipContent = '';
+       this.tooltipX = 0;
+       this.tooltipY = 0;
+       this.checkLLMSettings();
+     }
 
-   openImagePopup(img) {
+    parsePngMetadata(buffer) {
+      const metadata = {};
+      const view = new DataView(buffer);
+      if (view.getUint32(0) !== 0x89504e47 || view.getUint32(4) !== 0x0d0a1a0a) return metadata;
+      let offset = 8;
+      while (offset < buffer.byteLength) {
+        const length = view.getUint32(offset, false);
+        const type = String.fromCharCode(view.getUint8(offset+4), view.getUint8(offset+5), view.getUint8(offset+6), view.getUint8(offset+7));
+        if (type === 'tEXt') {
+          const data = new Uint8Array(buffer, offset+8, length);
+          const nullIndex = data.indexOf(0);
+          if (nullIndex !== -1) {
+            const keyword = String.fromCharCode(...data.slice(0, nullIndex));
+            const value = String.fromCharCode(...data.slice(nullIndex+1));
+            metadata[keyword] = value;
+          }
+        }
+        offset += 8 + length + 4;
+      }
+      console.log('PNG metadata:', metadata);
+      return metadata;
+    }
+
+    async getPrompts(path) {
+      try {
+        const res = await fetch(`/images/${path}`);
+        if (!res.ok) return { positive: '', negative: '' };
+        const buffer = await res.arrayBuffer();
+        const metadata = this.parsePngMetadata(buffer);
+        let positive = '';
+        let negative = '';
+        if (metadata.prompt) {
+          try {
+            const workflow = JSON.parse(metadata.prompt);
+            for (const nodeId in workflow) {
+              const node = workflow[nodeId];
+              if (node.class_type === 'CLIPTextEncode' && node.inputs.text !== undefined) {
+                // Check connections to determine positive or negative
+                let isPositive = false;
+                let isNegative = false;
+                for (const otherNodeId in workflow) {
+                  const otherNode = workflow[otherNodeId];
+                  if (otherNode.inputs) {
+                    for (const inputKey in otherNode.inputs) {
+                      const input = otherNode.inputs[inputKey];
+                      if (Array.isArray(input) && input[0] === nodeId) {
+                        if (inputKey === 'positive') isPositive = true;
+                        if (inputKey === 'negative') isNegative = true;
+                      }
+                    }
+                  }
+                }
+                if (isPositive) positive = node.inputs.text;
+                if (isNegative) negative = node.inputs.text;
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to parse workflow:', e);
+          }
+        }
+        return { positive, negative };
+      } catch (e) {
+        console.warn('Failed to get prompts:', e);
+        return { positive: '', negative: '' };
+      }
+    }
+
+    showTooltip(e, img, traits, clothing, imgElement) {
+      const rect = imgElement.getBoundingClientRect();
+      this.tooltipX = rect.right + 10;
+      this.tooltipY = rect.top;
+      const activeTraits = Object.keys(traits || {}).filter(k => traits[k]);
+      const activeClothing = Object.keys(clothing || {}).filter(k => clothing[k]);
+      if (!img.prompts) {
+        this.getPrompts(img.path).then(prompts => {
+          img.prompts = prompts;
+          this.tooltipContent = `Positive: ${prompts.positive}\nNegative: ${prompts.negative}\nTraits: ${activeTraits.join(', ')}\nClothing: ${activeClothing.join(', ')}`;
+          this.tooltipVisible = true;
+          this.requestUpdate();
+        });
+      } else {
+        this.tooltipContent = `Positive: ${img.prompts.positive}\nNegative: ${img.prompts.negative}\nTraits: ${activeTraits.join(', ')}\nClothing: ${activeClothing.join(', ')}`;
+        this.tooltipVisible = true;
+        this.requestUpdate();
+      }
+    }
+
+    hideTooltip() {
+      this.tooltipVisible = false;
+      this.requestUpdate();
+    }
+
+    openImagePopup(img) {
      if (!this.imagePopup) {
        this.imagePopup = document.createElement('popup-dialog');
        document.body.appendChild(this.imagePopup);
@@ -369,34 +469,46 @@ export class ChatApp extends LitElement {
       if (res.ok) {
         const data = await res.json();
         console.log('ChatApp: Loaded', data.messages.length, 'messages');
-        const messages = [];
-        for (const msg of data.messages) {
-          const message = {
-            id: msg.id,
-            role: msg.actor === 'user' ? 'user' : 'system',
-            content: msg.content,
-            images: [],
-            voiceItems: []
-          };
+         const messages = [];
+         for (const msg of data.messages) {
+           const message = {
+             id: msg.id,
+             role: msg.actor === 'user' ? 'user' : 'system',
+             content: msg.content,
+             images: [],
+             voiceItems: [],
+             traits: {},
+             clothing: {}
+           };
            if (message.role === 'system') {
              try {
                 const annRes = await fetch(`/sessions/${this.currentSession}/chat/messages/${msg.id}/annotations`);
                if (annRes.ok) {
                  const annData = await annRes.json();
                  console.log('ChatApp: Annotations for message', msg.id, annData.annotations);
-                 if (annData.annotations.hasOwnProperty('tool.image.result')) {
-                   const imageAnnotation = annData.annotations['tool.image.result'];
-                   message.images = imageAnnotation;
-                   console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
-                 }
+                  if (annData.annotations.hasOwnProperty('tool.image.result')) {
+                    const imageAnnotation = annData.annotations['tool.image.result'];
+                    message.images = imageAnnotation;
+                    console.log('ChatApp: Found images for message', msg.id, message.images.length, 'images');
+                  }
                  if (annData.annotations.hasOwnProperty('evaluators.VoiceEvaluator')) {
                    const voiceAnnotation = annData.annotations['evaluators.VoiceEvaluator'];
                    message.voiceItems = voiceAnnotation.voiceItems;
                    console.log('ChatApp: Found voice items for message', msg.id, message.voiceItems.length, 'voice items:', message.voiceItems);
-                 } else {
-                   console.log('ChatApp: No voice annotation found for message', msg.id);
-                 }
-               }
+                  } else {
+                    console.log('ChatApp: No voice annotation found for message', msg.id);
+                  }
+                  if (annData.annotations.hasOwnProperty('tool.traits.reactive')) {
+                    const traitsAnnotation = annData.annotations['tool.traits.reactive'];
+                    message.traits = traitsAnnotation.traits;
+                    console.log('ChatApp: Found traits for message', msg.id, message.traits);
+                  }
+                  if (annData.annotations.hasOwnProperty('tool.clothing.reactive')) {
+                    const clothingAnnotation = annData.annotations['tool.clothing.reactive'];
+                    message.clothing = clothingAnnotation.clothing;
+                    console.log('ChatApp: Found clothing for message', msg.id, message.clothing);
+                  }
+                }
              } catch (error) {
                console.warn('Failed to load annotations:', error);
              }
@@ -1317,15 +1429,16 @@ export class ChatApp extends LitElement {
             return html`
               <div class="message-container">
                   <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}${msg.voiceItems && msg.voiceItems.length > 0 ? html`<button class="voice-button" @click=${() => this.replayVoice(msg.voiceItems)}>📣</button>` : ''}</div>
-                 ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)}>`)}</div>` : ''}
+                  ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)} @mouseover=${(e) => this.showTooltip(e, img, msg.traits, msg.clothing, e.target)} @mouseout=${() => this.hideTooltip()}>`)}</div>` : ''}
                 ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
               </div>
             `;
          })}
       </div>
-      <div class="resizer" @mousedown=${this.startResize}></div>
-      <dock-widget .loading=${this.loading} @generate=${this.handleGenerate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}></dock-widget>
-    `;
+       <div class="resizer" @mousedown=${this.startResize}></div>
+       <dock-widget .loading=${this.loading} @generate=${this.handleGenerate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}></dock-widget>
+       ${this.tooltipVisible ? html`<div style="position: fixed; left: ${this.tooltipX}px; top: ${this.tooltipY}px; background: var(--primary-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; z-index: 1000; white-space: pre-wrap; max-width: 300px;">${this.tooltipContent}</div>` : ''}
+     `;
   }
 }
 
