@@ -395,12 +395,12 @@ export class ChatApp extends LitElement {
       if (!img.prompts) {
         this.getPrompts(img.path).then(prompts => {
           img.prompts = prompts;
-          this.tooltipContent = `Positive: ${prompts.positive}\nNegative: ${prompts.negative}\nTraits: ${activeTraits.join(', ')}\nClothing: ${activeClothing.join(', ')}`;
+          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}`;
           this.tooltipVisible = true;
           this.requestUpdate();
         });
       } else {
-        this.tooltipContent = `Positive: ${img.prompts.positive}\nNegative: ${img.prompts.negative}\nTraits: ${activeTraits.join(', ')}\nClothing: ${activeClothing.join(', ')}`;
+        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}`;
         this.tooltipVisible = true;
         this.requestUpdate();
       }
@@ -1437,7 +1437,7 @@ export class ChatApp extends LitElement {
       </div>
        <div class="resizer" @mousedown=${this.startResize}></div>
        <dock-widget .loading=${this.loading} @generate=${this.handleGenerate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}></dock-widget>
-       ${this.tooltipVisible ? html`<div style="position: fixed; left: ${this.tooltipX}px; top: ${this.tooltipY}px; background: var(--primary-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; z-index: 1000; white-space: pre-wrap; max-width: 300px;">${this.tooltipContent}</div>` : ''}
+       ${this.tooltipVisible ? html`<div style="position: fixed; left: ${this.tooltipX}px; top: ${this.tooltipY}px; background: var(--primary-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; z-index: 1000; max-width: 600px;">${unsafeHTML(this.tooltipContent)}</div>` : ''}
      `;
   }
 }
