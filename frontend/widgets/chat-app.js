@@ -396,25 +396,27 @@ export class ChatApp extends LitElement {
       if (attributes && Object.keys(attributes).length > 0) {
         attributesHtml = '<br><strong>Attributes:</strong><br>';
         for (const character in attributes) {
-          attributesHtml += `&nbsp;&nbsp;${character}:<br>`;
+          attributesHtml += `&nbsp;&nbsp;<strong>${character}:</strong><br>`;
           const charAttrs = attributes[character];
           for (const category in charAttrs) {
             const values = charAttrs[category];
             if (values && values.length > 0) {
-              attributesHtml += `&nbsp;&nbsp;&nbsp;&nbsp;${category}: ${values.join(', ')}<br>`;
+              attributesHtml += `&nbsp;&nbsp;&nbsp;&nbsp;<strong>${category}:</strong> ${values.join(', ')}<br>`;
             }
           }
         }
       }
+      const traitsHtml = activeTraits.length > 0 ? `<br><strong>Traits:</strong> ${activeTraits.join(', ')}` : '';
+      const clothingHtml = activeClothing.length > 0 ? `<br><strong>Clothing:</strong> ${activeClothing.join(', ')}` : '';
       if (!img.prompts) {
         this.getPrompts(img.path).then(prompts => {
           img.prompts = prompts;
-          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}${attributesHtml}`;
+          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}${traitsHtml}${clothingHtml}${attributesHtml}`;
           this.tooltipVisible = true;
           this.requestUpdate();
         });
       } else {
-        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}${attributesHtml}`;
+        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}${traitsHtml}${clothingHtml}${attributesHtml}`;
         this.tooltipVisible = true;
         this.requestUpdate();
       }
