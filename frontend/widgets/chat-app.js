@@ -386,21 +386,35 @@ export class ChatApp extends LitElement {
       }
     }
 
-    showTooltip(e, img, traits, clothing, imgElement) {
+    showTooltip(e, img, traits, clothing, attributes, imgElement) {
       const rect = imgElement.getBoundingClientRect();
       this.tooltipX = rect.right + 10;
       this.tooltipY = rect.top;
       const activeTraits = Object.keys(traits || {}).filter(k => traits[k]);
       const activeClothing = Object.keys(clothing || {}).filter(k => clothing[k]);
+      let attributesHtml = '';
+      if (attributes && Object.keys(attributes).length > 0) {
+        attributesHtml = '<br><strong>Attributes:</strong><br>';
+        for (const character in attributes) {
+          attributesHtml += `&nbsp;&nbsp;${character}:<br>`;
+          const charAttrs = attributes[character];
+          for (const category in charAttrs) {
+            const values = charAttrs[category];
+            if (values && values.length > 0) {
+              attributesHtml += `&nbsp;&nbsp;&nbsp;&nbsp;${category}: ${values.join(', ')}<br>`;
+            }
+          }
+        }
+      }
       if (!img.prompts) {
         this.getPrompts(img.path).then(prompts => {
           img.prompts = prompts;
-          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}`;
+          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}${attributesHtml}`;
           this.tooltipVisible = true;
           this.requestUpdate();
         });
       } else {
-        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}`;
+        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}<br><strong>Traits:</strong> ${activeTraits.join(', ')}<br><strong>Clothing:</strong> ${activeClothing.join(', ')}${attributesHtml}`;
         this.tooltipVisible = true;
         this.requestUpdate();
       }
@@ -478,7 +492,8 @@ export class ChatApp extends LitElement {
              images: [],
              voiceItems: [],
              traits: {},
-             clothing: {}
+             clothing: {},
+             attributes: {}
            };
            if (message.role === 'system') {
              try {
@@ -507,6 +522,11 @@ export class ChatApp extends LitElement {
                     const clothingAnnotation = annData.annotations['tool.clothing.reactive'];
                     message.clothing = clothingAnnotation.clothing;
                     console.log('ChatApp: Found clothing for message', msg.id, message.clothing);
+                  }
+                  if (annData.annotations.hasOwnProperty('tool.attributes.v2')) {
+                    const attributesAnnotation = annData.annotations['tool.attributes.v2'];
+                    message.attributes = attributesAnnotation.active_attributes;
+                    console.log('ChatApp: Found attributes for message', msg.id, message.attributes);
                   }
                 }
              } catch (error) {
@@ -1429,7 +1449,7 @@ export class ChatApp extends LitElement {
             return html`
               <div class="message-container">
                   <div class="message ${msg.role}">${unsafeHTML(this.stripLeadingNewlines(this.getDisplayContent(msg.content)))}${isDeletable && msg.id ? html`<button class="delete-button" @click=${(e) => this.deleteMessage(e, msg.id)}>×</button>` : ''}${isEditable && msg.id ? html`<button class="edit-button" @click=${() => this.startEdit(msg.id, msg.content)}>✎</button>` : ''}${showRegenerateButton && msg.id ? html`<button class="regenerate-button" @click=${() => this.regenerateMessage(msg.id)}>🔄</button>` : ''}${showContinueButton ? html`<button class="continue-button" @click=${() => this.handleContinue(msg.id)}>▶</button>` : ''}${msg.voiceItems && msg.voiceItems.length > 0 ? html`<button class="voice-button" @click=${() => this.replayVoice(msg.voiceItems)}>📣</button>` : ''}</div>
-                  ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)} @mouseover=${(e) => this.showTooltip(e, img, msg.traits, msg.clothing, e.target)} @mouseout=${() => this.hideTooltip()}>`)}</div>` : ''}
+                  ${msg.images && msg.images.length > 0 ? html`<div class="message-images">${msg.images.map(img => html`<img src="/images/${img.path}" alt="${img.filename}" style="max-width: 200px; max-height: 200px; margin-left: 10px; cursor: pointer;" @click=${() => this.openImagePopup(img)} @mouseover=${(e) => this.showTooltip(e, img, msg.traits, msg.clothing, msg.attributes, e.target)} @mouseout=${() => this.hideTooltip()}>`)}</div>` : ''}
                 ${this.loading && isLastSystemMessage ? html`<div class="generating-indicator">Generating...</div>` : ''}
               </div>
             `;
