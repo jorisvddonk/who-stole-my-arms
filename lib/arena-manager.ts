@@ -95,7 +95,11 @@ export class ArenaManager {
   }
 
   clearArena(sessionId: string): void {
-    this.arenas.delete(sessionId);
+    const prevArena = this.arenas.get(sessionId);
+    if (prevArena) {
+      prevArena.destroy();
+      this.arenas.delete(sessionId);
+    }
   }
 
   async clearArenaState(sessionId: string): Promise<void> {

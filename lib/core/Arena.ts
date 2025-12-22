@@ -76,7 +76,9 @@ export class Arena {
         }
     }
 
-
+    public destroy() {
+        this.eventEmitter.removeAllListeners();
+    }
 
     /**
      * Updates the streaming LLM interface for all agents.
