@@ -394,29 +394,29 @@ export class ChatApp extends LitElement {
       const activeClothing = Object.keys(clothing || {}).filter(k => clothing[k]);
       let attributesHtml = '';
       if (attributes && Object.keys(attributes).length > 0) {
-        attributesHtml = '<br><strong>Attributes:</strong><br>';
+        attributesHtml = '<br><span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Attributes:</span><br>';
         for (const character in attributes) {
-          attributesHtml += `&nbsp;&nbsp;<strong>${character}:</strong><br>`;
+          attributesHtml += `&nbsp;&nbsp;<span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">${character}:</span><br>`;
           const charAttrs = attributes[character];
           for (const category in charAttrs) {
             const values = charAttrs[category];
             if (values && values.length > 0) {
-              attributesHtml += `&nbsp;&nbsp;&nbsp;&nbsp;<strong>${category}:</strong> ${values.join(', ')}<br>`;
+              attributesHtml += `&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--tooltip-fg-shift-2); font-weight: bold;">${category}:</span> <span style="color: var(--tooltip-fg-shift-3);">${values.join(', ')}</span><br>`;
             }
           }
         }
       }
-      const traitsHtml = activeTraits.length > 0 ? `<br><strong>Traits:</strong> ${activeTraits.join(', ')}` : '';
-      const clothingHtml = activeClothing.length > 0 ? `<br><strong>Clothing:</strong> ${activeClothing.join(', ')}` : '';
+      const traitsHtml = activeTraits.length > 0 ? `<br><span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Traits:</span> <span style="color: var(--tooltip-fg-shift-2);">${activeTraits.join(', ')}</span>` : '';
+      const clothingHtml = activeClothing.length > 0 ? `<br><span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Clothing:</span> <span style="color: var(--tooltip-fg-shift-2);">${activeClothing.join(', ')}</span>` : '';
       if (!img.prompts) {
         this.getPrompts(img.path).then(prompts => {
           img.prompts = prompts;
-          this.tooltipContent = `<strong>Positive:</strong> ${prompts.positive}<br><strong>Negative:</strong> ${prompts.negative}${traitsHtml}${clothingHtml}${attributesHtml}`;
+          this.tooltipContent = `<span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Positive:</span> <span style="color: var(--tooltip-fg-shift-2);">${prompts.positive}</span><br><span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Negative:</span> <span style="color: var(--tooltip-fg-shift-2);">${prompts.negative}</span>${traitsHtml}${clothingHtml}${attributesHtml}`;
           this.tooltipVisible = true;
           this.requestUpdate();
         });
       } else {
-        this.tooltipContent = `<strong>Positive:</strong> ${img.prompts.positive}<br><strong>Negative:</strong> ${img.prompts.negative}${traitsHtml}${clothingHtml}${attributesHtml}`;
+        this.tooltipContent = `<span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Positive:</span> <span style="color: var(--tooltip-fg-shift-2);">${img.prompts.positive}</span><br><span style="color: var(--tooltip-fg-shift-1); font-weight: bold;">Negative:</span> <span style="color: var(--tooltip-fg-shift-2);">${img.prompts.negative}</span>${traitsHtml}${clothingHtml}${attributesHtml}`;
         this.tooltipVisible = true;
         this.requestUpdate();
       }
@@ -1459,7 +1459,7 @@ export class ChatApp extends LitElement {
       </div>
        <div class="resizer" @mousedown=${this.startResize}></div>
        <dock-widget .loading=${this.loading} @generate=${this.handleGenerate} style=${this.dockHeight ? `height: ${this.dockHeight}px;` : ''}></dock-widget>
-       ${this.tooltipVisible ? html`<div style="position: fixed; left: ${this.tooltipX}px; top: ${this.tooltipY}px; background: var(--primary-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; z-index: 1000; max-width: 600px;">${unsafeHTML(this.tooltipContent)}</div>` : ''}
+       ${this.tooltipVisible ? html`<div style="position: fixed; left: ${this.tooltipX}px; top: ${this.tooltipY}px; background: var(--tooltip-bg); color: var(--tooltip-fg); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; z-index: 1000; max-width: 600px;">${unsafeHTML(this.tooltipContent)}</div>` : ''}
      `;
   }
 }
