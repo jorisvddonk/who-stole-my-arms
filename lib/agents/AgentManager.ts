@@ -9,6 +9,8 @@ import { MathAgent } from './MathAgent';
 import { ErrorAgent } from './ErrorAgent';
 import { RPGGameMasterAgent } from './RPGGameMasterAgent';
 import { ExampleAgent } from './ExampleAgent';
+import { ExampleErrorAgent } from './ExampleErrorAgent';
+import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { SentimentAgent } from './SentimentAgent';
 import { Logger } from '../logging/debug-logger';
 
@@ -55,6 +57,8 @@ export class AgentManager {
       'ErrorAgent': new ErrorAgent(streamingLLM, null),
       'RPGGameMasterAgent': new RPGGameMasterAgent(streamingLLM, null),
       'ExampleAgent': new ExampleAgent(streamingLLM, null),
+      'ExampleErrorAgent': new ExampleErrorAgent(streamingLLM, null),
+      'ExampleErrorToolAgent': new ExampleErrorToolAgent(streamingLLM, null),
       'SentimentAgent': new SentimentAgent(streamingLLM, null),
     };
 

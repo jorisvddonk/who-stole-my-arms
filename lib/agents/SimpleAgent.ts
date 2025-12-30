@@ -4,6 +4,9 @@ import { SimpleEvaluator } from '../evaluators/SimpleEvaluator';
 import { ChunkType } from '../../interfaces/AgentTypes';
 import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
+import { AgentEvaluator } from '../evaluators/AgentEvaluator';
+import { ExampleErrorAgent } from './ExampleErrorAgent';
+import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { FormatterRegistry } from '../formatters';
 import { ChatMessage } from '../chat-history';
 
@@ -29,7 +32,21 @@ export class SimpleAgent extends LLMAgent {
                 temperature: 1.0
             }
         });
-        this.evaluators = [markdownEvaluator, voiceEvaluator];
+        // Create an agent evaluator that uses ExampleErrorAgent
+        const errorEvaluator = new AgentEvaluator(
+            ExampleErrorAgent,
+            streamingLLM,
+            [ChunkType.LlmOutput], // Evaluates LLM output chunks
+            'evaluators.ExampleErrorEvaluator'
+        );
+        // Create another agent evaluator that uses ExampleErrorToolAgent
+        const errorToolEvaluator = new AgentEvaluator(
+            ExampleErrorToolAgent,
+            streamingLLM,
+            [ChunkType.LlmOutput], // Evaluates LLM output chunks
+            'evaluators.ExampleErrorToolEvaluator'
+        );
+        this.evaluators = [markdownEvaluator, voiceEvaluator, errorEvaluator, errorToolEvaluator];
     }
 
     /**
