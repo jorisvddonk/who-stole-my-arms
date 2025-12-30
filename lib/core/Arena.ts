@@ -560,8 +560,12 @@ export class Arena {
         const parentAgent = this.agents[parent.agent_name];
         parentAgent.addChunk(parent, agentChunk);
         if (this.hasAllChildResults(parent)) {
-            this.taskQueue.push(parent);
-            Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
+            if (parent.taskType !== TaskType.Evaluator) {
+                this.taskQueue.push(parent);
+                Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
+            } else {
+                Logger.debugLog(`Parent evaluator task ${parent.id} completed with agent result chunk: ${agentResult}`);
+            }
         } else {
             Logger.debugLog(`Parent task ${parent.id} waiting for more child results (${this.invocationLog.filter(inv => inv.parent_id === parent.id && inv.type === 'agent').length} children, ${parent.scratchpad.filter(chunk => chunk.type === ChunkType.AgentOutput).length} results received)`);
         }
@@ -764,10 +768,12 @@ export class Arena {
             lastChunk.processed = true;
 
             if (hasNewErrors) {
-                if (task.retryCount < 3 && task.executionCount < 10) {
+                const maxRetries = task.taskType === TaskType.Evaluator ? 1 : 3;
+                const maxExecutions = task.taskType === TaskType.Evaluator ? 2 : 10;
+                if (task.retryCount < maxRetries && task.executionCount < maxExecutions) {
                     task.retryCount++;
                     this.taskQueue.push(task);
-                    Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/3, executions: ${task.executionCount})`);
+                    Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/${maxRetries}, executions: ${task.executionCount})`);
                 } else {
                     const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
                     const errorDetails = `${reason}\n${task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n')}`;
