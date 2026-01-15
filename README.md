@@ -211,6 +211,36 @@ Widgets appear in the dock's edit interface and can be added to grid rows:
 
 **Example**: `frontend/widgets/os-metrics-dock-widget.js` registers "OS Metrics" widget type that displays system metrics
 
+### Evaluator System
+
+Evaluators automatically analyze and annotate chunks as they are created during agent execution. They provide metadata and insights about chunk content.
+
+#### Backend Evaluators
+
+Evaluators are implemented as classes that implement the `Evaluator` interface:
+
+- **Interface**: `lib/core/Evaluator.ts` defines evaluators with an `evaluate(chunk)` method returning annotations
+- **Registration**: Evaluators are registered in `EvaluatorManager` similar to agents
+- **Server Integration**: Evaluators are instantiated in `Arena` constructor and wired to chunk events
+- **Execution**: When chunks are emitted, all evaluators supporting that chunk type run in parallel
+
+**Types**:
+- **SimpleEvaluator**: Pure functions wrapped in a class for synchronous evaluation
+- **AgentEvaluator**: Full `LLMAgent` instances for complex LLM-based evaluation (cannot use continuation-supporting agents)
+
+**Example**: `lib/evaluators/MarkdownEvaluator.ts` annotates LLM output chunks with parsed markdown structure
+
+#### Integration
+
+Evaluators are called automatically when chunks are added via `agent.addChunk()`:
+
+- Chunk events are emitted by agents
+- Arena listens for chunk events and runs matching evaluators
+- Annotations are stored in `chunk.annotations[fqdn]`
+- FQDN-based keys prevent conflicts between evaluators
+
+**Example**: MarkdownEvaluator adds `{parsedMarkdown: [...]}` to LLM output chunk annotations
+
 ### Storage Injection
 
 Storage injection automatically provides component storage in API handlers based on the request route.
