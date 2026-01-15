@@ -50,7 +50,12 @@ export class ComfyUISettingsTool implements ToolboxTool, HasStorage {
         ...this.settings,
         debugBypass: this.settings.debugBypass ? 1 : 0
       };
-      await this.storage.update('1', settingsToSave);
+      const existing = await this.storage.findById('1');
+      if (existing) {
+        await this.storage.update('1', settingsToSave);
+      } else {
+        await this.storage.insert(settingsToSave, '1');
+      }
     } catch (error) {
       console.error('Failed to save ComfyUI settings:', error);
       throw error;
@@ -130,7 +135,7 @@ export class ComfyUISettingsTool implements ToolboxTool, HasStorage {
     const currentVersion = await storage.getComponentVersion();
     if (currentVersion === null) {
       await storage.setComponentVersion(1);
-      await this.storage!.insert(this.settings);
+      await this.storage!.insert(this.settings, '1');
     }
 
     await this.loadSettings();
