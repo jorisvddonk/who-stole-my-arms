@@ -12,6 +12,7 @@ import { ExampleAgent } from './ExampleAgent';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { SentimentAgent } from './SentimentAgent';
+import { ImageGenerationAgent } from './ImageGenerationAgent';
 import { Logger } from '../logging/debug-logger';
 
 /**
@@ -40,8 +41,9 @@ export class AgentManager {
   /**
    * Initializes the agent manager by loading all available agents.
    * @param streamingLLM The streaming LLM interface to pass to agents.
+   * @param comfyuiSettingsTool Optional ComfyUI settings tool for ImageGenerationAgent.
    */
-  async init(streamingLLM: any): Promise<void> {
+  async init(streamingLLM: any, comfyuiSettingsTool?: any): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
 
@@ -60,6 +62,7 @@ export class AgentManager {
       'ExampleErrorAgent': new ExampleErrorAgent(streamingLLM, null),
       'ExampleErrorToolAgent': new ExampleErrorToolAgent(streamingLLM, null),
       'SentimentAgent': new SentimentAgent(streamingLLM, null),
+      'ImageGenerationAgent': new ImageGenerationAgent(streamingLLM, null, comfyuiSettingsTool),
     };
 
     // Load dynamic agents

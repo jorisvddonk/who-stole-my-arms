@@ -20,6 +20,7 @@ import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
+import { ComfyUISettingsTool } from "./lib/tools/comfyui-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
 import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
@@ -59,6 +60,7 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, USE_OPENROUT
 const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_OPENROUTER ? (settings) => {
   api.updateSettings(settings);
 } : undefined);
+const comfyuiSettingsTool = new ComfyUISettingsTool(toolboxCollector);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const imageDisplayTool = new ImageDisplayTool(toolboxCollector);
 const voiceDisplayTool = new VoiceDisplayTool(toolboxCollector);
@@ -71,6 +73,7 @@ const dockManager = new DockManager(toolboxCollector);
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 await dbManager.registerGlobalComponent(openRouterSettingsTool);
+await dbManager.registerGlobalComponent(comfyuiSettingsTool);
 
 // Create API after settings are loaded
 let baseApi;
@@ -88,7 +91,7 @@ api = baseApi;
 
 // Initialize AgentManager
 const agentManager = AgentManager.getInstance();
-await agentManager.init(api);
+await agentManager.init(api, comfyuiSettingsTool);
 
 // Initialize EvaluatorManager
 const evaluatorManager = EvaluatorManager.getInstance();
@@ -125,6 +128,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   openRouterSettingsTool,
+  comfyuiSettingsTool,
   formatterSettingsTool,
   autoScrollSettingsTool,
   defaultAgentTool,
