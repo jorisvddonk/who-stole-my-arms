@@ -5,6 +5,7 @@ import { ChunkType } from '../../interfaces/AgentTypes';
 import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
 import { AgentEvaluator } from '../evaluators/AgentEvaluator';
+import { AnswerQuestionsEvaluator } from '../evaluators/AnswerQuestionsEvaluator';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { FormatterRegistry } from '../formatters';
@@ -32,21 +33,13 @@ export class SimpleAgent extends LLMAgent {
                 temperature: 1.0
             }
         });
-        // Create an agent evaluator that uses ExampleErrorAgent
-        const errorEvaluator = new AgentEvaluator(
-            ExampleErrorAgent,
-            streamingLLM,
-            [ChunkType.LlmOutput], // Evaluates LLM output chunks
-            'evaluators.ExampleErrorEvaluator'
+        const answerQuestionsEvaluator = new AnswerQuestionsEvaluator(
+            {
+                'hasQuestion': 'Is the user asking at least one question?'
+            },
+            [ChunkType.Input]
         );
-        // Create another agent evaluator that uses ExampleErrorToolAgent
-        const errorToolEvaluator = new AgentEvaluator(
-            ExampleErrorToolAgent,
-            streamingLLM,
-            [ChunkType.LlmOutput], // Evaluates LLM output chunks
-            'evaluators.ExampleErrorToolEvaluator'
-        );
-        this.evaluators = [markdownEvaluator, voiceEvaluator, errorEvaluator, errorToolEvaluator];
+        this.evaluators = [markdownEvaluator, voiceEvaluator, answerQuestionsEvaluator];
     }
 
     /**
