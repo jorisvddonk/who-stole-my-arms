@@ -45,12 +45,10 @@ export class GenerateImageTool extends Tool {
  Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
   private settingsTool: ComfyUISettingsTool;
-  private outputFolder: string;
 
-  constructor(settingsTool: ComfyUISettingsTool, outputFolder?: string) {
+  constructor(settingsTool: ComfyUISettingsTool) {
     super();
     this.settingsTool = settingsTool;
-    this.outputFolder = outputFolder || path.join(os.homedir(), 'ComfyUI', 'output');
   }
 
   private setNestedValue(obj: any, path: string, value: any) {
@@ -66,6 +64,7 @@ export class GenerateImageTool extends Tool {
     console.log('GenerateImage run, parameters keys:', Object.keys(parameters));
     const { positive_prompt, negative_prompt = "", seed = -1, workflow: customWorkflow, filename } = parameters;
     const settings = this.settingsTool.getSettings();
+    const outputFolder = settings.outputFolder;
     console.log('customWorkflow defined:', !!customWorkflow);
 
     let workflow: ComfyUIWorkflow;
@@ -158,7 +157,7 @@ export class GenerateImageTool extends Tool {
             node.inputs.filename = outputFilename.replace('.png', '');
           }
           if (node.inputs?.path) {
-            node.inputs.path = this.outputFolder;
+            node.inputs.path = outputFolder;
           }
         }
       }
@@ -202,7 +201,7 @@ export class GenerateImageTool extends Tool {
         for (const nodeId in outputs) {
           if (outputs[nodeId].images && outputs[nodeId].images.length > 0) {
             const images = outputs[nodeId].images.filter((img: any) => img.type === "output").map((img: any) => {
-              const base = this.outputFolder;
+              const base = outputFolder;
               let imagePath;
               if (img.filename.startsWith('/')) {
                 imagePath = img.filename;

@@ -18,8 +18,7 @@ export class ImageGenerationAgent extends LLMAgent {
   constructor(streamingLLM: any, arena: any, comfyuiSettingsTool: ComfyUISettingsTool) {
     super(streamingLLM, arena);
     this.settingsTool = comfyuiSettingsTool;
-    const settings = comfyuiSettingsTool.getSettings();
-    this.generateImageTool = new GenerateImageTool(comfyuiSettingsTool, settings.outputFolder);
+    this.generateImageTool = new GenerateImageTool(comfyuiSettingsTool);
     this.registerTool(this.generateImageTool);
   }
 
