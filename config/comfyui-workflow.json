@@ -93,15 +93,25 @@
   },
   "9": {
     "inputs": {
-      "filename_prefix": "SD1.5",
+      "filename": "filename",
+      "path": "~",
+      "extension": "png",
+      "lossless_webp": true,
+      "quality_jpeg_or_webp": 100,
+      "optimize_png": false,
+      "embed_workflow": true,
+      "save_workflow_as_json": false,
+      "counter": 0,
+      "time_format": "%Y-%m-%d-%H%M%S",
+      "show_preview": true,
       "images": [
         "8",
         0
       ]
     },
-    "class_type": "SaveImage",
+    "class_type": "Image Saver Simple",
     "_meta": {
-      "title": "Save Image"
+      "title": "Image Saver Simple"
     }
   }
 }

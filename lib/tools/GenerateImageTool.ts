@@ -153,6 +153,13 @@ export class GenerateImageTool extends Tool {
           } else if (node.inputs?.filename) {
             node.inputs.filename = outputFilename;
           }
+        } else if (node.class_type === 'Image Saver Simple') {
+          if (node.inputs?.filename) {
+            node.inputs.filename = outputFilename.replace('.png', '');
+          }
+          if (node.inputs?.path) {
+            node.inputs.path = this.outputFolder;
+          }
         }
       }
     }
@@ -199,6 +206,8 @@ export class GenerateImageTool extends Tool {
               let imagePath;
               if (img.filename.startsWith('/')) {
                 imagePath = img.filename;
+              } else if (img.subfolder && img.subfolder.startsWith('/')) {
+                imagePath = `${img.subfolder}/${img.filename}`;
               } else {
                 const relativePath = img.subfolder ? `${img.subfolder}/${img.filename}` : img.filename;
                 imagePath = `${base}/${relativePath}`;
