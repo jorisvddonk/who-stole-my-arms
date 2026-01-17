@@ -41,6 +41,8 @@ import { createMethodRouter } from "./lib/util/route-utils.js";
 import { FormatterRegistry } from "./lib/formatters.js";
 import { MarkdownEvaluator } from "./lib/evaluators/MarkdownEvaluator.js";
 import { VoiceEvaluator } from "./lib/evaluators/VoiceEvaluator.js";
+import { ToolCallDetectionEvaluator } from "./lib/evaluators/ToolCallDetectionEvaluator.js";
+import { ToolInvocationEvaluator } from "./lib/evaluators/ToolInvocationEvaluator.js";
 import { ArenaManager } from "./lib/arena-manager.js";
 import { AgentManager } from "./lib/agents/AgentManager.js";
 import { EvaluatorManager } from "./lib/evaluators/EvaluatorManager.js";
@@ -120,8 +122,11 @@ promptManager.registerProvider('chat', chatHistory);
 // Initialize Evaluators
 const markdownEvaluator = new MarkdownEvaluator();
 const voiceEvaluator = new VoiceEvaluator();
+const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+const toolInvocationEvaluator = new ToolInvocationEvaluator();
 evaluatorManager.registerEvaluator(markdownEvaluator);
 evaluatorManager.registerEvaluator(voiceEvaluator);
+evaluatorManager.registerEvaluator([toolCallDetectionEvaluator, toolInvocationEvaluator]);
 
 // Define route groups
 const routeGroups = [

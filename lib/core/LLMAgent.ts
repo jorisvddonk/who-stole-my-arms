@@ -185,9 +185,15 @@ export abstract class LLMAgent {
             // Use the content of the last input chunk
             return inputs[inputs.length - 1].content;
         } else {
-            // Fallback to task.input.text if available
+            // Fallback to task.input
             const input = task.input;
-            return (typeof input === 'object' && input !== null && 'text' in input) ? input.text : JSON.stringify(input);
+            if (typeof input === 'object' && input !== null && 'content' in input) {
+                return input.content;
+            } else if (typeof input === 'object' && input !== null && 'text' in input) {
+                return input.text;
+            } else {
+                return JSON.stringify(input);
+            }
         }
     }
 
@@ -202,9 +208,15 @@ export abstract class LLMAgent {
             // Use the content of the last chunk
             return inputs[inputs.length - 1].content;
         } else {
-            // Fallback to task.input.text if available
+            // Fallback to task.input
             const input = task.input;
-            return (typeof input === 'object' && input !== null && 'text' in input) ? input.text : JSON.stringify(input);
+            if (typeof input === 'object' && input !== null && 'content' in input) {
+                return input.content;
+            } else if (typeof input === 'object' && input !== null && 'text' in input) {
+                return input.text;
+            } else {
+                return JSON.stringify(input);
+            }
         }
     }
 

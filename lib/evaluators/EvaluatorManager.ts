@@ -2,6 +2,8 @@ import { ChunkType } from '../../interfaces/AgentTypes';
 import { Evaluator } from '../core/Evaluator';
 import { SimpleEvaluator } from './SimpleEvaluator';
 import { AgentEvaluator } from './AgentEvaluator';
+import { ToolCallDetectionEvaluator } from './ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from './ToolInvocationEvaluator';
 import { SentimentAgent } from '../agents/SentimentAgent';
 import { Logger } from '../logging/debug-logger';
 
@@ -40,8 +42,6 @@ export class EvaluatorManager {
 
         this.evaluators = [];
 
-        // TODO: Load dynamic evaluators if needed
-
         Logger.debugLog(`EvaluatorManager loaded evaluators: ${Object.keys(this.evaluators).join(', ')}`);
     }
 
@@ -63,10 +63,10 @@ export class EvaluatorManager {
     }
 
     /**
-     * Registers a new evaluator.
-     * @param evaluator The evaluator to register.
+     * Registers a new evaluator or evaluator group.
+     * @param evaluator The evaluator or evaluator group to register.
      */
-    registerEvaluator(evaluator: Evaluator): void {
+    registerEvaluator(evaluator: Evaluator | Evaluator[]): void {
         this.evaluators.push(evaluator);
     }
 

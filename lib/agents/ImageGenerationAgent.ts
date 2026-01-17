@@ -3,6 +3,8 @@ import { Task, ChunkType } from '../../interfaces/AgentTypes';
 import { ComfyUISettingsTool } from '../tools/comfyui-settings-tool';
 import { GenerateImageTool } from '../tools/GenerateImageTool';
 import { Logger } from '../logging/debug-logger';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -21,10 +23,15 @@ export class ImageGenerationAgent extends LLMAgent {
     this.settingsTool = comfyuiSettingsTool;
     this.generateImageTool = new GenerateImageTool(comfyuiSettingsTool);
     this.registerTool(this.generateImageTool);
+
+    const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+    const toolInvocationEvaluator = new ToolInvocationEvaluator();
+    this.evaluators = [[toolCallDetectionEvaluator, toolInvocationEvaluator]];
   }
 
   async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
-    Logger.debugLog(`[ImageGenerationAgent] Starting task ${task.id} with input: ${task.input?.substring(0, 100)}${task.input && task.input.length > 100 ? '...' : ''}`);
+    const inputText = typeof task.input === 'string' ? task.input : (task.input as any)?.content || '';
+    Logger.debugLog(`[ImageGenerationAgent] Starting task ${task.id} with input: ${inputText?.substring(0, 100)}${inputText && inputText.length > 100 ? '...' : ''}`);
     this.currentTask = task;
     this.hasToolCallResult = false;
     this.toolCallResultInput = '';

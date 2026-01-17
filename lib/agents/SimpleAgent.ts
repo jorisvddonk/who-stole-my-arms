@@ -5,6 +5,8 @@ import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
 import { AgentEvaluator, CopyChunksOption } from '../evaluators/AgentEvaluator';
 import { AnswerQuestionsEvaluator } from '../evaluators/AnswerQuestionsEvaluator';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { ImageGenerationAgent } from './ImageGenerationAgent';
@@ -42,6 +44,8 @@ export class SimpleAgent extends LLMAgent {
             },
             [ChunkType.Input]
         );
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
         const evaluators: Evaluator[][] = [[markdownEvaluator, voiceEvaluator], [answerQuestionsEvaluator]];
         if (comfyuiSettingsTool) {
             const imageGenerationEvaluator = new AgentEvaluator(
@@ -63,6 +67,7 @@ export class SimpleAgent extends LLMAgent {
             );
             evaluators[1].push(imageGenerationEvaluator);
         }
+        evaluators.push([toolCallDetectionEvaluator, toolInvocationEvaluator]);
         this.evaluators = evaluators;
     }
 

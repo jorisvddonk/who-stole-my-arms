@@ -61,13 +61,14 @@ export class AgentEvaluator extends Evaluator {
         this.supportedChunkTypes = supportedChunkTypes;
         this.preconditionFunction = preconditionFunction;
         this.copyChunks = copyChunks;
-        this.fqdn = fqdn || `evaluators.${this.constructor.name}`;
+         this.fqdn = fqdn || `evaluators.${this.constructor.name}`;
 
-        // Validate that the agent doesn't support continuation
-        const testAgent = this.agentFactory(this.streamingLLM, null);
-        if (testAgent.supportsContinuation) {
-            throw new Error(`AgentEvaluator cannot use agents with supportsContinuation=true`);
-        }
+         // Validate that the agent doesn't support continuation
+         const testAgent = this.agentFactory(this.streamingLLM, null);
+         if (testAgent.supportsContinuation) {
+             throw new Error(`AgentEvaluator cannot use agents with supportsContinuation=true`);
+         }
+
     }
 
     /**
@@ -96,13 +97,13 @@ export class AgentEvaluator extends Evaluator {
             return { annotation: error };
         }
 
-        // Create task with chunk content as input
-        const parentTaskId = agent?.currentTask?.id || null;
-        Logger.debugLog(`[${this.fqdn}] Creating task with parent_task_id: ${parentTaskId}`);
-        const task: Task = {
-            id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-            agent_name: agentInstance.constructor.name,
-            input: chunk.content,
+         // Create task with chunk as input
+         const parentTaskId = agent?.currentTask?.id || null;
+         Logger.debugLog(`[${this.fqdn}] Creating task with parent_task_id: ${parentTaskId}`);
+         const task: Task = {
+             id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+             agent_name: agentInstance.constructor.name,
+             input: chunk,
             parent_task_id: parentTaskId,
             scratchpad: [],
             retryCount: 0,
