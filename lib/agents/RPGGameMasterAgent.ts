@@ -1,28 +1,73 @@
-import { LLMAgent } from '../core/LLMAgent';
-import { Task } from '../../interfaces/AgentTypes';
+ import { LLMAgent } from '../core/LLMAgent';
+ import { Task, Chunk, ChunkType } from '../../interfaces/AgentTypes';
+ import { AgentEvaluator, CopyChunksOption } from '../evaluators/AgentEvaluator';
+ import { AnswerQuestionsEvaluator } from '../evaluators/AnswerQuestionsEvaluator';
+ import { CombatAgent } from './CombatAgent';
+ import { MathAgent } from './MathAgent';
+ import { DieRollerAgent } from './DieRollerAgent';
 
-export class RPGGameMasterAgent extends LLMAgent {
-    public supportsContinuation: boolean = true;
+ export class RPGGameMasterAgent extends LLMAgent {
+     public supportsContinuation: boolean = true;
 
-    async buildPrompt(task: Task): Promise<string> {
-        const scratchpadContent = this.getScratchpadContent(task);
-        const currentInput = this.getInputText(task);
+     constructor(streamingLLM: any, arena: any) {
+         super(streamingLLM, arena);
+         // Set up evaluators for dynamic agent loading
+          const answerQuestionsEvaluator = new AnswerQuestionsEvaluator(
+              {
+                  'isCombatScenario': 'Is the user input describing a combat encounter or battle situation?',
+                  'requiresMath': 'Does the user input require mathematical calculations, dice rolls, or numerical operations?',
+                  'requiresDiceRoll': 'Does the user input require rolling dice?'
+              },
+              [ChunkType.Input]
+          );
+         const combatEvaluator = new AgentEvaluator(
+             (streamingLLM, arena) => new CombatAgent(streamingLLM, arena),
+             streamingLLM,
+             [ChunkType.Input],
+             async (chunk: Chunk, arena: any, agent?: any) => {
+                 const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
+                 return answers['isCombatScenario'] === true;
+             },
+             CopyChunksOption.LAST_LLMOUTPUT
+         );
+          const mathEvaluator = new AgentEvaluator(
+              (streamingLLM, arena) => new MathAgent(streamingLLM, arena),
+              streamingLLM,
+              [ChunkType.Input],
+              async (chunk: Chunk, arena: any, agent?: any) => {
+                  const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
+                  return answers['requiresMath'] === true;
+              },
+              CopyChunksOption.LAST_LLMOUTPUT
+          );
+          const dieRollerEvaluator = new AgentEvaluator(
+              (streamingLLM, arena) => new DieRollerAgent(streamingLLM, arena),
+              streamingLLM,
+              [ChunkType.Input],
+              async (chunk: Chunk, arena: any, agent?: any) => {
+                  const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
+                  return answers['requiresDiceRoll'] === true;
+              },
+              CopyChunksOption.LAST_LLMOUTPUT
+          );
+          this.evaluators = [[answerQuestionsEvaluator, dieRollerEvaluator, mathEvaluator, combatEvaluator]];
+     }
 
-        let prompt = `You are the RPGGameMasterAgent, the ultimate Game Master for tabletop RPG adventures.
+     async buildPrompt(task: Task): Promise<string> {
+         const scratchpadContent = this.getScratchpadContent(task);
+         const currentInput = this.getInputText(task);
 
-Current player input: ${currentInput}
+         let prompt = `You are the RPGGameMasterAgent, the ultimate Game Master for tabletop RPG adventures.
 
-Adventure history (scratchpad):
-${scratchpadContent}
+ Current player input: ${currentInput}
 
-Available agents you can call:
-- CombatAgent: For handling combat encounters, battles, and fight mechanics
-- MathAgent: For calculations in game mechanics, dice rolls, and statistics
+ Adventure history (scratchpad):
+ ${scratchpadContent}
 
-To call an agent, use the format: <|agent_call|>{"name": "AgentName", "input": {...}}<|agent_call_end|>
+  Combat encounters, mathematical calculations, and dice rolls are handled automatically by specialized sub-agents.
 
-As the Game Master, you control the narrative, describe scenes vividly, manage NPC interactions, and ensure an immersive RPG experience. Respond to player actions, advance the plot, and maintain game balance. If combat occurs, delegate to CombatAgent. For any mathematical calculations or dice rolls, use MathAgent. Always stay in character and create engaging, memorable moments.`;
+ As the Game Master, you control the narrative, describe scenes vividly, manage NPC interactions, and ensure an immersive RPG experience. Respond to player actions, advance the plot, and maintain game balance. Always stay in character and create engaging, memorable moments.`;
 
-        return prompt;
-    }
-}
+         return prompt;
+     }
+ }

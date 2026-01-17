@@ -22,12 +22,12 @@ export class DieTool extends Tool {
 Description: Roll a die with the specified number of sides. Returns a random number between 1 and the number of sides.
 Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
-  async run(parameters: any, context?: { arena: any, task: Task }): Promise<{ result: number; sides: number }> {
+  async run(parameters: any, context?: { arena: any, task: Task }): Promise<{ roll: number; sides: number }> {
     const { sides } = parameters;
     if (typeof sides !== 'number' || sides < 2 || sides > 100) {
       throw new Error('Die must have between 2 and 100 sides');
     }
-    const result = Math.floor(Math.random() * sides) + 1;
-    return { result, sides };
+    const roll = Math.floor(Math.random() * sides) + 1;
+    return { roll, sides };
   }
 }

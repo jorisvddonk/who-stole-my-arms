@@ -11,9 +11,10 @@ import { RPGGameMasterAgent } from './RPGGameMasterAgent';
 import { ExampleAgent } from './ExampleAgent';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
-import { SentimentAgent } from './SentimentAgent';
-import { ImageGenerationAgent } from './ImageGenerationAgent';
-import { Logger } from '../logging/debug-logger';
+ import { SentimentAgent } from './SentimentAgent';
+ import { ImageGenerationAgent } from './ImageGenerationAgent';
+ import { DieRollerAgent } from './DieRollerAgent';
+ import { Logger } from '../logging/debug-logger';
 
 /**
  * Singleton manager for loading and managing LLM agents.
@@ -49,21 +50,22 @@ export class AgentManager {
 
     Logger.debugLog('Initializing AgentManager');
 
-    // Load hardcoded agents
-    this.agents = {
-      'TopLevelAgent': new TopLevelAgent(streamingLLM, null),
-      'ConversationalAgent': new ConversationalAgent(streamingLLM, null),
-      'SimpleAgent': new SimpleAgent(streamingLLM, null, comfyuiSettingsTool),
-      'CombatAgent': new CombatAgent(streamingLLM, null),
-      'MathAgent': new MathAgent(streamingLLM, null),
-      'ErrorAgent': new ErrorAgent(streamingLLM, null),
-      'RPGGameMasterAgent': new RPGGameMasterAgent(streamingLLM, null),
-      'ExampleAgent': new ExampleAgent(streamingLLM, null),
-      'ExampleErrorAgent': new ExampleErrorAgent(streamingLLM, null),
-      'ExampleErrorToolAgent': new ExampleErrorToolAgent(streamingLLM, null),
-      'SentimentAgent': new SentimentAgent(streamingLLM, null),
-      'ImageGenerationAgent': new ImageGenerationAgent(streamingLLM, null, comfyuiSettingsTool),
-    };
+     // Load hardcoded agents
+     this.agents = {
+       'TopLevelAgent': new TopLevelAgent(streamingLLM, null),
+       'ConversationalAgent': new ConversationalAgent(streamingLLM, null),
+       'SimpleAgent': new SimpleAgent(streamingLLM, null, comfyuiSettingsTool),
+       'CombatAgent': new CombatAgent(streamingLLM, null),
+       'MathAgent': new MathAgent(streamingLLM, null),
+       'DieRollerAgent': new DieRollerAgent(streamingLLM, null),
+       'ErrorAgent': new ErrorAgent(streamingLLM, null),
+       'RPGGameMasterAgent': new RPGGameMasterAgent(streamingLLM, null),
+       'ExampleAgent': new ExampleAgent(streamingLLM, null),
+       'ExampleErrorAgent': new ExampleErrorAgent(streamingLLM, null),
+       'ExampleErrorToolAgent': new ExampleErrorToolAgent(streamingLLM, null),
+       'SentimentAgent': new SentimentAgent(streamingLLM, null),
+       'ImageGenerationAgent': new ImageGenerationAgent(streamingLLM, null, comfyuiSettingsTool),
+     };
 
     // Load dynamic agents
     await this.loadDynamicAgents(streamingLLM);
