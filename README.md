@@ -213,7 +213,7 @@ Widgets appear in the dock's edit interface and can be added to grid rows:
 
 ### Evaluator System
 
-Evaluators automatically analyze and annotate chunks as they are created during agent execution. They provide metadata and insights about chunk content.
+Evaluators automatically analyze and annotate chunks as they are created during agent execution. They provide metadata and insights about chunk content, and enable automatic tool invocation from LLM responses.
 
 #### Backend Evaluators
 
@@ -228,7 +228,26 @@ Evaluators are implemented as classes that implement the `Evaluator` interface:
 - **SimpleEvaluator**: Pure functions wrapped in a class for synchronous evaluation
 - **AgentEvaluator**: Full `LLMAgent` instances for complex LLM-based evaluation (cannot use continuation-supporting agents)
 
-**Example**: `lib/evaluators/MarkdownEvaluator.ts` annotates LLM output chunks with parsed markdown structure
+**Examples**:
+- `lib/evaluators/MarkdownEvaluator.ts`: Annotates LLM output chunks with parsed markdown structure
+- `lib/evaluators/ToolCallDetectionEvaluator.ts`: Detects tool call syntax in LLM responses
+- `lib/evaluators/ToolInvocationEvaluator.ts`: Invokes detected tools and annotates with results
+
+#### Tool Integration via Evaluators
+
+Tools are implemented as evaluators that enable automatic tool calling from LLM responses. This system allows agents to seamlessly invoke tools based on natural language instructions:
+
+- **Tool Detection**: `ToolCallDetectionEvaluator` scans LLM output for tool call syntax (e.g., `<|tool_call|>{ "name": "toolName", "parameters": {...} }<|tool_call_end|>`). It annotates chunks with detected tool calls.
+- **Tool Invocation**: `ToolInvocationEvaluator` uses the detection annotations to invoke the corresponding tools, capturing results and errors. Results are annotated back to the chunk for agent consumption.
+- **Automatic Execution**: Tools run asynchronously when chunks are processed, allowing agents to use tools without explicit programming.
+
+**Example Flow**:
+1. Agent generates LLM response containing tool call syntax
+2. ToolCallDetectionEvaluator detects the call and annotates the chunk
+3. ToolInvocationEvaluator invokes the tool and annotates the result
+4. Agent can use the tool result in subsequent interactions
+
+This evaluator-based tool system provides a clean separation between tool definition, detection, and execution.
 
 #### Integration
 
@@ -239,7 +258,7 @@ Evaluators are called automatically when chunks are added via `agent.addChunk()`
 - Annotations are stored in `chunk.annotations[fqdn]`
 - FQDN-based keys prevent conflicts between evaluators
 
-**Example**: MarkdownEvaluator adds `{parsedMarkdown: [...]}` to LLM output chunk annotations
+**Example**: ToolInvocationEvaluator adds `{toolInvocations: [...], hasToolInvocations: true}` to LLM output chunk annotations
 
 ### Storage Injection
 

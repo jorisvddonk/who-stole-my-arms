@@ -30,6 +30,13 @@ Evaluators are classes that implement the `Evaluator` interface and are automati
 - Cannot use agents that support continuation
 - Example: Analyzing emotional tone or detecting inappropriate content
 
+### Tool Integration Evaluators
+- Specialized evaluators that enable automatic tool invocation from LLM responses
+- Consist of detection and invocation phases for seamless tool calling
+- Allow agents to use tools without explicit programming
+- **ToolCallDetectionEvaluator**: Scans LLM output for tool call syntax and annotates detected calls
+- **ToolInvocationEvaluator**: Executes detected tools and annotates results back to chunks
+
 ## Interface
 
 All evaluators must implement:
@@ -85,6 +92,55 @@ Evaluators enable various automated analysis capabilities:
 - **Domain-Specific**: Create evaluators for specialized domains (e.g., legal, medical)
 - **Business Logic**: Implement company-specific validation rules
 - **Integration**: Connect to external services for advanced analysis
+
+## Tool Integration via Evaluators
+
+Tools in this system are implemented as evaluators that enable automatic tool calling from LLM responses. This architecture provides a clean separation between tool definition, detection, and execution, allowing agents to seamlessly invoke tools based on natural language instructions.
+
+### How Tool Calling Works
+
+1. **LLM Response Generation**: Agent generates response that may include tool call syntax
+2. **Tool Detection**: `ToolCallDetectionEvaluator` scans for `<|tool_call|>...<\tool_call_end|>` patterns
+3. **Annotation**: Detected calls are annotated on the chunk
+4. **Tool Invocation**: `ToolInvocationEvaluator` executes the tools and captures results
+5. **Result Annotation**: Tool outputs are annotated back for agent consumption
+
+### Tool Call Syntax
+
+LLMs are prompted to output tool calls in a structured format:
+
+```
+<|tool_call|>
+{
+  "name": "toolName",
+  "parameters": {
+    "param1": "value1",
+    "param2": 42
+  }
+}
+<|tool_call_end|>
+```
+
+### Evaluator Flow
+
+- **ToolCallDetectionEvaluator**:
+  - Supports: `ChunkType.LlmOutput`
+  - Annotates: `{ toolCalls: [...], hasToolCalls: boolean }`
+  - Detects multiple tool calls per chunk
+
+- **ToolInvocationEvaluator**:
+  - Depends on: ToolCallDetectionEvaluator annotations
+  - Supports: `ChunkType.LlmOutput`
+  - Annotates: `{ toolInvocations: [...], hasToolInvocations: boolean }`
+  - Handles errors and partial failures gracefully
+
+### Benefits
+
+- **Natural Language Tool Use**: Agents can invoke tools via conversational instructions
+- **Asynchronous Execution**: Tools run in parallel without blocking agent flow
+- **Error Handling**: Robust error recovery and result annotation
+- **Extensibility**: New tools integrate seamlessly without agent modification
+- **Separation of Concerns**: Tools defined independently of agent logic
 
 ## Creating Custom Evaluators
 
