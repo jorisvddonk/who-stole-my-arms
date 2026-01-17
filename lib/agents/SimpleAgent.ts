@@ -6,6 +6,8 @@ import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
 import { AgentEvaluator } from '../evaluators/AgentEvaluator';
 import { AnswerQuestionsEvaluator } from '../evaluators/AnswerQuestionsEvaluator';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
 import { FormatterRegistry } from '../formatters';
@@ -39,7 +41,9 @@ export class SimpleAgent extends LLMAgent {
             },
             [ChunkType.Input]
         );
-        this.evaluators = [markdownEvaluator, voiceEvaluator, answerQuestionsEvaluator];
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
+        this.evaluators = [markdownEvaluator, voiceEvaluator, answerQuestionsEvaluator, [toolCallDetectionEvaluator, toolInvocationEvaluator]] as any;
     }
 
     /**

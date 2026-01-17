@@ -39,11 +39,14 @@ describe('EvaluatorManager', () => {
     });
 
     describe('init', () => {
-        test('should initialize without loading evaluators', () => {
+        test('should initialize with tool call evaluators', () => {
             evaluatorManager.init(streamingLLM);
 
             const evaluators = evaluatorManager.getEvaluators();
-            expect(evaluators).toEqual([]);
+            // ToolCallDetectionEvaluator and ToolInvocationEvaluator are registered as a group
+            expect(evaluators.length).toBe(1);
+            expect(Array.isArray(evaluators[0])).toBe(true);
+            expect(evaluators[0].length).toBe(2);
         });
 
         test('should not reinitialize if already initialized', () => {
@@ -54,8 +57,8 @@ describe('EvaluatorManager', () => {
 
             evaluatorManager.init(streamingLLM);
 
-            // Should still have the evaluator
-            expect(evaluatorManager.getEvaluators().length).toBe(1);
+            // Should have tool evaluators (1 group) + the mock evaluator
+            expect(evaluatorManager.getEvaluators().length).toBe(2);
         });
     });
 

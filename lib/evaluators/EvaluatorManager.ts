@@ -2,6 +2,8 @@ import { ChunkType } from '../../interfaces/AgentTypes';
 import { Evaluator } from '../core/Evaluator';
 import { SimpleEvaluator } from './SimpleEvaluator';
 import { AgentEvaluator } from './AgentEvaluator';
+import { ToolCallDetectionEvaluator } from './ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from './ToolInvocationEvaluator';
 import { SentimentAgent } from '../agents/SentimentAgent';
 import { Logger } from '../logging/debug-logger';
 
@@ -40,7 +42,9 @@ export class EvaluatorManager {
 
         this.evaluators = [];
 
-        // TODO: Load dynamic evaluators if needed
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
+        this.evaluators.push([toolCallDetectionEvaluator, toolInvocationEvaluator]);
 
         Logger.debugLog(`EvaluatorManager loaded evaluators: ${Object.keys(this.evaluators).join(', ')}`);
     }

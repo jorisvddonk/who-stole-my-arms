@@ -655,19 +655,11 @@ export class Arena {
         await this.waitForEvaluators(newChunk);
         Logger.debugLog(`- done waiting`);
 
-        // Check the last chunk for parsing
+        const TOOL_INVOCATION_EVALUATOR_FQDN = 'evaluators.ToolInvocationEvaluator';
+
         const lastChunk = task.scratchpad[task.scratchpad.length - 1];
         if (lastChunk.type === ChunkType.LlmOutput && !lastChunk.processed) {
-            let toolCalls: Array<{ name: string; parameters: any }> = [];
             let agentCalls: Array<{ name: string; input: any }> = [];
-            try {
-                toolCalls = Arena.parseToolCalls(lastChunk.content);
-            } catch (e) {
-                const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: `Parse error in toolCalls: ${e}`, processed: true };
-                agent.addChunk(task, errorChunk);
-                this.eventEmitter.emit('parseError', { type: 'toolCalls', error: e, content: lastChunk.content });
-                hasNewErrors = true;
-            }
             try {
                 agentCalls = Arena.parseAgentCalls(lastChunk.content);
             } catch (e) {
@@ -677,67 +669,34 @@ export class Arena {
                 hasNewErrors = true;
             }
 
-            let hasToolCalls = false;
+            const toolInvocationAnnotation = lastChunk.annotations?.[TOOL_INVOCATION_EVALUATOR_FQDN];
+            let hasToolInvocations = false;
 
-            // Process tool calls
-            for (const call of toolCalls) {
-                agent.eventEmitter.emit('toolCall', call);
-                Logger.debugLog(`Executing tool call: ${TOOL_COLOR}${call.name}${RESET} with params: ${JSON.stringify(call.parameters)}`);
-                const toolId = `tool_${task.id}_${call.name}`;
-                if (!this.invocationLog.some(inv => inv.id === toolId)) {
-                    this.invocationLog.push({id: toolId, type: 'tool', name: call.name, parent_id: task.id, params: call.parameters});
-                }
-                const tool = agent.tools[call.name];
-                let toolResult: any;
-                if (tool) {
-                    try {
-                        const toolReturn = await tool.run(call.parameters, { arena: this, task });
-                        let annotations: Record<string, any> | undefined;
+            if (toolInvocationAnnotation && toolInvocationAnnotation.toolInvocations) {
+                for (const invocation of toolInvocationAnnotation.toolInvocations) {
+                    agent.eventEmitter.emit('toolCall', { name: invocation.name, parameters: invocation.parameters });
+                    const toolId = `tool_${task.id}_${invocation.name}`;
+                    if (!this.invocationLog.some(inv => inv.id === toolId)) {
+                        this.invocationLog.push({id: toolId, type: 'tool', name: invocation.name, parent_id: task.id, params: invocation.parameters});
+                    }
 
-                        if (typeof toolReturn === 'object' && toolReturn !== null && 'result' in toolReturn) {
-                            toolResult = toolReturn.result;
-                            if (toolReturn.annotation && toolReturn.annotations) {
-                                throw new Error('Cannot specify both annotation and annotations');
-                            }
-                            if (toolReturn.annotation) {
-                                annotations = { [tool.fqdn]: toolReturn.annotation };
-                            } else if (toolReturn.annotations) {
-                                annotations = toolReturn.annotations;
-                            }
-                        } else {
-                            toolResult = toolReturn;
-                        }
-
-                        Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} output: ${JSON.stringify(toolResult)}`);
-                        const toolResultStr = `<|tool_result|>${JSON.stringify(toolResult)}<|tool_result_end|>`;
+                    if (invocation.success) {
+                        const toolResultStr = `<|tool_result|>${JSON.stringify(invocation.result)}<|tool_result_end|>`;
                         const toolChunk: Chunk = { id: Arena.generateId(), type: ChunkType.ToolOutput, content: toolResultStr, processed: true };
-                        if (annotations) {
-                            toolChunk.annotations = annotations;
-                        }
                         agent.addChunk(task, toolChunk);
-                        hasToolCalls = true;
                         Logger.debugLog(`Tool result: ${toolResultStr}`);
-                    } catch (e) {
-                        const errorContent = `<|error|>Tool ${call.name} failed: ${(e as any).message || e}<|error_end|>`;
+                    } else {
+                        const errorContent = `<|error|>Tool ${invocation.name} failed: ${invocation.error}<|error_end|>`;
                         const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
                         agent.addChunk(task, errorChunk);
-                        this.eventEmitter.emit('parseError', { type: 'toolExecution', error: e, content: call.name });
-                        toolResult = { error: (e as any).message || e };
-                        Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} failed: ${e}`);
+                        this.eventEmitter.emit('parseError', { type: 'toolExecution', error: invocation.error, content: invocation.name });
+                        Logger.debugLog(`Tool ${TOOL_COLOR}${invocation.name}${RESET} failed: ${invocation.error}`);
                         hasNewErrors = true;
                     }
-                } else {
-                    const errorContent = `<|error|>Unknown tool: ${call.name}<|error_end|>`;
-                    const errorChunk = { id: Arena.generateId(), type: ChunkType.Error, content: errorContent, processed: true };
-                    agent.addChunk(task, errorChunk);
-                    this.eventEmitter.emit('parseError', { type: 'toolExecution', error: errorContent, content: call.name });
-                    toolResult = "unknown tool";
-                    Logger.debugLog(`Tool ${TOOL_COLOR}${call.name}${RESET} not found, output: ${JSON.stringify(toolResult)}`);
-                    hasNewErrors = true;
+                    hasToolInvocations = true;
                 }
             }
 
-            // Process agent calls
             for (const call of agentCalls) {
                 if (agent.registeredAgents[call.name] || this.alwaysAllowedAgents.includes(call.name) && this.agents[call.name] || (Object.keys(agent.registeredAgents).length === 0 && this.agents[call.name])) {
                     agent.eventEmitter.emit('agentCall', call);
@@ -795,11 +754,11 @@ export class Arena {
                     Logger.debugLog(`Created ErrorAgent task ${errorTask.id} for exhausted task ${task.id} (${reason})`);
                     Logger.globalLog(`\x1b[31mERROR: Task ${task.id} failed - ${reason}\x1b[0m`);
                 }
-            } else if (hasToolCalls) {
+            } else if (hasToolInvocations) {
                 // Re-queue task
                 this.taskQueue.push(task);
                 Logger.debugLog(`Re-queued task ${task.id} after tool calls`);
-            } else if (toolCalls.length === 0 && agentCalls.length === 0) {
+            } else if (!hasToolInvocations && agentCalls.length === 0) {
                 const agent = this.agents[task.agent_name];
                 if (agent && agent.supportsContinuation && isInteractive) {
                     Logger.debugLog(`Continuation agent task ${task.id} provided response, waiting for more input`);
