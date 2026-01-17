@@ -32,7 +32,7 @@ export class ExampleErrorToolAgent extends LLMAgent {
 Available tools:
 ${Object.values(this.tools).map(tool => tool.prompt).join('\n\n')}
 
-Current task input: ${JSON.stringify(task.input)}
+Current task input: ${this.getInputText(task)}
 
 Scratchpad history:
 ${scratchpadContent}

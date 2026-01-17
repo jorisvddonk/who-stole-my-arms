@@ -3,7 +3,7 @@ import { Task } from '../../interfaces/AgentTypes';
 
 export class DieTool extends Tool {
   name = 'roll_die';
-  description = 'Roll a die with the specified number of sides. Returns a random number between 1 and the number of sides.';
+  description = 'Roll a die with the specified number of sides. Returns only the roll result as a random number between 1 and the number of sides. Does not perform any calculations or modifications.';
 
   parameters = {
     type: 'object' as const,
@@ -19,7 +19,7 @@ export class DieTool extends Tool {
   };
 
   prompt = `Tool: roll_die
-Description: Roll a die with the specified number of sides. Returns a random number between 1 and the number of sides.
+Description: Roll a die with the specified number of sides. Returns only the roll result as a random number between 1 and the number of sides. Does not perform any calculations or modifications.
 Parameters: ${JSON.stringify(this.parameters.properties)}`;
 
   async run(parameters: any, context?: { arena: any, task: Task }): Promise<{ roll: number; sides: number }> {

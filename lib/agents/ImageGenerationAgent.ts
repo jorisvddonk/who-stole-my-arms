@@ -30,7 +30,7 @@ export class ImageGenerationAgent extends LLMAgent {
   }
 
   async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
-    const inputText = typeof task.input === 'string' ? task.input : (task.input as any)?.content || '';
+    const inputText = this.getInputText(task);
     Logger.debugLog(`[ImageGenerationAgent] Starting task ${task.id} with input: ${inputText?.substring(0, 100)}${inputText && inputText.length > 100 ? '...' : ''}`);
     this.currentTask = task;
     this.hasToolCallResult = false;

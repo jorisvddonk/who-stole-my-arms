@@ -16,7 +16,7 @@ export class ErrorAgent extends LLMAgent {
 
         const prompt = `You are the ErrorAgent, specialized in summarizing errors in a neutral, human-readable way.
 
-Current task input (error details): ${JSON.stringify(task.input)}
+Current task input (error details): ${this.getInputText(task)}
 
 Scratchpad history:
 ${scratchpadContent}

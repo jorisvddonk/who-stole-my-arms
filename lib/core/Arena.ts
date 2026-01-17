@@ -239,7 +239,11 @@ export class Arena {
                 } else if (Array.isArray(e)) {
                     agentInstances.push(e);
                     for (const sub of e) {
-                        agentEvalFqdns.add(sub.fqdn);
+                        if (typeof sub === 'string') {
+                            agentEvalFqdns.add(sub);
+                        } else {
+                            agentEvalFqdns.add(sub.fqdn);
+                        }
                     }
                 } else {
                     agentInstances.push(e);
@@ -515,7 +519,8 @@ export class Arena {
      */
     async run_agent(task: Task): Promise<string | {content: string, annotation?: any, annotations?: Record<string, any>}> {
         if (!this.invocationLog.some(inv => inv.id === task.id)) {
-            this.invocationLog.push({id: task.id, type: 'agent', name: task.agent_name, parent_id: task.parent_task_id, params: task.input});
+            const params = task.inputChunks ? task.inputChunks.map(c => c.content).join(' ') : '';
+            this.invocationLog.push({id: task.id, type: 'agent', name: task.agent_name, parent_id: task.parent_task_id, params});
         }
 
         const agent = this.agents[task.agent_name] || (task.agent_name === 'ErrorAgent' ? new ErrorAgent(this.streamingLLM, this) : null);
@@ -715,12 +720,13 @@ export class Arena {
                 if (agent.registeredAgents[call.name] || this.alwaysAllowedAgents.includes(call.name) && this.agents[call.name] || (Object.keys(agent.registeredAgents).length === 0 && this.agents[call.name])) {
                     agent.eventEmitter.emit('agentCall', call);
                     Logger.debugLog(`Creating agent call: ${AGENT_COLOR}${call.name}${RESET} with input: ${JSON.stringify(call.input)}`);
+                    const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true };
                     const childTask: Task = {
                         id: Arena.generateId(),
                         agent_name: call.name,
-                        input: call.input,
+                        inputChunks: [inputChunk],
                         parent_task_id: task.id,
-                        scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: JSON.stringify(call.input), processed: true }],
+                        scratchpad: [inputChunk],
                         retryCount: 0,
                         executionCount: 0,
                         sessionId: this.sessionId
@@ -750,12 +756,13 @@ export class Arena {
                 } else {
                     const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
                     const errorDetails = `${reason}\n${task.scratchpad.filter(c => c.type === ChunkType.Error).map(c => c.content).join('\n')}`;
+                    const errorChunk = { id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true };
                     const errorTask: Task = {
                         id: Arena.generateId(),
                         agent_name: 'ErrorAgent',
-                        input: errorDetails,
+                        inputChunks: [errorChunk],
                         parent_task_id: task.id,
-                        scratchpad: [{ id: Arena.generateId(), type: ChunkType.Input, content: errorDetails, processed: true }],
+                        scratchpad: [errorChunk],
                         retryCount: 0,
                         executionCount: 0,
                         sessionId: this.sessionId

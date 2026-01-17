@@ -35,6 +35,8 @@ export class AgentEvaluator extends Evaluator {
     private preconditionFunction?: (chunk: Chunk, arena: any, agent?: any) => Promise<boolean>;
     /** Option for copying chunks from evaluated task back to calling agent */
     private copyChunks: CopyChunksOption;
+    /** Optional function to select chunks for agent input */
+    private chunkSelection?: (chunk: Chunk, arena: any, agent?: any) => Chunk[];
     /** Event emitter for handling evaluator events */
     eventEmitter: EventEmitter = new EventEmitter();
 
@@ -47,20 +49,22 @@ export class AgentEvaluator extends Evaluator {
        * @param copyChunks Option for copying chunks from evaluated task back to calling agent (default: NONE).
        * @param fqdn Optional FQDN override for this evaluator.
        */
-     constructor(
-         agentFactory: (streamingLLM: StreamingLLMInvoke, arena: any) => LLMAgent,
-         streamingLLM: StreamingLLMInvoke,
-         supportedChunkTypes: ChunkType[],
-         preconditionFunction?: (chunk: Chunk, arena: any, agent?: any) => Promise<boolean>,
-         copyChunks: CopyChunksOption = CopyChunksOption.NONE,
-         fqdn?: string
-     ) {
+      constructor(
+          agentFactory: (streamingLLM: StreamingLLMInvoke, arena: any) => LLMAgent,
+          streamingLLM: StreamingLLMInvoke,
+          supportedChunkTypes: ChunkType[],
+          preconditionFunction?: (chunk: Chunk, arena: any, agent?: any) => Promise<boolean>,
+          copyChunks: CopyChunksOption = CopyChunksOption.NONE,
+          chunkSelection?: (chunk: Chunk, arena: any, agent?: any) => Chunk[],
+          fqdn?: string
+      ) {
         super();
         this.agentFactory = agentFactory;
         this.streamingLLM = streamingLLM;
         this.supportedChunkTypes = supportedChunkTypes;
         this.preconditionFunction = preconditionFunction;
         this.copyChunks = copyChunks;
+        this.chunkSelection = chunkSelection;
          this.fqdn = fqdn || `evaluators.${this.constructor.name}`;
 
          // Validate that the agent doesn't support continuation
@@ -98,14 +102,15 @@ export class AgentEvaluator extends Evaluator {
          }
 
          return new Promise((resolve) => {
-             // Create task with chunk as input
-             const parentTaskId = agent?.currentTask?.id || null;
-             Logger.debugLog(`[${this.fqdn}] Creating task with parent_task_id: ${parentTaskId}`);
-             const task: Task = {
-                 id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-                 agent_name: agentInstance.constructor.name,
-                 input: chunk,
-                parent_task_id: parentTaskId,
+              // Create task with selected chunks as input
+              const parentTaskId = agent?.currentTask?.id || null;
+              Logger.debugLog(`[${this.fqdn}] Creating task with parent_task_id: ${parentTaskId}`);
+              const selectedChunks = this.chunkSelection ? this.chunkSelection(chunk, arena, agent) : [chunk];
+              const task: Task = {
+                  id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                  agent_name: agentInstance.constructor.name,
+                  inputChunks: selectedChunks,
+                 parent_task_id: parentTaskId,
                 scratchpad: [],
                 retryCount: 0,
                 executionCount: 0,
@@ -149,15 +154,15 @@ export class AgentEvaluator extends Evaluator {
                                 const parentTask = arena.taskStore[task.parent_task_id];
                                 if (parentTask) {
                                     Logger.debugLog(`[${this.fqdn}] Parent task ${parentTask.id} found, copying chunks`);
-                                    if (this.copyChunks === CopyChunksOption.ALL_LLMOUTPUT) {
-                                        for (const chunk of llmOutputChunks) {
-                                            const copiedChunk = { ...chunk, id: Arena.generateId() };
-                                            parentTask.scratchpad.push(copiedChunk);
-                                            Logger.debugLog(`[${this.fqdn}] Copied chunk ${chunk.id} to parent task ${parentTask.id}`);
-                                        }
-                                    } else if (this.copyChunks === CopyChunksOption.LAST_LLMOUTPUT && llmOutputChunks.length > 0) {
-                                        const lastChunk = llmOutputChunks[llmOutputChunks.length - 1];
-                                        const copiedChunk = { ...lastChunk, id: Arena.generateId() };
+                                     if (this.copyChunks === CopyChunksOption.ALL_LLMOUTPUT) {
+                                         for (const chunk of llmOutputChunks) {
+                                             const copiedChunk = { ...chunk, id: Arena.generateId(), producer: agentInstance.fqdn };
+                                             parentTask.scratchpad.push(copiedChunk);
+                                             Logger.debugLog(`[${this.fqdn}] Copied chunk ${chunk.id} to parent task ${parentTask.id}`);
+                                         }
+                                      } else if (this.copyChunks === CopyChunksOption.LAST_LLMOUTPUT && llmOutputChunks.length > 0) {
+                                          const lastChunk = llmOutputChunks[llmOutputChunks.length - 1];
+                                          const copiedChunk = { ...lastChunk, id: Arena.generateId(), producer: agentInstance.fqdn };
                                         parentTask.scratchpad.push(copiedChunk);
                                         Logger.debugLog(`[${this.fqdn}] Copied last chunk ${lastChunk.id} to parent task ${parentTask.id}`);
                                     }

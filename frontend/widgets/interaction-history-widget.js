@@ -213,7 +213,7 @@ export class InteractionHistoryWidget extends LitElement {
         ${Object.values(tasks).map(task => html`
           <li class="task-item ${this.hoveredTaskId === task.id ? 'highlighted' : ''} ${this.expandedTaskId === task.id ? 'expanded' : ''}" @click=${(e) => { if (!window.getSelection().toString()) this.toggleExpanded(task.id); }}>
             <strong>${task.id}</strong> - Agent: <span style="color: ${this.getAgentColor(task.agent_name)}">${task.agent_name}</span>${task.taskType ? ` [${task.taskType}]` : ''}, Parent: ${task.parent_task_id || 'none'}, Retries: ${task.retryCount}
-            <br>Input: ${JSON.stringify(task.input).slice(0, 100)}${JSON.stringify(task.input).length > 100 ? '...' : ''}
+            <br>Input: ${JSON.stringify(task.inputChunks || task.input).slice(0, 100)}${JSON.stringify(task.inputChunks || task.input).length > 100 ? '...' : ''}
             <br>Scratchpad: ${task.scratchpad.length} chunks
             ${this.expandedTaskId === task.id ? this.renderTaskDetails(task) : ''}
           </li>
@@ -230,12 +230,12 @@ export class InteractionHistoryWidget extends LitElement {
     return html`
       <div class="task-details">
         <h4>Full Details</h4>
-        <p><strong>Input:</strong> ${JSON.stringify(task.input, null, 2)}</p>
+        <p><strong>Input:</strong> ${JSON.stringify(task.inputChunks || task.input, null, 2)}</p>
         <p><strong>Scratchpad:</strong></p>
         <ul>
           ${task.scratchpad.map((chunk, index) => html`
             <li>
-              <strong>${index}:</strong> <span style="color: ${this.getChunkTypeColor(chunk.type)}">${chunk.type}</span> (${chunk.processed ? '✓' : '✗'}) - ${chunk.content}
+              <strong>${index}:</strong> <span style="color: ${this.getChunkTypeColor(chunk.type)}">${chunk.type}</span> (${chunk.processed ? '✓' : '✗'})${chunk.producer ? ` [${chunk.producer}]` : ''} - ${chunk.content}
               ${chunk.annotations ? html`<br><strong>Annotations:</strong> <pre>${JSON.stringify(chunk.annotations, null, 2)}</pre>` : ''}
             </li>
           `)}

@@ -43,6 +43,8 @@ export interface Chunk {
     parentChunkId?: string;
     /** Optional metadata annotations added by evaluators */
     annotations?: Record<string, any>;
+    /** Optional producer FQDN that created this chunk */
+    producer?: string;
 }
 
 /**
@@ -54,8 +56,8 @@ export interface Task {
     id: string;
     /** Name of the agent responsible for executing this task */
     agent_name: string;
-    /** Input data provided to the agent */
-    input: any;
+    /** Input chunks provided to the agent */
+    inputChunks: Chunk[];
     /** ID of the parent task, null for root tasks */
     parent_task_id: string | null;
     /** Array of chunks containing the task's data and conversation history */

@@ -20,17 +20,18 @@
               },
               [ChunkType.Input]
           );
-         const combatEvaluator = new AgentEvaluator(
-             (streamingLLM, arena) => new CombatAgent(streamingLLM, arena),
-             streamingLLM,
-             [ChunkType.Input],
-             async (chunk: Chunk, arena: any, agent?: any) => {
-                 const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
-                 return answers['isCombatScenario'] === true;
-             },
-             CopyChunksOption.LAST_LLMOUTPUT
-         );
-          const mathEvaluator = new AgentEvaluator(
+          const combatEvaluator = new AgentEvaluator(
+              (streamingLLM, arena) => new CombatAgent(streamingLLM, arena),
+              streamingLLM,
+              [ChunkType.Input],
+              async (chunk: Chunk, arena: any, agent?: any) => {
+                  const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
+                  return answers['isCombatScenario'] === true;
+              },
+              CopyChunksOption.LAST_LLMOUTPUT,
+              (chunk: Chunk, arena: any, agent?: any) => [chunk]
+          );
+           const mathEvaluator = new AgentEvaluator(
               (streamingLLM, arena) => new MathAgent(streamingLLM, arena),
               streamingLLM,
               [ChunkType.Input],
@@ -38,7 +39,12 @@
                   const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
                   return answers['requiresMath'] === true;
               },
-              CopyChunksOption.LAST_LLMOUTPUT
+              CopyChunksOption.LAST_LLMOUTPUT,
+              (chunk: Chunk, arena: any, agent?: any) => {
+                  const original = [chunk];
+                  const rollChunks = agent?.currentTask?.scratchpad?.filter((c: Chunk) => c.producer === 'agents.DieRollerAgent') || [];
+                  return [...original, ...rollChunks];
+              }
           );
           const dieRollerEvaluator = new AgentEvaluator(
               (streamingLLM, arena) => new DieRollerAgent(streamingLLM, arena),
@@ -48,7 +54,8 @@
                   const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
                   return answers['requiresDiceRoll'] === true;
               },
-              CopyChunksOption.LAST_LLMOUTPUT
+              CopyChunksOption.LAST_LLMOUTPUT,
+              (chunk: Chunk, arena: any, agent?: any) => [chunk]
           );
           this.evaluators = [[answerQuestionsEvaluator, dieRollerEvaluator, mathEvaluator, combatEvaluator]];
      }

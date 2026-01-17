@@ -177,47 +177,37 @@ export abstract class LLMAgent {
     /**
      * Extracts the input text from the task.
      * @param task The task to extract input from.
-     * @returns The input text, either from the last input chunk or the task's input field.
+     * @returns The input text from inputChunks or scratchpad.
      */
     protected getInputText(task: Task): string {
+        // Use inputChunks if available
+        if (task.inputChunks && task.inputChunks.length > 0) {
+            return task.inputChunks.map(chunk => chunk.content).join('\n');
+        }
+        // Fallback to scratchpad input chunks
         const inputs = task.scratchpad.filter(c => c.type === ChunkType.Input);
         if (inputs.length > 0) {
-            // Use the content of the last input chunk
             return inputs[inputs.length - 1].content;
-        } else {
-            // Fallback to task.input
-            const input = task.input;
-            if (typeof input === 'object' && input !== null && 'content' in input) {
-                return input.content;
-            } else if (typeof input === 'object' && input !== null && 'text' in input) {
-                return input.text;
-            } else {
-                return JSON.stringify(input);
-            }
         }
+        return '';
     }
 
     /**
      * Extracts the last input text or tool output from the task.
      * @param task The task to extract input from.
-     * @returns The input text or tool output, either from the last input/tooloutput chunk or the task's input field.
+     * @returns The input text or tool output from inputChunks or scratchpad.
      */
     protected getInputTextOrToolOutput(task: Task): string {
+        // Use inputChunks if available
+        if (task.inputChunks && task.inputChunks.length > 0) {
+            return task.inputChunks.map(chunk => chunk.content).join('\n');
+        }
+        // Fallback to scratchpad
         const inputs = task.scratchpad.filter(c => (c.type === ChunkType.Input || c.type === ChunkType.ToolOutput));
         if (inputs.length > 0) {
-            // Use the content of the last chunk
             return inputs[inputs.length - 1].content;
-        } else {
-            // Fallback to task.input
-            const input = task.input;
-            if (typeof input === 'object' && input !== null && 'content' in input) {
-                return input.content;
-            } else if (typeof input === 'object' && input !== null && 'text' in input) {
-                return input.text;
-            } else {
-                return JSON.stringify(input);
-            }
         }
+        return '';
     }
 
     /**

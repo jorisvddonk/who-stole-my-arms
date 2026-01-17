@@ -72,25 +72,25 @@ async function handle_user_input(text: string, arena: Arena, isInteractive: bool
 
     if (!arena.currentContinuationTask) {
         // Create new root task
+        const inputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: text, processed: true };
         const rootTask: Task = {
             id: Arena.generateId(),
             agent_name: ROOT_AGENT_NAME,
-            input: text,
+            inputChunks: [inputChunk],
             parent_task_id: null,
-            scratchpad: [],
+            scratchpad: [inputChunk],
             retryCount: 0
         };
         Logger.debugLog(`Created root task ${rootTask.id} (${AGENT_COLOR}${rootTask.agent_name}${RESET})`);
         arena.taskStore[rootTask.id] = rootTask;
 
         // Add input chunk (triggers evaluators synchronously)
-        const inputChunk = { type: ChunkType.Input, content: text, processed: true };
         arena.addInputChunk(rootTask, inputChunk);
         arena.currentContinuationTask = rootTask;
         arena.taskQueue.push(rootTask);
     } else {
         // Append to existing scratchpad and re-queue
-        const newInputChunk = { type: ChunkType.Input, content: text, processed: true };
+        const newInputChunk = { id: Arena.generateId(), type: ChunkType.Input, content: text, processed: true };
         arena.agents[ROOT_AGENT_NAME].addChunk(arena.currentContinuationTask, newInputChunk);
         arena.taskQueue.push(arena.currentContinuationTask);
         Logger.debugLog(`Appended new input to existing continuation task ${arena.currentContinuationTask!.id}`);
@@ -166,7 +166,7 @@ async function startDebugRepl(arena: Arena) {
                             console.log(`  \x1b[36m├──\x1b[0m Parent: \x1b[90m${task.parent_task_id || 'none'}\x1b[0m`);
                             console.log(`  \x1b[36m├──\x1b[0m Retry Count: \x1b[1;33m${task.retryCount}\x1b[0m`);
                             console.log(`  \x1b[36m├──\x1b[0m Input:\x1b[0m`);
-                            console.log(`  \x1b[36m│\x1b[0m   \x1b[35m${JSON.stringify(task.input, null, 2).replace(/\n/g, '\n  \x1b[36m│\x1b[0m   \x1b[35m')}\x1b[0m`);
+                            console.log(`  \x1b[36m│\x1b[0m   \x1b[35m${JSON.stringify(task.inputChunks, null, 2).replace(/\n/g, '\n  \x1b[36m│\x1b[0m   \x1b[35m')}\x1b[0m`);
                             console.log(`  \x1b[36m└──\x1b[0m Scratchpad:\x1b[0m`);
                             if (task.scratchpad.length === 0) {
                                 console.log(`      \x1b[33m(empty)\x1b[0m`);
