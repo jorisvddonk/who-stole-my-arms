@@ -10,10 +10,30 @@ Evaluators are classes that implement the `Evaluator` interface and are automati
 
 ## How It Works
 
-1. **Registration**: Evaluators are registered with the `EvaluatorManager` singleton
+1. **Registration**: Evaluators are registered with the `EvaluatorManager` as groups: single evaluators or arrays for sequences
 2. **Triggering**: When an agent calls `addChunk()`, chunk events are emitted
-3. **Execution**: All evaluators that support the chunk's type run in parallel
+3. **Execution**: Evaluators run in nested parallel-sequential fashion:
+   - Top-level groups execute in parallel
+   - Evaluators within each group run sequentially
 4. **Annotation**: Results are stored in `chunk.annotations[fqdn]`
+
+## Sequences and Parallelism
+
+The evaluator system uses nested arrays to define execution patterns:
+
+- **Parallel Execution**: Top-level array elements (groups) run concurrently
+- **Sequential Execution**: Within each group (inner array), evaluators run one after another
+- **Group Types**:
+  - Single evaluator: `[foo]` - runs alone in its group
+  - Sequential group: `[foo, bar, baz]` - runs foo → bar → baz sequentially
+  - Mixed configuration: `[[foo, bar], [baz, quux]]` - runs (foo → bar) and (baz → quux) in parallel
+
+**Registration Examples**:
+- `registerEvaluator(foo); registerEvaluator(bar); registerEvaluator(baz)` → `[[foo], [bar], [baz]]` → runs foo, bar, baz in parallel
+- `registerEvaluator([foo, bar, baz])` → `[[foo, bar, baz]]` → runs foo → bar → baz sequentially
+- `registerEvaluator([foo, bar]); registerEvaluator([baz, quux])` → `[[foo, bar], [baz, quux]]` → runs (foo → bar) and (baz → quux) in parallel
+
+This enables reactive chains where dependent evaluators (e.g., tool invocation after detection) run sequentially, while independent chains execute in parallel.
 
 ## Evaluator Types
 
@@ -178,9 +198,16 @@ const sentimentEvaluator = new AgentEvaluator(
 
 ## Integration
 
-Evaluators are automatically integrated when agents add chunks:
+Evaluators are automatically integrated when agents add chunks, respecting the nested execution structure:
 
 ```typescript
+// Register parallel groups: one sequence + one single
+evaluatorManager.registerEvaluator([toolCallDetectionEvaluator, toolInvocationEvaluator]);
+evaluatorManager.registerEvaluator(lengthEvaluator);
+
+// Results in: [[toolCallDetectionEvaluator, toolInvocationEvaluator], [lengthEvaluator]]
+// Execution: (detection → invocation) || lengthEvaluator
+
 // In an agent
 this.addChunk({
     type: ChunkType.Text,
@@ -188,8 +215,11 @@ this.addChunk({
     timestamp: Date.now()
 });
 
-// Evaluators run automatically, adding annotations like:
-// chunk.annotations['evaluators.LengthEvaluator'] = { chars: 12, words: 2 }
+// Evaluators run automatically:
+// - toolCallDetectionEvaluator runs first in its sequence
+// - toolInvocationEvaluator runs after, using detection results
+// - lengthEvaluator runs in parallel
+// Annotations: chunk.annotations['evaluators.ToolInvocationEvaluator'] = {...}, etc.
 ```
 
 ## Management
