@@ -57,7 +57,7 @@
               CopyChunksOption.LAST_LLMOUTPUT,
               (chunk: Chunk, arena: any, agent?: any) => [chunk]
           );
-          this.evaluators = [[answerQuestionsEvaluator, dieRollerEvaluator, mathEvaluator, combatEvaluator]];
+          this.evaluators = [[answerQuestionsEvaluator, dieRollerEvaluator, mathEvaluator]];
      }
 
      async buildPrompt(task: Task): Promise<string> {

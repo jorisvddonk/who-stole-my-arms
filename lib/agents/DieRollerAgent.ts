@@ -39,9 +39,18 @@ ${scratchpadContent}
 `;
 
         if (toolResults.length === 0) {
-            prompt += `Roll the requested die using the roll_die tool. Only roll the die - do not perform any calculations or modifications.
+            prompt += `You are a specialized dice rolling agent. Your ONLY job is to roll dice - do not perform any calculations, additions, or modifications.
 
-To call a tool, use the format: <|tool_call|>{"name": "roll_die", "parameters": {...}}<|tool_call_end|>
+Analyze the user input to determine what die to roll. Look for patterns like "d20", "d6", etc.
+
+Examples:
+- "roll a d20" → roll_die with sides=20
+- "roll 2d6" → this is not supported, just roll one die based on the type mentioned
+- "roll a die" → assume d6
+
+Call the roll_die tool with the appropriate number of sides. Do not explain, just call the tool.
+
+To call a tool, use the format: <|tool_call|>{"name": "roll_die", "parameters": {"sides": NUMBER}}<|tool_call_end|>
 
 Available tools:
 - roll_die: Roll a die with specified number of sides. Returns only the roll result.`;
