@@ -1,11 +1,18 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { ChunkType, Task } from '../../interfaces/AgentTypes';
 import { RollDiceTool } from '../tools/battle/RollDiceTool';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 
 export class CombatAgent extends LLMAgent {
     constructor(streamingLLM: any, arena: any) {
         super(streamingLLM, arena);
         this.registerTool(new RollDiceTool());
+
+        // Set up evaluators for tool invocation
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
+        this.evaluators = [[toolCallDetectionEvaluator, toolInvocationEvaluator]];
     }
 
     async buildPrompt(task: Task): Promise<string> {

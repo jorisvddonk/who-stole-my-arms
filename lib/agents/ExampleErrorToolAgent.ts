@@ -1,6 +1,8 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { Task } from '../../interfaces/AgentTypes';
 import { ErrorTool } from '../tools/error-tool';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 
 /**
  * Example agent that always invokes the ErrorTool.
@@ -10,6 +12,11 @@ export class ExampleErrorToolAgent extends LLMAgent {
         super(streamingLLM, arena);
         // Register the ErrorTool
         this.registerTool(new ErrorTool());
+
+        // Set up evaluators for tool invocation
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
+        this.evaluators = [[toolCallDetectionEvaluator, toolInvocationEvaluator]];
     }
 
     /**

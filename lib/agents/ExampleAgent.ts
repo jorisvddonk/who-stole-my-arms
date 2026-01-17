@@ -1,6 +1,8 @@
 import { LLMAgent } from '../core/LLMAgent';
 import { ChunkType, Task } from '../../interfaces/AgentTypes';
 import { ExampleTool } from '../tools/example-tool';
+import { ToolCallDetectionEvaluator } from '../evaluators/ToolCallDetectionEvaluator';
+import { ToolInvocationEvaluator } from '../evaluators/ToolInvocationEvaluator';
 
 export class ExampleAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
@@ -8,6 +10,11 @@ export class ExampleAgent extends LLMAgent {
     constructor(streamingLLM: any, arena: any) {
         super(streamingLLM, arena);
         this.tools['example'] = new ExampleTool();
+
+        // Set up evaluators for tool invocation
+        const toolCallDetectionEvaluator = new ToolCallDetectionEvaluator();
+        const toolInvocationEvaluator = new ToolInvocationEvaluator();
+        this.evaluators = [[toolCallDetectionEvaluator, toolInvocationEvaluator]];
     }
 
     async buildPrompt(task: Task): Promise<string> {
