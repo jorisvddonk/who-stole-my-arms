@@ -1,5 +1,6 @@
-// Configuration: Set to true to use OpenRouter, false to use KoboldCPP
+// Configuration: Set to true to use OpenRouter, false to use KoboldCPP, or 'llama' to use LlamaCpp
 const USE_OPENROUTER = false;
+const USE_LLAMACPP = true;
 const ROOT_AGENT_NAME = 'RPGGameMasterAgent';
 
 // Enable debugging if --debug flag is set
@@ -11,6 +12,7 @@ if (process.argv.includes('--debug')) {
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { OpenRouterAPI } from "./lib/llm-api/OpenRouterAPI.js";
+import { LlamaCppOpenAI } from "./lib/llm-api/LlamaCppOpenAI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { applyStorageMiddleware } from "./lib/middleware/database.js";
@@ -20,6 +22,7 @@ import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
+import { LlamaCppSettingsTool } from "./lib/tools/llama-settings-tool.js";
 import { ComfyUISettingsTool } from "./lib/tools/comfyui-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
@@ -60,6 +63,9 @@ const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, USE_OPENROUT
 const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_OPENROUTER ? (settings) => {
   api.updateSettings(settings);
 } : undefined);
+const llamaSettingsTool = new LlamaCppSettingsTool(toolboxCollector, USE_LLAMACPP ? (settings) => {
+  api.updateSettings(settings);
+} : undefined);
 const comfyuiSettingsTool = new ComfyUISettingsTool(toolboxCollector);
 const osMetricsTool = new OsMetricsTool(toolboxCollector);
 const imageDisplayTool = new ImageDisplayTool(toolboxCollector);
@@ -73,14 +79,19 @@ const dockManager = new DockManager(toolboxCollector);
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 await dbManager.registerGlobalComponent(openRouterSettingsTool);
+await dbManager.registerGlobalComponent(llamaSettingsTool);
 await dbManager.registerGlobalComponent(comfyuiSettingsTool);
 
 // Create API after settings are loaded
 let baseApi;
 try {
-  baseApi = USE_OPENROUTER
-    ? new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings())
-    : new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+  if (USE_OPENROUTER) {
+    baseApi = new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings());
+  } else if (USE_LLAMACPP) {
+    baseApi = new LlamaCppOpenAI(llamaSettingsTool.getSettings().baseUrl, llamaSettingsTool.getSettings().model, llamaSettingsTool.getSettings());
+  } else {
+    baseApi = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+  }
 } catch (error) {
   console.error('Failed to initialize LLM API:', error);
   baseApi = null;
@@ -128,6 +139,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   openRouterSettingsTool,
+  llamaSettingsTool,
   comfyuiSettingsTool,
   formatterSettingsTool,
   autoScrollSettingsTool,
@@ -724,14 +736,17 @@ const routeGroups = [
           }
         }),
 
-       "/llm/settings": (req) => {
-         // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
-         const supportsStreaming = api instanceof Object && 'generateStream' in api;
-         return new Response(JSON.stringify({
-           supportsStreaming,
-           model: USE_OPENROUTER ? 'OpenRouter' : 'KoboldCPP'
-         }), { headers: { 'Content-Type': 'application/json' } });
-       },
+"/llm/settings": (req) => {
+          // Check if the API supports streaming by checking if it's an instance of StreamingLLMInvoke
+          const supportsStreaming = api instanceof Object && 'generateStream' in api;
+          let modelProvider = 'KoboldCPP';
+          if (USE_OPENROUTER) modelProvider = 'OpenRouter';
+          else if (USE_LLAMACPP) modelProvider = 'LlamaCpp';
+          return new Response(JSON.stringify({
+            supportsStreaming,
+            model: modelProvider
+          }), { headers: { 'Content-Type': 'application/json' } });
+        },
       "/llm/info": async (req) => {
         try {
           const [version, model, maxContext, perf] = await Promise.all([
