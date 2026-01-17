@@ -173,7 +173,7 @@ export class GenerateImageTool extends Tool {
         filename: outputFilename || "test123.png",
         subfolder: "test",
         type: "output",
-        path: path.join(process.cwd(), 'generated', 'images', outputFilename || "test123.png")
+        path: path.join(outputFolder, outputFilename || "test123.png")
       }];
     }
 

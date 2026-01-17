@@ -1,7 +1,6 @@
 import { ToolboxTool } from "../../interfaces/ToolboxTool.js";
 import { HasStorage, Storage } from "../../interfaces/Storage.js";
 import * as path from 'path';
-import * as os from 'os';
 
 interface ComfyUISettings {
   host: string;
@@ -23,7 +22,7 @@ export class ComfyUISettingsTool implements ToolboxTool, HasStorage {
       host: 'localhost',
       port: 8188,
       workflowPath: './config/comfyui-workflow.json',
-      outputFolder: path.join(os.homedir(), 'ComfyUI', 'output'),
+      outputFolder: path.join(process.cwd(), 'generated', 'images'),
       debugBypass: false
     };
   }

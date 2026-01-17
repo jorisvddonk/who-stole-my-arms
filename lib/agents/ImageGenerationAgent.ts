@@ -43,8 +43,15 @@ export class ImageGenerationAgent extends LLMAgent {
           const imagePath = result[0].path;
           const filename = result[0].filename;
           Logger.debugLog(`[ImageGenerationAgent] Image generated successfully: ${filename} at ${imagePath}`);
+
+          // Extract relative path from cwd for URL
+          const cwd = process.cwd();
+          const relativePath = imagePath.startsWith(cwd)
+            ? imagePath.slice(cwd.length + 1) // Remove cwd + leading slash
+            : filename;
+
           return {
-            content: `Image generated: /images/${imagePath}`,
+            content: `Image generated: /images/${relativePath}`,
             annotations: {
               'tool.image.result': result,
               'tool.image.file': imagePath
