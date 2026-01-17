@@ -2,6 +2,7 @@ import { LLMAgent } from '../core/LLMAgent';
 import { Task, ChunkType } from '../../interfaces/AgentTypes';
 import { ComfyUISettingsTool } from '../tools/comfyui-settings-tool';
 import { GenerateImageTool } from '../tools/GenerateImageTool';
+import { Logger } from '../logging/debug-logger';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -23,6 +24,7 @@ export class ImageGenerationAgent extends LLMAgent {
   }
 
   async run(task: Task): Promise<string | { content: string, annotation?: any, annotations?: Record<string, any> }> {
+    Logger.debugLog(`[ImageGenerationAgent] Starting task ${task.id} with input: ${task.input?.substring(0, 100)}${task.input && task.input.length > 100 ? '...' : ''}`);
     this.currentTask = task;
     this.hasToolCallResult = false;
     this.toolCallResultInput = '';
@@ -33,13 +35,14 @@ export class ImageGenerationAgent extends LLMAgent {
     const prompt = await this.buildPrompt(task);
 
     if (this.hasToolCallResult) {
-      console.log('Tool call result:', this.toolCallResultInput);
+      Logger.debugLog(`[ImageGenerationAgent] Processing tool call result`);
       const jsonMatch = this.toolCallResultInput.match(/<\|tool_result\|>(.*)<\|tool_result_end\|>/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[1]);
         if (Array.isArray(result) && result.length > 0) {
           const imagePath = result[0].path;
           const filename = result[0].filename;
+          Logger.debugLog(`[ImageGenerationAgent] Image generated successfully: ${filename} at ${imagePath}`);
           return {
             content: `Image generated: /images/${imagePath}`,
             annotations: {
@@ -49,6 +52,7 @@ export class ImageGenerationAgent extends LLMAgent {
           };
         }
       }
+      Logger.debugLog(`[ImageGenerationAgent] No valid image result found in tool call response`);
       return { content: this.toolCallResultInput };
     }
 
@@ -77,6 +81,7 @@ Provide a vivid, detailed description of the scene that would be suitable for im
 
 Description:`
     );
+    Logger.debugLog(`[ImageGenerationAgent] Generated scene description: ${this.sceneDescription.substring(0, 200)}${this.sceneDescription.length > 200 ? '...' : ''}`);
 
     this.positivePrompt = await this.generateStreamingResponse(
       `Convert this scene description into a detailed Stable Diffusion image generation prompt.
@@ -92,6 +97,7 @@ Guidelines for positive prompts:
 
 Generate ONLY the positive prompt, no explanations:`
     );
+    Logger.debugLog(`[ImageGenerationAgent] Generated positive prompt: ${this.positivePrompt.substring(0, 200)}${this.positivePrompt.length > 200 ? '...' : ''}`);
 
     this.negativePrompt = await this.generateStreamingResponse(
       `Generate a negative prompt for Stable Diffusion to avoid bad quality based on this scene description.
@@ -105,6 +111,7 @@ Guidelines for negative prompts:
 
 Generate ONLY the negative prompt, no explanations:`
     );
+    Logger.debugLog(`[ImageGenerationAgent] Generated negative prompt: ${this.negativePrompt.substring(0, 200)}${this.negativePrompt.length > 200 ? '...' : ''}`);
 
     return '';
   }
@@ -142,6 +149,8 @@ Generate ONLY the negative prompt, no explanations:`
       workflow: workflow,
       filename: filename
     })}}<|tool_call_end|>`;
+
+    Logger.debugLog(`[ImageGenerationAgent] Creating GenerateImage tool call for file: ${filename}`);
 
     return {
       content: toolCall,

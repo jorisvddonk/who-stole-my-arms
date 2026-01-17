@@ -53,7 +53,7 @@ export class AgentManager {
     this.agents = {
       'TopLevelAgent': new TopLevelAgent(streamingLLM, null),
       'ConversationalAgent': new ConversationalAgent(streamingLLM, null),
-      'SimpleAgent': new SimpleAgent(streamingLLM, null),
+      'SimpleAgent': new SimpleAgent(streamingLLM, null, comfyuiSettingsTool),
       'CombatAgent': new CombatAgent(streamingLLM, null),
       'MathAgent': new MathAgent(streamingLLM, null),
       'ErrorAgent': new ErrorAgent(streamingLLM, null),

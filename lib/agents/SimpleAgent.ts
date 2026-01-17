@@ -1,15 +1,17 @@
 import { LLMAgent } from '../core/LLMAgent';
-import { Task } from '../../interfaces/AgentTypes';
-import { SimpleEvaluator } from '../evaluators/SimpleEvaluator';
-import { ChunkType } from '../../interfaces/AgentTypes';
+import { Evaluator } from '../core/Evaluator';
+import { Task, Chunk, ChunkType } from '../../interfaces/AgentTypes';
 import { MarkdownEvaluator } from '../evaluators/MarkdownEvaluator';
 import { VoiceEvaluator } from '../evaluators/VoiceEvaluator';
-import { AgentEvaluator } from '../evaluators/AgentEvaluator';
+import { AgentEvaluator, CopyChunksOption } from '../evaluators/AgentEvaluator';
 import { AnswerQuestionsEvaluator } from '../evaluators/AnswerQuestionsEvaluator';
 import { ExampleErrorAgent } from './ExampleErrorAgent';
 import { ExampleErrorToolAgent } from './ExampleErrorToolAgent';
+import { ImageGenerationAgent } from './ImageGenerationAgent';
+import { ComfyUISettingsTool } from '../tools/comfyui-settings-tool';
 import { FormatterRegistry } from '../formatters';
 import { ChatMessage } from '../chat-history';
+import { Logger } from '../logging/debug-logger';
 
 /**
  * Simple conversational agent that provides basic assistance.
@@ -18,7 +20,7 @@ import { ChatMessage } from '../chat-history';
 export class SimpleAgent extends LLMAgent {
     public supportsContinuation: boolean = true;
 
-    constructor(streamingLLM: any, arena: any) {
+    constructor(streamingLLM: any, arena: any, comfyuiSettingsTool?: ComfyUISettingsTool) {
         super(streamingLLM, arena);
         // Set up evaluators for markdown parsing and voice generation
         const markdownEvaluator = new MarkdownEvaluator();
@@ -35,11 +37,33 @@ export class SimpleAgent extends LLMAgent {
         });
         const answerQuestionsEvaluator = new AnswerQuestionsEvaluator(
             {
-                'hasQuestion': 'Is the user asking at least one question?'
+                'hasQuestion': 'Is the user asking at least one question?',
+                'didUserRequestImage': 'did the user request an image to be generated?'
             },
             [ChunkType.Input]
         );
-        this.evaluators = [markdownEvaluator, voiceEvaluator, answerQuestionsEvaluator];
+        const evaluators: Evaluator[][] = [[markdownEvaluator, voiceEvaluator], [answerQuestionsEvaluator]];
+        if (comfyuiSettingsTool) {
+            const imageGenerationEvaluator = new AgentEvaluator(
+                (streamingLLM, arena) => {
+                    const agent = new ImageGenerationAgent(streamingLLM, arena, comfyuiSettingsTool);
+                    agent.supportsContinuation = false;
+                    return agent;
+                },
+                streamingLLM,
+                [ChunkType.Input],
+                async (chunk: Chunk, arena: any, agent?: any) => {
+                    const answers = chunk.annotations?.['evaluators.AnswerQuestionsEvaluator']?.answers || {};
+                    Logger.debugLog(`[ImageGenerationPrecondition] Answers: ${JSON.stringify(answers)}`);
+                    const result = answers['didUserRequestImage'] === true;
+                    Logger.debugLog(`[ImageGenerationPrecondition] didUserRequestImage: ${answers['didUserRequestImage']}, result: ${result}`);
+                    return result;
+                },
+                CopyChunksOption.LAST_LLMOUTPUT
+            );
+            evaluators[1].push(imageGenerationEvaluator);
+        }
+        this.evaluators = evaluators;
     }
 
     /**

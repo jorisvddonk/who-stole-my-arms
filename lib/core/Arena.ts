@@ -45,6 +45,9 @@ export class Arena {
     // Set of chunk IDs currently awaiting evaluator processing
     awaitingEvaluatorChunks: Set<string> = new Set();
 
+    // Flag to prevent multiple concurrent event loops
+    private eventLoopRunning = false;
+
     /**
      * Creates a new Arena instance.
      * @param streamingLLM The streaming LLM interface for agent communication.
@@ -68,6 +71,11 @@ export class Arena {
         }
         // Wire evaluators to chunk events
         this.wireEvaluators();
+
+        // Set up reactive task processing - start event loop when tasks are queued
+        this.eventEmitter.on('taskQueued', () => {
+            this.startEventLoopIfNeeded();
+        });
         // Wire evaluator events
         for (const evaluator of Object.values(this.evaluators)) {
             if ((evaluator as any).eventEmitter) {
@@ -561,7 +569,7 @@ export class Arena {
         parentAgent.addChunk(parent, agentChunk);
         if (this.hasAllChildResults(parent)) {
             if (parent.taskType !== TaskType.Evaluator) {
-                this.taskQueue.push(parent);
+                this.queueTask(parent, 'parent_completion');
                 Logger.debugLog(`Re-queued parent task ${parent.id} with agent result chunk: ${agentResult}`);
             } else {
                 Logger.debugLog(`Parent evaluator task ${parent.id} completed with agent result chunk: ${agentResult}`);
@@ -753,7 +761,7 @@ export class Arena {
                         sessionId: this.sessionId
                     };
                     this.taskStore[childTask.id] = childTask;
-                    this.taskQueue.push(childTask);
+                    this.queueTask(childTask, 'agent_call');
                     Logger.debugLog(`Created child task ${childTask.id} (${AGENT_COLOR}${childTask.agent_name}${RESET})`);
                 } else {
                     const errorContent = `<|error|>Unknown agent: ${call.name}<|error_end|>`;
@@ -772,7 +780,7 @@ export class Arena {
                 const maxExecutions = task.taskType === TaskType.Evaluator ? 2 : 10;
                 if (task.retryCount < maxRetries && task.executionCount < maxExecutions) {
                     task.retryCount++;
-                    this.taskQueue.push(task);
+                    this.queueTask(task, 'retry');
                     Logger.debugLog(`Re-queued task ${task.id} for retry (${task.retryCount}/${maxRetries}, executions: ${task.executionCount})`);
                 } else {
                     const reason = task.executionCount >= 10 ? 'max executions reached' : 'max retries reached';
@@ -788,7 +796,7 @@ export class Arena {
                         sessionId: this.sessionId
                     };
                     this.taskStore[errorTask.id] = errorTask;
-                    this.taskQueue.push(errorTask);
+                    this.queueTask(errorTask, 'error_handler');
                     if (this.currentContinuationTask?.id === task.id) {
                         this.currentContinuationTask = null;
                     }
@@ -797,7 +805,7 @@ export class Arena {
                 }
             } else if (hasToolCalls) {
                 // Re-queue task
-                this.taskQueue.push(task);
+                this.queueTask(task, 'tool_calls');
                 Logger.debugLog(`Re-queued task ${task.id} after tool calls`);
             } else if (toolCalls.length === 0 && agentCalls.length === 0) {
                 const agent = this.agents[task.agent_name];
@@ -818,6 +826,32 @@ export class Arena {
         }
 
         Logger.debugLog(`Task ${task.id} processing completed`);
+    }
+
+    /**
+     * Queues a task and emits an event to trigger reactive processing.
+     * @param task The task to queue
+     * @param source Optional source identifier for debugging
+     */
+    queueTask(task: Task, source: string = 'unknown') {
+        this.taskQueue.push(task);
+        this.eventEmitter.emit('taskQueued', { task, source });
+        Logger.debugLog(`Task ${task.id} (${task.agent_name}) queued from ${source}, total queue: ${this.taskQueue.length}`);
+    }
+
+    /**
+     * Starts the event loop if there are pending tasks and no loop is currently running.
+     * This provides reactive task processing - tasks are processed immediately when queued.
+     */
+    private async startEventLoopIfNeeded() {
+        if (this.eventLoopRunning || this.taskQueue.length === 0) return;
+
+        this.eventLoopRunning = true;
+        try {
+            await this.run_event_loop(false);
+        } finally {
+            this.eventLoopRunning = false;
+        }
     }
 
     /**

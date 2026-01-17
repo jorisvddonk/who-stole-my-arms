@@ -24,7 +24,7 @@ export abstract class LLMAgent {
     public supportsContinuation: boolean = false;
     public tools: Record<string, Tool> = {};
     public registeredAgents: Record<string, LLMAgent> = {};
-    public evaluators: (string | Evaluator)[] | null = null; // FQDNs or Evaluator instances; null means all available, empty array means none
+    public evaluators: (string | Evaluator)[][] | null = null; // FQDNs or Evaluator instances; null means all available, empty array means none
     protected streamingLLM: StreamingLLMInvoke;
     public fqdn: string;
     public currentTask: Task | null = null;

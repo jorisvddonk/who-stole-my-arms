@@ -383,20 +383,20 @@ const routeGroups = [
                   executionCount: 0,
                   sessionId
                 };
-                arena.taskStore[rootTask.id] = rootTask;
+                 arena.taskStore[rootTask.id] = rootTask;
 
-                      // Add input chunk (triggers evaluators synchronously)
-                      const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
-                      arena.addInputChunk(rootTask, inputChunk);
-                      await arena.waitForEvaluators(inputChunk);
-                      arena.currentContinuationTask = rootTask;
-                      arena.taskQueue.push(rootTask);
+                       // Add input chunk (triggers evaluators synchronously)
+                       const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
+                       arena.addInputChunk(rootTask, inputChunk);
+                       await arena.waitForEvaluators(inputChunk);
+                       arena.currentContinuationTask = rootTask;
+                       arena.queueTask(rootTask, 'server_new');
                     } else {
-                      // Append to existing scratchpad and re-queue
-                      const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
-                      arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
-                      await arena.waitForEvaluators(newInputChunk);
-                      arena.taskQueue.push(arena.currentContinuationTask);
+                       // Append to existing scratchpad and re-queue
+                       const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
+                       arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                       await arena.waitForEvaluators(newInputChunk);
+                       arena.queueTask(arena.currentContinuationTask, 'server_append');
                     }
 
               await arena.run_event_loop(false);
@@ -483,13 +483,13 @@ const routeGroups = [
 
                       // Add input chunk (triggers evaluators synchronously)
                       const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
-                      arena.addInputChunk(rootTask, inputChunk);
-                      arena.currentContinuationTask = rootTask;
-                      arena.taskQueue.push(rootTask);
-                    } else {
-                      const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
-                      arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
-                      arena.taskQueue.push(arena.currentContinuationTask);
+                       arena.addInputChunk(rootTask, inputChunk);
+                       arena.currentContinuationTask = rootTask;
+                       arena.queueTask(rootTask, 'server_new');
+                     } else {
+                       const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
+                       arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                       arena.queueTask(arena.currentContinuationTask, 'server_append');
                     }
 
                     // Listen to events
