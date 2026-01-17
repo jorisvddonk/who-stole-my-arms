@@ -82,7 +82,7 @@ export class SimpleAgent extends LLMAgent {
             formattedInput = formatter.userPrompt(currentInput);
         }
 
-        let prompt = `You are a helpful assistant.
+        let prompt = `You are a helpful assistant with the ability to generate images. When users request image creation, you can acknowledge the request and the image will be automatically generated in the background by a specialized subagent. The generated images will be delivered seamlessly without requiring any additional action from you.
 
 ${formattedHistory}
 ${formattedInput}`;
