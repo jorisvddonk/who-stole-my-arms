@@ -464,79 +464,97 @@ const routeGroups = [
                     }
                   };
                   try {
-                    // Handle user input
-                    arena.errorCount = 0;
-
-                    if (!arena.currentContinuationTask) {
-                      // Create new root task
-                      const rootTask = {
-                        id: Arena.generateId(),
-                        agent_name: defaultAgent,
-                        input: { text: userPrompt,  },
-                        parent_task_id: null,
-                        scratchpad: [],
-                        retryCount: 0,
-                        executionCount: 0,
-                        sessionId
+                     // Listen to events BEFORE evaluators run so we can stream from them
+                     const onToken = (details: { agentName: string, token: string }) => {
+                       // Include tokens from all agents (main agent + child agents from evaluators)
+                       fullResponse += details.token;
+                       const data = JSON.stringify({ token: details.token, agent: details.agentName });
+                       enqueueData(data);
+                     };
+                     const onToolCall = (details: any) => {
+                       // Don't send tool_call events to frontend as they may cause premature connection closure
+                       // Tool calls are internal agent coordination, not user-visible events
+                     };
+                     const onAgentCall = (details: any) => {
+                       const data = JSON.stringify({ agent_call: details.call, agent: details.agentName });
+                       enqueueData(data);
+                     };
+                     const onParseError = (details: any) => {
+                       const data = JSON.stringify({ error: details.error, type: details.type, agent: details.agentName });
+                       enqueueData(data);
+                     };
+                      const onChunk = (details: any) => {
+                        const data = { chunk: { id: details.chunk.id, type: details.chunk.type, content: details.chunk.content, processed: details.chunk.processed } };
+                        enqueueData(JSON.stringify(data));
                       };
-                      arena.taskStore[rootTask.id] = rootTask;
+                      const onEvaluatorsFinished = (details: any) => {
+                        const data = JSON.stringify({ evaluatorsFinished: { chunkId: details.chunk.id, chunkType: details.chunk.type } });
+                        enqueueData(data);
+                      };
+                      const onEvaluatorResult = (details: any) => {
+                        const data = JSON.stringify({ evaluatorResult: details });
+                        enqueueData(data);
+                      };
+                      const onEvaluatorChunk = (details: any) => {
+                        const data = JSON.stringify({ evaluatorChunk: details });
+                        enqueueData(data);
+                      };
 
-                      // Add input chunk (triggers evaluators synchronously)
-                      const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
+                      arena.eventEmitter.on('token', onToken);
+                      arena.eventEmitter.on('toolCall', onToolCall);
+                      arena.eventEmitter.on('agentCall', onAgentCall);
+                      arena.eventEmitter.on('parseError', onParseError);
+                      arena.eventEmitter.on('chunk', onChunk);
+                      arena.eventEmitter.on('evaluatorsFinished', onEvaluatorsFinished);
+                      arena.eventEmitter.on('evaluatorResult', onEvaluatorResult);
+                      arena.eventEmitter.on('evaluatorChunk', onEvaluatorChunk);
+
+                     // Handle user input
+                     arena.errorCount = 0;
+
+                     if (!arena.currentContinuationTask) {
+                       // Create new root task
+                       const rootTask = {
+                         id: Arena.generateId(),
+                         agent_name: defaultAgent,
+                         input: { text: userPrompt,  },
+                         parent_task_id: null,
+                         scratchpad: [],
+                         retryCount: 0,
+                         executionCount: 0,
+                         sessionId
+                       };
+                       arena.taskStore[rootTask.id] = rootTask;
+
+                       // For streaming, we'll use Server-Sent Events
+                       // Add input chunk (triggers evaluators synchronously)
+                       const inputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                        arena.addInputChunk(rootTask, inputChunk);
+                       await arena.waitForEvaluators(inputChunk);
                        arena.currentContinuationTask = rootTask;
                        arena.queueTask(rootTask, 'server_new');
                      } else {
+                       // Append to existing scratchpad and re-queue
                        const newInputChunk = { id: userMessageId, type: ChunkType.Input, content: userPrompt, processed: true,  };
                        arena.agents[defaultAgent].addChunk(arena.currentContinuationTask, newInputChunk);
+                       await arena.waitForEvaluators(newInputChunk);
                        arena.queueTask(arena.currentContinuationTask, 'server_append');
-                    }
+                     }
 
-                    // Listen to events
-                    const onToken = (details: { agentName: string, token: string }) => {
-                      if (details.agentName == defaultAgent) {
-                        fullResponse += details.token;
-                        const data = JSON.stringify({ token: details.token });
-                        enqueueData(data);
-                      }
-                    };
-                    const onToolCall = (details: any) => {
-                      const data = JSON.stringify({ tool_call: details.call });
-                      enqueueData(data);
-                    };
-                    const onAgentCall = (details: any) => {
-                      const data = JSON.stringify({ agent_call: details.call });
-                      enqueueData(data);
-                    };
-                    const onParseError = (details: any) => {
-                      const data = JSON.stringify({ error: details.error, type: details.type });
-                      enqueueData(data);
-                    };
-                     const onChunk = (details: any) => {
-                       const data = { chunk: { id: details.chunk.id, type: details.chunk.type, content: details.chunk.content, processed: details.chunk.processed } };
-                       enqueueData(JSON.stringify(data));
-                     };
-                     const onEvaluatorsFinished = (details: any) => {
-                       const data = JSON.stringify({ evaluatorsFinished: { chunkId: details.chunk.id, chunkType: details.chunk.type } });
-                       enqueueData(data);
-                     };
+                     await arena.run_event_loop(false);
 
-                     arena.eventEmitter.on('token', onToken);
-                     arena.eventEmitter.on('toolCall', onToolCall);
-                     arena.eventEmitter.on('agentCall', onAgentCall);
-                     arena.eventEmitter.on('parseError', onParseError);
-                     arena.eventEmitter.on('chunk', onChunk);
-                     arena.eventEmitter.on('evaluatorsFinished', onEvaluatorsFinished);
+                     // Give time for any asynchronous child tasks to complete and send their events
+                     await new Promise(resolve => setTimeout(resolve, 100));
 
-                    await arena.run_event_loop(false);
-
-                     // Clean up listeners
-                     arena.eventEmitter.off('token', onToken);
-                     arena.eventEmitter.off('toolCall', onToolCall);
-                     arena.eventEmitter.off('agentCall', onAgentCall);
-                     arena.eventEmitter.off('parseError', onParseError);
-                     arena.eventEmitter.off('chunk', onChunk);
-                     arena.eventEmitter.off('evaluatorsFinished', onEvaluatorsFinished);
+                      // Clean up listeners
+                      arena.eventEmitter.off('token', onToken);
+                      arena.eventEmitter.off('toolCall', onToolCall);
+                      arena.eventEmitter.off('agentCall', onAgentCall);
+                      arena.eventEmitter.off('parseError', onParseError);
+                      arena.eventEmitter.off('chunk', onChunk);
+                      arena.eventEmitter.off('evaluatorsFinished', onEvaluatorsFinished);
+                      arena.eventEmitter.off('evaluatorResult', onEvaluatorResult);
+                      arena.eventEmitter.off('evaluatorChunk', onEvaluatorChunk);
 
                     // Send finish
                     const finishData = JSON.stringify({ finishReason: 'stop' });

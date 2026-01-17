@@ -96,6 +96,7 @@ export class AnswerQuestionsEvaluator extends Evaluator {
             }
         }
 
+        Logger.debugLog(`[${this.fqdn}] Completed evaluation with answers: ${JSON.stringify(answers)}`);
         return { annotation: { answers } };
     }
 
