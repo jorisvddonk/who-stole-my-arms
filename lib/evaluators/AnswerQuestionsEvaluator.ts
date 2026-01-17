@@ -61,9 +61,14 @@ export class AnswerQuestionsEvaluator extends Evaluator {
                     const cleanedResponse = response.trim().toLowerCase();
                     let answer: boolean | null = null;
 
-                    if (cleanedResponse === 'yes' || cleanedResponse === 'true') {
+                    // Normalize by removing trailing punctuation
+                    const normalized = cleanedResponse.replace(/[.,!?;:]+$/, '');
+                    const words = normalized.trim().split(/\s+/);
+                    const lastWord = words.length > 0 ? words[words.length - 1] : '';
+
+                    if (lastWord === 'yes' || cleanedResponse === 'true') {
                         answer = true;
-                    } else if (cleanedResponse === 'no' || cleanedResponse === 'false') {
+                    } else if (lastWord === 'no' || cleanedResponse === 'false') {
                         answer = false;
                     } else {
                         currentError = 1;
