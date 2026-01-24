@@ -68,7 +68,7 @@ export class AgentManager {
      };
 
     // Load dynamic agents
-    await this.loadDynamicAgents(streamingLLM);
+    await this.loadDynamicAgents(streamingLLM, comfyuiSettingsTool);
 
     Logger.debugLog(`AgentManager loaded agents: ${Object.keys(this.agents).join(', ')}`);
   }
@@ -77,7 +77,7 @@ export class AgentManager {
    * Loads dynamic agents from paths specified in the WSMA_AGENT_SEARCH_PATH environment variable.
    * @param streamingLLM The streaming LLM interface to pass to loaded agents.
    */
-  private async loadDynamicAgents(streamingLLM: any): Promise<void> {
+  private async loadDynamicAgents(streamingLLM: any, comfyuiSettingsTool?: any): Promise<void> {
     const searchPaths = process.env.WSMA_AGENT_SEARCH_PATH;
     Logger.debugLog(`WSMA_AGENT_SEARCH_PATH: ${searchPaths}`);
     if (!searchPaths) {
@@ -103,7 +103,7 @@ export class AgentManager {
                 Logger.debugLog(`AgentClass ${AgentClass.name} is a function`);
                 if (AgentClass.prototype instanceof LLMAgent) {
                   Logger.debugLog(`AgentClass ${AgentClass.name} extends LLMAgent, instantiating`);
-                  const instance = new AgentClass(streamingLLM, null);
+                  const instance = new AgentClass(streamingLLM, null, comfyuiSettingsTool);
                   this.agents[AgentClass.name] = instance;
                   Logger.debugLog(`Successfully loaded agent: ${AgentClass.name}`);
                 } else {
@@ -114,6 +114,7 @@ export class AgentManager {
               }
             } catch (e) {
               Logger.debugLog(`Failed to load agent from ${filePath}: ${e}`);
+              console.log(e);
             }
           } else {
             Logger.debugLog(`Skipping non-agent file: ${file}`);
