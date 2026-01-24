@@ -517,7 +517,7 @@ export class Arena {
      * @param task The task to execute.
      * @returns The agent's response.
      */
-    async run_agent(task: Task): Promise<string | {content: string, annotation?: any, annotations?: Record<string, any>}> {
+    async run_agent(task: Task): Promise<string | {content: string, annotation?: any, annotations?: Record<string, any>, type?: ChunkType}> {
         if (!this.invocationLog.some(inv => inv.id === task.id)) {
             const params = task.inputChunks ? task.inputChunks.map(c => c.content).join(' ') : '';
             this.invocationLog.push({id: task.id, type: 'agent', name: task.agent_name, parent_id: task.parent_task_id, params});
@@ -649,6 +649,7 @@ export class Arena {
         }
         let response: string;
         let annotations: Record<string, any> = {};
+        let t: ChunkType = ChunkType.LlmOutput;
         const agent = this.agents[task.agent_name];
         if (typeof result === 'string') {
             response = result;
@@ -660,15 +661,18 @@ export class Arena {
             if (result.annotations) {
                 annotations = { ...annotations, ...result.annotations };
             }
+            if (result.type) {
+                t = result.type;
+            }
         }
         Logger.debugLog(`Agent response: ${response}`);
 
         // Add the response as a new chunk
-        const newChunk: Chunk = { id: Arena.generateId(), type: ChunkType.LlmOutput, content: response, processed: false };
+        const newChunk: Chunk = { id: Arena.generateId(), type: t, content: response, processed: false };
         if (annotations) {
             newChunk.annotations = annotations;
         }
-        Logger.debugLog(`- adding chunk`);
+        Logger.debugLog(`- adding chunk with type ${t}`);
         agent.addChunk(task, newChunk);
         Logger.debugLog(`- waiting for evaluators`);
         await this.waitForEvaluators(newChunk);

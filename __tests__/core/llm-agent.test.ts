@@ -250,7 +250,7 @@ describe('LLMAgent', () => {
                 ]
             });
 
-            const text = (agent as any).getInputTextOrToolOutput(task);
+            const text = LLMAgent.getInputTextOrToolOutput(task);
 
             expect(text).toBe('tool output');
         });

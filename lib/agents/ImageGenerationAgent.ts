@@ -74,7 +74,7 @@ export class ImageGenerationAgent extends LLMAgent {
   }
 
   async buildPrompt(task: Task): Promise<string> {
-    const input = this.getInputTextOrToolOutput(task);
+    const input = LLMAgent.getInputTextOrToolOutput(task);
 
     const lastChunk = task.scratchpad.filter(c => (c.type === ChunkType.Input || c.type === ChunkType.ToolOutput)).pop();
     if (lastChunk && lastChunk.type === ChunkType.ToolOutput) {

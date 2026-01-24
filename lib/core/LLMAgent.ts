@@ -197,7 +197,7 @@ export abstract class LLMAgent {
      * @param task The task to extract input from.
      * @returns The input text or tool output from inputChunks or scratchpad.
      */
-    protected getInputTextOrToolOutput(task: Task): string {
+    public static getInputTextOrToolOutput(task: Task): string {
         // Use inputChunks if available
         if (task.inputChunks && task.inputChunks.length > 0) {
             return task.inputChunks.map(chunk => chunk.content).join('\n');

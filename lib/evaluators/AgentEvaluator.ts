@@ -14,6 +14,8 @@ export enum CopyChunksOption {
     NONE = 'none',
     /** Copy only the last LLMOutput chunk */
     LAST_LLMOUTPUT = 'last_llmoutput',
+    /** Copy only the last Data chunk */
+    LAST_DATA = 'last_data',
     /** Copy all LLMOutput chunks */
     ALL_LLMOUTPUT = 'all_llmoutput'
 }
@@ -36,7 +38,7 @@ export class AgentEvaluator extends Evaluator {
     /** Option for copying chunks from evaluated task back to calling agent */
     private copyChunks: CopyChunksOption;
     /** Optional function to select chunks for agent input */
-    private chunkSelection?: (chunk: Chunk, arena: any, agent?: any) => Chunk[];
+    private chunkSelection?: (chunk: Chunk, arena: any, agent?: any, parentTaskId?: number) => Chunk[];
     /** Event emitter for handling evaluator events */
     eventEmitter: EventEmitter = new EventEmitter();
 
@@ -53,9 +55,9 @@ export class AgentEvaluator extends Evaluator {
           agentFactory: (streamingLLM: StreamingLLMInvoke, arena: any) => LLMAgent,
           streamingLLM: StreamingLLMInvoke,
           supportedChunkTypes: ChunkType[],
-          preconditionFunction?: (chunk: Chunk, arena: any, agent?: any) => Promise<boolean>,
+          preconditionFunction?: (chunk: Chunk, arena: Arena, agent?: any) => Promise<boolean>,
           copyChunks: CopyChunksOption = CopyChunksOption.NONE,
-          chunkSelection?: (chunk: Chunk, arena: any, agent?: any) => Chunk[],
+          chunkSelection?: (chunk: Chunk, arena: any, agent?: any, parentTaskId?: number) => Chunk[],
           fqdn?: string
       ) {
         super();
@@ -82,7 +84,7 @@ export class AgentEvaluator extends Evaluator {
       * @param agent The agent that emitted the chunk.
       * @returns Promise resolving to annotation data.
       */
-     async evaluate(chunk: Chunk, arena: any, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
+     async evaluate(chunk: Chunk, arena: Arena, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
          // Check precondition if set
          if (this.preconditionFunction) {
              const shouldEvaluate = await this.preconditionFunction(chunk, arena, agent);
@@ -105,7 +107,7 @@ export class AgentEvaluator extends Evaluator {
               // Create task with selected chunks as input
               const parentTaskId = agent?.currentTask?.id || null;
               Logger.debugLog(`[${this.fqdn}] Creating task with parent_task_id: ${parentTaskId}`);
-              const selectedChunks = this.chunkSelection ? this.chunkSelection(chunk, arena, agent) : [chunk];
+              const selectedChunks = this.chunkSelection ? this.chunkSelection(chunk, arena, agent, parentTaskId) : [chunk];
               const task: Task = {
                   id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
                   agent_name: agentInstance.constructor.name,
@@ -133,7 +135,8 @@ export class AgentEvaluator extends Evaluator {
                         Logger.debugLog(`[${this.fqdn}] CopyChunks: task ${task.id} in store: ${!!completedTask}`);
                         if (completedTask && completedTask.scratchpad) {
                             const llmOutputChunks = completedTask.scratchpad.filter((c: Chunk) => c.type === ChunkType.LlmOutput);
-                            Logger.debugLog(`[${this.fqdn}] CopyChunks: found ${llmOutputChunks.length} LLMOutput chunks in task ${task.id}`);
+                            const dataChunks = completedTask.scratchpad.filter((c: Chunk) => c.type === ChunkType.Data);
+                            Logger.debugLog(`[${this.fqdn}] CopyChunks: found ${llmOutputChunks.length} LLMOutput chunks in task ${task.id} and ${dataChunks.length} dataChunks`);
 
                             // Emit chunks as events for frontend
                             for (const chunk of llmOutputChunks) {
@@ -148,23 +151,29 @@ export class AgentEvaluator extends Evaluator {
                                     }
                                 });
                             }
+                            // TODO: should data chunks also be emitted?
 
                             // Also try to copy to parent task if it exists and is still active
                             if (task.parent_task_id) {
                                 const parentTask = arena.taskStore[task.parent_task_id];
                                 if (parentTask) {
                                     Logger.debugLog(`[${this.fqdn}] Parent task ${parentTask.id} found, copying chunks`);
-                                     if (this.copyChunks === CopyChunksOption.ALL_LLMOUTPUT) {
-                                         for (const chunk of llmOutputChunks) {
-                                             const copiedChunk = { ...chunk, id: Arena.generateId(), producer: agentInstance.fqdn };
-                                             parentTask.scratchpad.push(copiedChunk);
-                                             Logger.debugLog(`[${this.fqdn}] Copied chunk ${chunk.id} to parent task ${parentTask.id}`);
-                                         }
-                                      } else if (this.copyChunks === CopyChunksOption.LAST_LLMOUTPUT && llmOutputChunks.length > 0) {
-                                          const lastChunk = llmOutputChunks[llmOutputChunks.length - 1];
-                                          const copiedChunk = { ...lastChunk, id: Arena.generateId(), producer: agentInstance.fqdn };
+                                    if (this.copyChunks === CopyChunksOption.ALL_LLMOUTPUT) {
+                                        for (const chunk of llmOutputChunks) {
+                                            const copiedChunk = { ...chunk, id: Arena.generateId(), producer: agentInstance.fqdn };
+                                            parentTask.scratchpad.push(copiedChunk);
+                                            Logger.debugLog(`[${this.fqdn}] Copied chunk ${chunk.id} to parent task ${parentTask.id}`);
+                                        }
+                                    } else if (this.copyChunks === CopyChunksOption.LAST_LLMOUTPUT && llmOutputChunks.length > 0) {
+                                        const lastChunk = llmOutputChunks[llmOutputChunks.length - 1];
+                                        const copiedChunk = { ...lastChunk, id: Arena.generateId(), producer: agentInstance.fqdn };
                                         parentTask.scratchpad.push(copiedChunk);
-                                        Logger.debugLog(`[${this.fqdn}] Copied last chunk ${lastChunk.id} to parent task ${parentTask.id}`);
+                                        Logger.debugLog(`[${this.fqdn}] Copied last llmOutput chunk ${lastChunk.id} to parent task ${parentTask.id}`);
+                                    } else if (this.copyChunks === CopyChunksOption.LAST_DATA && dataChunks.length > 0) {
+                                        const lastChunk = dataChunks[dataChunks.length - 1];
+                                        const copiedChunk = { ...lastChunk, id: Arena.generateId(), producer: agentInstance.fqdn };
+                                        parentTask.scratchpad.push(copiedChunk);
+                                        Logger.debugLog(`[${this.fqdn}] Copied last data chunk ${lastChunk.id} to parent task ${parentTask.id}`);
                                     }
                                 } else {
                                     Logger.debugLog(`[${this.fqdn}] Parent task ${task.parent_task_id} not found in taskStore`);
