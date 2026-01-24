@@ -69,7 +69,7 @@ export interface Task {
     /** Optional type classification for the task */
     taskType?: TaskType;
     /** Optional callback function called when the task completes */
-    onComplete?: (result: string | {content: string, annotation?: any, annotations?: Record<string, any>}) => void;
+    onComplete?: (result: string | {content: string, annotation?: any, annotations?: Record<string, any>, type: ChunkType}) => void;
     /** Optional session identifier for session-specific context */
     sessionId?: string;
 }

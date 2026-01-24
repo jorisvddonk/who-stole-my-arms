@@ -681,7 +681,7 @@ export class Arena {
         const TOOL_INVOCATION_EVALUATOR_FQDN = 'evaluators.ToolInvocationEvaluator';
 
         const lastChunk = task.scratchpad[task.scratchpad.length - 1];
-        if (lastChunk.type === ChunkType.LlmOutput && !lastChunk.processed) {
+        if ((lastChunk.type === ChunkType.LlmOutput || lastChunk.type === ChunkType.Data) && !lastChunk.processed) {
             let agentCalls: Array<{ name: string; input: any }> = [];
             try {
                 agentCalls = Arena.parseAgentCalls(lastChunk.content);
@@ -798,7 +798,7 @@ export class Arena {
                 Logger.debugLog(`Task ${task.id} waiting for child agents`);
             }
         } else {
-            Logger.debugLog(`Last chunk already processed or not llmOutput`);
+            Logger.debugLog(`Last chunk already processed or not llmOutput/data`);
         }
 
         Logger.debugLog(`Task ${task.id} processing completed`);

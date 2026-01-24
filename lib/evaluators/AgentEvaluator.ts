@@ -84,7 +84,7 @@ export class AgentEvaluator extends Evaluator {
       * @param agent The agent that emitted the chunk.
       * @returns Promise resolving to annotation data.
       */
-     async evaluate(chunk: Chunk, arena: Arena, agent?: any): Promise<{annotation?: any, annotations?: Record<string, any>}> {
+     async evaluate(chunk: Chunk, arena: Arena, agent?: any): Promise<{annotations?: Record<string, any>, content: string}> {
          // Check precondition if set
          if (this.preconditionFunction) {
              const shouldEvaluate = await this.preconditionFunction(chunk, arena, agent);
@@ -151,8 +151,18 @@ export class AgentEvaluator extends Evaluator {
                                     }
                                 });
                             }
-                            // TODO: should data chunks also be emitted?
-
+                            for (const chunk of dataChunks) {
+                                arena.eventEmitter.emit('evaluatorChunk', {
+                                    evaluatorName: this.fqdn,
+                                    taskId: task.id,
+                                    chunk: {
+                                        id: chunk.id,
+                                        type: chunk.type,
+                                        content: chunk.content,
+                                        processed: chunk.processed
+                                    }
+                                });
+                            }
                             // Also try to copy to parent task if it exists and is still active
                             if (task.parent_task_id) {
                                 const parentTask = arena.taskStore[task.parent_task_id];
@@ -184,8 +194,22 @@ export class AgentEvaluator extends Evaluator {
                         }
                     }
 
-                    // Resolve the promise with the result as annotation
-                    resolve({ annotation: result });
+                    // Resolve the promise with the result as annotation, depending on the result
+                    let response: string;
+                    let annotations: Record<string, any> = {};
+                    let type: ChunkType = ChunkType.LlmOutput;
+                    if (typeof result === 'string') {
+                        response = result;
+                    } else {
+                        response = result.content;
+                        if (result.annotation) {
+                            annotations = { [this.fqdn]: result.annotation };
+                        }
+                        if (result.annotations) {
+                            annotations = { ...annotations, ...result.annotations };
+                        }
+                    }
+                    resolve({ content: response, annotations });
                 }
             };
 
