@@ -18,6 +18,36 @@ export class TopBar extends LitElement {
     }
     .session-info {
       font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .session-name {
+      font-size: 14px;
+    }
+    .agent-name {
+      font-size: 12px;
+      opacity: 0.7;
+      font-weight: normal;
+    }
+    .session-name {
+      cursor: pointer;
+    }
+    .session-name:hover {
+      background: var(--hover-bg);
+      border-radius: 2px;
+      padding: 1px 3px;
+      margin: -1px -3px;
+    }
+    .name-input {
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      font-size: 14px;
+      font-weight: bold;
+      padding: 1px 3px;
+      border-radius: 2px;
+      width: 150px;
     }
     .hamburger {
       background: none;
@@ -77,7 +107,12 @@ export class TopBar extends LitElement {
     currentSession: { type: String },
     sessions: { type: Array },
     menuOpen: { type: Boolean },
-    isDarkTheme: { type: Boolean }
+    isDarkTheme: { type: Boolean },
+    sessionName: { type: String },
+    selectedAgent: { type: String },
+    editingName: { type: Boolean },
+    tempName: { type: String },
+    sessionInfo: { type: Object }
   };
 
   constructor() {
@@ -86,6 +121,11 @@ export class TopBar extends LitElement {
     this.sessions = [];
     this.menuOpen = false;
     this.isDarkTheme = this.getStoredTheme();
+    this.sessionName = '';
+    this.selectedAgent = '';
+    this.editingName = false;
+    this.tempName = '';
+    this.sessionInfo = {};
     this.sessionChangeHandler = this.handleSessionChange.bind(this);
     this.themeChangeHandler = this.handleThemeChange.bind(this);
     this.initialize();
@@ -95,7 +135,49 @@ export class TopBar extends LitElement {
     await sessionManager.initialize();
     this.currentSession = sessionManager.getCurrentSession();
     this.sessions = sessionManager.getSessions();
+    await this.loadAllSessionInfo();
     this.requestUpdate();
+  }
+
+  async loadSessionInfo() {
+    try {
+      // Load session name
+      const nameRes = await fetch(`/sessions/${this.currentSession}/name`);
+      if (nameRes.ok) {
+        const nameData = await nameRes.json();
+        this.sessionName = nameData.name;
+      }
+
+      // Load selected agent
+      const agentRes = await fetch(`/sessions/${this.currentSession}/default-agent`);
+      if (agentRes.ok) {
+        const agentData = await agentRes.json();
+        this.selectedAgent = agentData.defaultAgent;
+      }
+    } catch (error) {
+      console.warn('Failed to load session info:', error);
+    }
+  }
+
+  async loadAllSessionInfo() {
+    await this.loadSessionInfo();
+    
+    // Load info for all sessions for menu display
+    for (const sessionId of this.sessions) {
+      try {
+        const [nameRes, agentRes] = await Promise.all([
+          fetch(`/sessions/${sessionId}/name`),
+          fetch(`/sessions/${sessionId}/default-agent`)
+        ]);
+        
+        const name = nameRes.ok ? (await nameRes.json()).name : sessionId;
+        const agent = agentRes.ok ? (await agentRes.json()).defaultAgent : '';
+        
+        this.sessionInfo[sessionId] = { name, agent };
+      } catch (error) {
+        this.sessionInfo[sessionId] = { name: sessionId, agent: '' };
+      }
+    }
   }
 
   connectedCallback() {
@@ -126,6 +208,7 @@ export class TopBar extends LitElement {
   handleSessionChange(sessionId) {
     this.currentSession = sessionId;
     this.sessions = sessionManager.getSessions();
+    this.loadSessionInfo();
     this.requestUpdate();
   }
 
@@ -210,20 +293,93 @@ export class TopBar extends LitElement {
     }
   }
 
+  startEditingName() {
+    this.editingName = true;
+    this.tempName = this.sessionName || this.currentSession;
+    this.requestUpdate();
+    // Focus the input after render
+    setTimeout(() => {
+      const input = this.shadowRoot.querySelector('.name-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
+  }
+
+  async saveSessionName() {
+    if (!this.tempName.trim()) {
+      this.cancelEditingName();
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/sessions/${this.currentSession}/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this.tempName.trim() })
+      });
+      
+      if (res.ok) {
+        this.sessionName = this.tempName.trim();
+      }
+    } catch (error) {
+      console.warn('Failed to save session name:', error);
+    }
+    
+    this.editingName = false;
+    this.requestUpdate();
+  }
+
+  cancelEditingName() {
+    this.editingName = false;
+    this.tempName = '';
+    this.requestUpdate();
+  }
+
+  handleNameKeydown(e) {
+    if (e.key === 'Enter') {
+      this.saveSessionName();
+    } else if (e.key === 'Escape') {
+      this.cancelEditingName();
+    }
+  }
+
   render() {
     return html`
-      <div class="session-info">Session: ${this.currentSession}</div>
+      <div class="session-info">
+        ${this.editingName ? html`
+          <input 
+            class="name-input" 
+            .value=${this.tempName}
+            @input=${(e) => this.tempName = e.target.value}
+            @keydown=${this.handleNameKeydown}
+            @blur=${this.saveSessionName}
+          />
+        ` : html`
+          <div class="session-name" @click=${this.startEditingName}>
+            ${this.sessionName || this.currentSession}
+          </div>
+        `}
+        <div class="agent-name">(${this.selectedAgent})</div>
+      </div>
       <button class="hamburger" @click=${this.toggleMenu}>☰</button>
       ${this.menuOpen ? html`
         <div class="menu">
-          ${this.sessions.map(session => html`
-            <div
-              class="menu-item ${session === this.currentSession ? 'current' : ''}"
-              @click=${(e) => { e.stopPropagation(); this.switchSession(session); }}
-            >
-              ${session}
-            </div>
-          `)}
+          ${this.sessions.map(session => {
+            const info = this.sessionInfo[session] || { name: session, agent: '' };
+            return html`
+              <div
+                class="menu-item ${session === this.currentSession ? 'current' : ''}"
+                @click=${(e) => { e.stopPropagation(); this.switchSession(session); }}
+              >
+                <div>
+                  <div>${info.name}</div>
+                  <div style="font-size: 11px; opacity: 0.7;">${info.agent}</div>
+                </div>
+              </div>
+            `;
+          })}
           <div class="menu-divider"></div>
           <div class="menu-item" @click=${(e) => { e.stopPropagation(); this.toggleTheme(); }}>
             ${this.isDarkTheme ? '🌙 Dark Theme' : '☀️ Light Theme'}

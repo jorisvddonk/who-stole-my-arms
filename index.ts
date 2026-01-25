@@ -24,6 +24,7 @@ import { ComfyUISettingsTool } from "./lib/tools/comfyui-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
 import { DefaultAgentTool } from "./lib/tools/default-agent-tool.js";
+import { SessionNameTool } from "./lib/tools/session-name-tool.js";
 import { InteractionHistoryTool } from "./lib/tools/interaction-history-tool.js";
 import { ImageDisplayTool } from "./lib/tools/image-display-tool.js";
 import { VoiceDisplayTool } from "./lib/tools/voice-display-tool.js";
@@ -104,6 +105,7 @@ try {
 }
 
 const defaultAgentTool = new DefaultAgentTool(toolboxCollector, agentManager);
+const sessionNameTool = new SessionNameTool(toolboxCollector);
 
 const arenaManager = ArenaManager.getInstance(dbManager, agentManager, evaluatorManager);
 
@@ -137,6 +139,7 @@ const routeGroups = [
   formatterSettingsTool,
   autoScrollSettingsTool,
   defaultAgentTool,
+  sessionNameTool,
   interactionHistoryTool,
   osMetricsDockWidget,
   characterBioDockWidget,
