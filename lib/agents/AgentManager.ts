@@ -4,6 +4,7 @@ import { LLMAgent } from '../core/LLMAgent';
 import { TopLevelAgent } from './TopLevelAgent';
 import { ConversationalAgent } from './ConversationalAgent';
 import { SimpleAgent } from './SimpleAgent';
+import { SimplestAgent } from './SimplestAgent';
 import { CombatAgent } from './CombatAgent';
 import { MathAgent } from './MathAgent';
 import { ErrorAgent } from './ErrorAgent';
@@ -51,11 +52,12 @@ export class AgentManager {
     Logger.debugLog('Initializing AgentManager');
 
      // Load hardcoded agents
-     this.agents = {
-       'TopLevelAgent': new TopLevelAgent(streamingLLM, null),
-       'ConversationalAgent': new ConversationalAgent(streamingLLM, null),
-       'SimpleAgent': new SimpleAgent(streamingLLM, null, comfyuiSettingsTool),
-       'CombatAgent': new CombatAgent(streamingLLM, null),
+this.agents = {
+        'TopLevelAgent': new TopLevelAgent(streamingLLM, null),
+        'ConversationalAgent': new ConversationalAgent(streamingLLM, null),
+        'SimpleAgent': new SimpleAgent(streamingLLM, null),
+        'SimplestAgent': new SimplestAgent(streamingLLM, null),
+        'CombatAgent': new CombatAgent(streamingLLM, null),
        'MathAgent': new MathAgent(streamingLLM, null),
        'DieRollerAgent': new DieRollerAgent(streamingLLM, null),
        'ErrorAgent': new ErrorAgent(streamingLLM, null),
