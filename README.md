@@ -4,7 +4,7 @@ A programmable, wacky, LLM-driven roleplaying game application inspired by D&D a
 
 ## Features
 
-- **LLM Integration**: Connects to Koboldcpp for text generation with streaming support
+- **LLM Integration**: Connects to Koboldcpp, OpenRouter, or Ollama for text generation with streaming support
 - **Chat Interface**: Real-time conversation with the AI game master
 - **Session Management**: Isolated game sessions with persistent chat history
 - **Extensible Architecture**: Plugin system for tools (popup dialogs) and widgets (dock grid)
@@ -14,7 +14,9 @@ A programmable, wacky, LLM-driven roleplaying game application inspired by D&D a
 ## Prerequisites
 
 - [Bun](https://bun.sh/) installed
-- Koboldcpp running locally on port 5001 (default)
+- Koboldcpp running locally on port 5001 (default), OR
+- [Ollama](https://ollama.ai/) running locally on port 11434 (default), OR
+- OpenRouter API key (for cloud models)
 
 ## Environment Variables
 
@@ -83,6 +85,12 @@ Open `http://localhost:3008` in your browser to access the game interface.
 - `GET /llm/info`: Get LLM model information
 - `POST /llm/tokens`: Tokenize text
 - `POST /llm/detokenize`: Detokenize tokens
+- `GET /kobold/settings`: Get Koboldcpp settings
+- `POST /kobold/settings`: Update Koboldcpp settings
+- `GET /openrouter/settings`: Get OpenRouter settings
+- `POST /openrouter/settings`: Update OpenRouter settings
+- `GET /ollama/settings`: Get Ollama settings
+- `POST /ollama/settings`: Update Ollama settings
 
 #### Tools and Widgets
 - `GET /toolbox/list`: List available toolbox tools
@@ -145,7 +153,7 @@ bun run cli.ts --repl
 bun run cli.ts --agent CombatAgent --debug --prompt "I attack the goblin"
 ```
 
-The CLI tool connects to the same Koboldcpp instance as the web app and uses the same agent system for consistent behavior.
+The CLI tool connects to the same LLM instance as the web app (Koboldcpp, Ollama, or OpenRouter) and uses the same agent system for consistent behavior.
 
 ## Architecture
 
@@ -154,7 +162,7 @@ The CLI tool connects to the same Koboldcpp instance as the web app and uses the
 - **Server**: Bun.serve on port 3008 with custom routing
 - **Database**: SQLite via Bun, with global and session-specific databases
 - **Middleware**: Logging and storage injection for session-aware components
-- **LLM API**: KoboldAPI class implementing streaming/non-streaming generation
+- **LLM API**: KoboldAPI, OpenRouterAPI, or OllamaAPI classes implementing streaming/non-streaming generation
 - **Modular Design**: Tools and widgets implement interfaces for registration
 
 ### Frontend (Lit Web Components)
