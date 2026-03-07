@@ -39,13 +39,13 @@ Or use the npm script:
 npm start
 ```
 
-The server will start on port 3001.
+The server will start on port 3008.
 
 ## Usage
 
 ### Web Interface
 
-Open `http://localhost:3001` in your browser to access the game interface.
+Open `http://localhost:3008` in your browser to access the game interface.
 
 - **Chat**: Interact with the AI game master in real-time
 - **Sessions**: Create and switch between isolated game sessions
@@ -151,7 +151,7 @@ The CLI tool connects to the same Koboldcpp instance as the web app and uses the
 
 ### Backend (TypeScript + Bun)
 
-- **Server**: Bun.serve on port 3001 with custom routing
+- **Server**: Bun.serve on port 3008 with custom routing
 - **Database**: SQLite via Bun, with global and session-specific databases
 - **Middleware**: Logging and storage injection for session-aware components
 - **LLM API**: KoboldAPI class implementing streaming/non-streaming generation

@@ -857,7 +857,7 @@ const routeGroups = [
 ];
 
 const server = Bun.serve({
-  port: 3001,
+  port: 3008,
   idleTimeout: 255,
   routes: applyStorageMiddleware(dbManager, routeGroups.map(item => {
     if (item.routes) {
