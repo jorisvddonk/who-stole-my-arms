@@ -73,6 +73,11 @@ export class AgentManager {
     Logger.debugLog(`AgentManager loaded agents: ${Object.keys(this.agents).join(', ')}`);
   }
 
+  private hasLLMAgentMethods(prototype: any): boolean {
+    const requiredMethods = ['buildPrompt', 'run', 'generateStreamingResponse', 'registerTool'];
+    return requiredMethods.every(method => typeof prototype[method] === 'function');
+  }
+
   /**
    * Loads dynamic agents from paths specified in the WSMA_AGENT_SEARCH_PATH environment variable.
    * @param streamingLLM The streaming LLM interface to pass to loaded agents.
@@ -101,13 +106,14 @@ export class AgentManager {
               const AgentClass = module.default;
               if (AgentClass && typeof AgentClass === 'function') {
                 Logger.debugLog(`AgentClass ${AgentClass.name} is a function`);
-                if (AgentClass.prototype instanceof LLMAgent) {
-                  Logger.debugLog(`AgentClass ${AgentClass.name} extends LLMAgent, instantiating`);
+                if (this.hasLLMAgentMethods(AgentClass.prototype)) {
+                  Logger.debugLog(`AgentClass ${AgentClass.name} has LLMAgent methods, instantiating`);
                   const instance = new AgentClass(streamingLLM, null, comfyuiSettingsTool);
                   this.agents[AgentClass.name] = instance;
                   Logger.debugLog(`Successfully loaded agent: ${AgentClass.name}`);
                 } else {
-                  Logger.debugLog(`AgentClass ${AgentClass.name} does not extend LLMAgent`);
+                  Logger.debugLog(`AgentClass ${AgentClass.name} does not have LLMAgent methods; ${AgentClass.prototype}`);
+                  console.log(AgentClass.prototype)
                 }
               } else {
                 Logger.debugLog(`No valid default export in ${filePath}`);
