@@ -1,5 +1,6 @@
-// Configuration: Set to true to use OpenRouter, false to use KoboldCPP
+// Configuration: Set to true to use OpenRouter, false to use KoboldCPP, 'ollama' for Ollama
 const USE_OPENROUTER = false;
+const USE_OLLAMA = true;
 const ROOT_AGENT_NAME = 'RPGGameMasterAgent';
 
 // Enable debugging if --debug flag is set
@@ -11,6 +12,7 @@ if (process.argv.includes('--debug')) {
 import { readFile } from "fs/promises";
 import { KoboldAPI } from "./lib/llm-api/KoboldAPI.js";
 import { OpenRouterAPI } from "./lib/llm-api/OpenRouterAPI.js";
+import { OllamaAPI } from "./lib/llm-api/OllamaAPI.js";
 import { logRequest, logGenerate, logError } from "./lib/logging/logger.js";
 import { applyLoggingMiddleware } from "./lib/middleware/logging.js";
 import { applyStorageMiddleware } from "./lib/middleware/database.js";
@@ -20,6 +22,7 @@ import { DatabaseManager, Storage } from "./lib/database-manager.js";
 import { OsMetricsTool } from "./lib/tools/os-metrics-tool.js";
 import { KoboldSettingsTool } from "./lib/tools/kobold-settings-tool.js";
 import { OpenRouterSettingsTool } from "./lib/tools/openrouter-settings-tool.js";
+import { OllamaSettingsTool } from "./lib/tools/ollama-settings-tool.js";
 import { ComfyUISettingsTool } from "./lib/tools/comfyui-settings-tool.js";
 import { FormatterSettingsTool } from "./lib/tools/formatter-settings-tool.js";
 import { AutoScrollSettingsTool } from "./lib/tools/auto-scroll-settings-tool.js";
@@ -57,10 +60,13 @@ const dbManager = new DatabaseManager();
 let api;
 
 // Create components
-const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, USE_OPENROUTER ? undefined : (settings) => {
+const koboldSettingsTool = new KoboldSettingsTool(toolboxCollector, USE_OPENROUTER || USE_OLLAMA ? undefined : (settings) => {
   api.updateSettings(settings);
 });
 const openRouterSettingsTool = new OpenRouterSettingsTool(toolboxCollector, USE_OPENROUTER ? (settings) => {
+  api.updateSettings(settings);
+} : undefined);
+const ollamaSettingsTool = new OllamaSettingsTool(toolboxCollector, USE_OLLAMA ? (settings) => {
   api.updateSettings(settings);
 } : undefined);
 const comfyuiSettingsTool = new ComfyUISettingsTool(toolboxCollector);
@@ -76,14 +82,19 @@ const dockManager = new DockManager(toolboxCollector);
 // Register global components
 await dbManager.registerGlobalComponent(koboldSettingsTool);
 await dbManager.registerGlobalComponent(openRouterSettingsTool);
+await dbManager.registerGlobalComponent(ollamaSettingsTool);
 await dbManager.registerGlobalComponent(comfyuiSettingsTool);
 
 // Create API after settings are loaded
 let baseApi;
 try {
-  baseApi = USE_OPENROUTER
-    ? new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings())
-    : new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+  if (USE_OPENROUTER) {
+    baseApi = new OpenRouterAPI(openRouterSettingsTool.getSettings().apiKey, openRouterSettingsTool.getSettings().model, openRouterSettingsTool.getSettings());
+  } else if (USE_OLLAMA) {
+    baseApi = new OllamaAPI(ollamaSettingsTool.getSettings().baseUrl, ollamaSettingsTool.getSettings().model, ollamaSettingsTool.getSettings());
+  } else {
+    baseApi = new KoboldAPI(koboldSettingsTool.getSettings().baseUrl, koboldSettingsTool.getSettings());
+  }
 } catch (error) {
   console.error('Failed to initialize LLM API:', error);
   baseApi = null;
@@ -135,6 +146,7 @@ const routeGroups = [
   osMetricsTool,
   koboldSettingsTool,
   openRouterSettingsTool,
+  ollamaSettingsTool,
   comfyuiSettingsTool,
   formatterSettingsTool,
   autoScrollSettingsTool,
